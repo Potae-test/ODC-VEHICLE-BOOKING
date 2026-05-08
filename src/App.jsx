@@ -20,18 +20,10 @@ function canAccess(role, page) {
 export default function App() {
   const [page, setPage] = useState("cars");
   const [user, setUser] = useState(null);
-    useEffect(() => {
-      const savedUser = localStorage.getItem("odc_user");
 
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      }
-    }, []);
   useEffect(() => {
     const saved = localStorage.getItem("odc_user");
-    if (saved) {
-      setUser(JSON.parse(saved));
-    }
+    if (saved) setUser(JSON.parse(saved));
   }, []);
 
   function goPage(nextPage) {
@@ -39,7 +31,6 @@ export default function App() {
       alert("คุณไม่มีสิทธิ์เข้าเมนูนี้");
       return;
     }
-
     setPage(nextPage);
   }
 
@@ -49,54 +40,78 @@ export default function App() {
     setPage("cars");
   }
 
-  if (!user) {
-    return <Login onLogin={setUser} />;
-  }
+  if (!user) return <Login onLogin={setUser} />;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>ระบบงานจองรถ</h1>
-          <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+    <div className="app-shell">
+      <header className="gov-header">
+        <div className="brand">
+          <div className="brand-logo">🚑</div>
+          <div>
+            <h1>ระบบงานจองรถ</h1>
+            <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+          </div>
         </div>
 
-        <div className="user-box">
-          <div>{user.name}</div>
-          <small>{user.role}</small>
-          <button onClick={logout}>ออกจากระบบ</button>
+        <div className="profile-box">
+          <div className="profile-icon">👤</div>
+          <div>
+            <b>{user.name}</b>
+            <span>{user.role}</span>
+          </div>
+          <button className="logout-btn" onClick={logout}>
+            ออกจากระบบ
+          </button>
         </div>
       </header>
 
-      <nav className="nav">
-        {canAccess(user.role, "cars") && (
-          <button onClick={() => goPage("cars")}>หน้าจอรถ</button>
-        )}
+      <div className="layout">
+        <aside className="sidebar">
+          {canAccess(user.role, "cars") && (
+            <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
+              🚐 หน้าจอรถ
+            </button>
+          )}
 
-        {canAccess(user.role, "booking") && (
-          <button onClick={() => goPage("booking")}>จองรถ</button>
-        )}
+          {canAccess(user.role, "booking") && (
+            <button className={page === "booking" ? "active" : ""} onClick={() => goPage("booking")}>
+              📝 จองรถ
+            </button>
+          )}
 
-        {canAccess(user.role, "staff") && (
-          <button onClick={() => goPage("staff")}>เจ้าหน้าที่</button>
-        )}
+          {canAccess(user.role, "staff") && (
+            <button className={page === "staff" ? "active" : ""} onClick={() => goPage("staff")}>
+              👥 เจ้าหน้าที่
+            </button>
+          )}
 
-        {canAccess(user.role, "calendar") && (
-          <button onClick={() => goPage("calendar")}>ปฏิทิน</button>
-        )}
+          {canAccess(user.role, "calendar") && (
+            <button className={page === "calendar" ? "active" : ""} onClick={() => goPage("calendar")}>
+              📅 ปฏิทิน
+            </button>
+          )}
 
-        {canAccess(user.role, "admin") && (
-          <button onClick={() => goPage("admin")}>Admin</button>
-        )}
-      </nav>
+          {canAccess(user.role, "admin") && (
+            <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
+              ⚙️ Admin
+            </button>
+          )}
 
-      <main className="container">
-        {page === "cars" && <Cars />}
-        {page === "booking" && <Booking />}
-        {page === "staff" && <Staff />}
-        {page === "calendar" && <CalendarPage />}
-        {page === "admin" && <Admin />}
-      </main>
+          <div className="sidebar-help">
+            <b>ศูนย์ช่วยเหลือ</b>
+            <p>ฝ่ายระบบงาน</p>
+            <p>02-xxx-xxxx</p>
+          </div>
+        </aside>
+
+        <main className="main-content">
+          {page === "cars" && <Cars />}
+          {page === "booking" && <Booking />}
+          {page === "staff" && <Staff />}
+          {page === "calendar" && <CalendarPage />}
+          {page === "admin" && <Admin />}
+        </main>
+      </div>
     </div>
   );
 }

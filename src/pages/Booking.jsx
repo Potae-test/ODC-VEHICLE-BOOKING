@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createBooking, getBookings } from "../api";
+import { formatThaiDateTime } from "../utils/date";
 
 export default function Booking() {
   const [bookings, setBookings] = useState([]);
@@ -177,21 +178,16 @@ export default function Booking() {
             </thead>
 
             <tbody>
-              {bookings.map((b) => (
-                <tr key={b.booking_id}>
-                  <td>{b.booking_no}</td>
-                  <td>{b.requester_name}</td>
-                  <td>{b.start_datetime}</td>
-                  <td>{b.end_datetime}</td>
-                  <td>{b.destination}</td>
-                  <td>
-                    <span className="status amber">
-                      {b.status || "PENDING"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-
+                  {bookings.map((b) => (
+                    <tr key={b.booking_id}>
+                      <td>{b.booking_no}</td>
+                      <td>{b.requester_name}</td>
+                      <td>{formatThaiDateTime(b.start_datetime)}</td>
+                      <td>{formatThaiDateTime(b.end_datetime)}</td>
+                      <td>{b.destination}</td>
+                      <td>{b.status}</td>
+                    </tr>
+                  ))}
               {bookings.length === 0 && (
                 <tr>
                   <td colSpan="6">ยังไม่มีรายการจอง</td>

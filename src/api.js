@@ -229,3 +229,34 @@ export async function resetUserPassword(data) {
   if (!json.success) throw new Error(json.message || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
   return json.data;
 }
+export async function updateVehicle(data) {
+  const res = await fetch(`${API_BASE_URL}/api/vehicles/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "แก้ไขรถไม่สำเร็จ");
+  }
+
+  return json.data;
+}
+
+export async function deleteVehicle(vehicle_id) {
+  const res = await fetch(`${API_BASE_URL}/api/vehicles/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vehicle_id }),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "ลบข้อมูลรถไม่สำเร็จ");
+  }
+
+  return json.data;
+}

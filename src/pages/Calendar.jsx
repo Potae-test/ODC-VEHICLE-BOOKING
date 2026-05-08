@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import "react-big-calendar/lib/css/react-big-calendar.css";
-
 import { getBookings } from "../api";
+import "moment/locale/th";
+import { formatThaiDateTime } from "../utils/date";
+moment.locale("th");
 
 const localizer = momentLocalizer(moment);
 

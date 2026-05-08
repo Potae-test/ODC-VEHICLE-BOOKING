@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { createVehicle, getVehicles } from "../api";
-
+import {
+  createVehicle,
+  deleteVehicle,
+  getVehicles,
+  updateVehicle,
+} from "../api";
+import { formatThaiDateTime } from "../utils/date";
 function getStatusText(status) {
   if (status === "AVAILABLE") return "พร้อมใช้งาน";
   if (status === "IN_USE") return "กำลังใช้งาน";
@@ -15,13 +20,29 @@ function getStatusClass(status) {
   if (status === "MAINTENANCE") return "status amber";
   return "status";
 }
+function handleEdit(car) {
+  setEditingId(car.vehicle_id);
+
+  setForm({
+    vehicle_code: car.vehicle_code || "",
+    vehicle_type: car.vehicle_type || "รถตู้",
+    plate_no: car.plate_no || "",
+    status: car.status || "AVAILABLE",
+    driver_name: car.driver_name || "-",
+    next_booking: car.next_booking || "-",
+  });
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 
 export default function Cars() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
+  const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState({
+    
     vehicle_code: "",
     vehicle_type: "รถตู้",
     plate_no: "",
@@ -41,7 +62,17 @@ export default function Cars() {
       setLoading(false);
     }
   }
+  async function handleDelete(car) {
+    if (!confirm(`ยืนยันลบรถ ${car.vehicle_code} ใช่หรือไม่?`)) return;
 
+    try {
+      await deleteVehicle(car.vehicle_id);
+      await loadVehicles();
+      alert("ลบข้อมูลสำเร็จ");
+    } catch (err) {
+      alert(err.message || "ลบรถไม่สำเร็จ");
+    }
+  }
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -77,6 +108,19 @@ export default function Cars() {
     } finally {
       setSaving(false);
     }
+        if (editingId) {
+      await updateVehicle({
+        vehicle_id: editingId,
+        ...form,
+      });
+
+      alert("แก้ไขข้อมูลรถสำเร็จ");
+    } else {
+      await createVehicle(form);
+      alert("เพิ่มรถสำเร็จ");
+    }
+
+    setEditingId("");
   }
 
   useEffect(() => {
@@ -148,7 +192,7 @@ export default function Cars() {
               <option value="AVAILABLE">พร้อมใช้งาน</option>
               <option value="IN_USE">กำลังใช้งาน</option>
               <option value="MAINTENANCE">ซ่อมบำรุง</option>
-              <option value="INACTIVE">ปิดใช้งาน</option>
+              <option value="INACTIVE">ลบข้อมูลแล้ว</option>
             </select>
           </div>
 
@@ -175,43 +219,87 @@ export default function Cars() {
           </div>
         </div>
 
-        <button disabled={saving}>
-          {saving ? "กำลังบันทึก..." : "เพิ่มรถ"}
+      <button disabled={saving}>
+        {saving
+          ? "กำลังบันทึก..."
+          : editingId
+          ? "บันทึกการแก้ไข"
+          : "เพิ่มรถ"}
+      </button>
+
+      {editingId && (
+        <button
+          type="button"
+          onClick={() => {
+            setEditingId("");
+
+            setForm({
+              vehicle_code: "",
+              vehicle_type: "รถตู้",
+              plate_no: "",
+              status: "AVAILABLE",
+              driver_name: "-",
+              next_booking: "-",
+            });
+          }}
+          style={{ marginLeft: 12 }}
+        >
+          ยกเลิกแก้ไข
         </button>
+      )}
       </form>
 
       {loading ? (
         <p>กำลังโหลดข้อมูลรถ...</p>
       ) : (
-        <div className="car-grid">
-          {vehicles.map((car) => (
-            <div className="car-card" key={car.vehicle_id}>
-              <div className="car-top">
-                <div className="car-icon">🚐</div>
+      <div className="form-card">
+        <h3>รายการรถทั้งหมด</h3>
 
-                <span className={getStatusClass(car.status)}>
-                  {getStatusText(car.status)}
-                </span>
-              </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสรถ</th>
+                <th>ประเภทรถ</th>
+                <th>ทะเบียน</th>
+                <th>สถานะ</th>
+                <th>คนขับประจำ</th>
+                <th>รายการถัดไป</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
 
-              <h3>{car.vehicle_code}</h3>
-
-              <p>
-                {car.vehicle_type} · {car.plate_no}
-              </p>
-
-              <div className="car-detail">
-                <div>
-                  คนขับ: <b>{car.driver_name}</b>
-                </div>
-
-                <div>
-                  รายการถัดไป: <b>{car.next_booking}</b>
-                </div>
-              </div>
-            </div>
-          ))}
+            <tbody>
+              {vehicles.map((car) => (
+                <tr key={car.vehicle_id}>
+                  <td><b>{car.vehicle_code}</b></td>
+                  <td>{car.vehicle_type}</td>
+                  <td>{car.plate_no}</td>
+                  <td>
+                    <span className={getStatusClass(car.status)}>
+                      {getStatusText(car.status)}
+                    </span>
+                  </td>
+                  <td>{car.driver_name || "-"}</td>
+                  <td>{formatThaiDateTime(car.next_booking)}</td>
+                  <td>
+                    <button type="button" onClick={() => handleEdit(car)}>
+                      แก้ไข
+                    </button>
+                  <button
+                    className="danger-button"
+                    style={{ marginLeft: 8 }}
+                    onClick={() => handleDelete(car)}
+                  >
+                    ลบข้อมูล
+                  </button>
+                </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
+      </div>
       )}
     </div>
   );

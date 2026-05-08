@@ -29,8 +29,8 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={handleLogin}>
-        <h1>ระบบงานจองรถ</h1>
-        <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+<h1>ระบบงานจองรถ</h1>
+<p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
 
         <label>Email</label>
         <input

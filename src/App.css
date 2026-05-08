@@ -1,31 +1,160 @@
-body {
-  margin: 0;
-  font-family: sans-serif;
-  background: #f1f5f9;
+@font-face {
+  font-family: "TH Sarabun";
+  src: url("./assets/fonts/THSarabunNew.ttf") format("truetype");
+  font-weight: normal;
 }
 
-.app {
+@font-face {
+  font-family: "TH Sarabun";
+  src: url("./assets/fonts/THSarabunNew Bold.ttf") format("truetype");
+  font-weight: bold;
+}
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "TH Sarabun", sans-serif;
+  background: #f3f7fc;
+  color: #10233f;
+  font-size: 24px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  font-size: 22px;
+}
+
+button {
+  border: 0;
+  border-radius: 14px;
+  padding: 13px 22px;
+  background: #1455c8;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0f429f;
+}
+
+.app-shell {
   min-height: 100vh;
 }
 
-.topbar {
-  background: #1d4ed8;
+.gov-header {
+  height: 120px;
+  background: linear-gradient(90deg, #073b8e, #1455c8);
   color: white;
-  padding: 24px;
+  padding: 22px 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.topbar h1 {
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.brand-logo {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: white;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+}
+
+.brand h1 {
   margin: 0;
-  font-size: 32px;
+  font-size: 34px;
+  line-height: 1.2;
 }
 
-.topbar p {
-  margin-top: 8px;
+.brand p {
+  margin: 6px 0 0;
+  font-size: 20px;
+  opacity: 0.95;
+}
+
+.profile-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: right;
+}
+
+.profile-box span {
+  display: block;
+  font-size: 16px;
   opacity: 0.9;
 }
 
-.container {
-  padding: 24px;
+.profile-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: white;
+  color: #1455c8;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+
+.logout-btn {
+  background: white;
+  color: #1455c8;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: calc(100vh - 120px);
+}
+
+.sidebar {
+  background: white;
+  border-right: 1px solid #dbe6f3;
+  padding: 28px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar button {
+  background: white;
+  color: #12325f;
+  text-align: left;
+  font-size: 20px;
+  padding: 18px 20px;
+  border-radius: 16px;
+}
+
+.sidebar button:hover,
+.sidebar button.active {
+  background: #eaf2ff;
+  color: #1455c8;
+}
+
+.sidebar-help {
+  margin-top: auto;
+  background: #eaf2ff;
+  border-radius: 20px;
+  padding: 20px;
+  color: #17427a;
+  line-height: 1.6;
+}
+
+.main-content {
+  padding: 36px;
 }
 
 .page-header {
@@ -35,27 +164,83 @@ body {
   margin-bottom: 24px;
 }
 
-button {
-  background: #1d4ed8;
-  color: white;
-  border: 0;
-  padding: 12px 18px;
-  border-radius: 12px;
-  font-weight: bold;
-  cursor: pointer;
+.page-header h2 {
+  margin: 0;
+  color: #073b8e;
+  font-size: 32px;
 }
 
-.car-grid {
+.page-header p {
+  margin: 8px 0 0;
+  color: #6b7a90;
+}
+
+.form-card,
+.card,
+.calendar-card,
+.car-card,
+.summary-card {
+  background: white;
+  border: 1px solid #dbe6f3;
+  border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(15, 47, 92, 0.06);
+}
+
+.form-card {
+  padding: 28px;
+  margin-bottom: 28px;
+}
+
+.form-card h3 {
+  margin-top: 0;
+  text-align: center;
+  font-size: 28px;
+  color: #073b8e;
+}
+
+.form-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 22px;
+  margin-bottom: 24px;
+}
+
+.form-grid label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #173b69;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea,
+.login-card input {
+  width: 100%;
+  border: 1px solid #c9d8eb;
+  border-radius: 14px;
+  padding: 15px 16px;
+  font-size: 18px;
+  background: white;
+  color: #10233f;
+}
+
+.form-grid input:focus,
+.form-grid select:focus,
+.login-card input:focus {
+  outline: 4px solid #d9e8ff;
+  border-color: #1455c8;
+}
+
+.car-grid,
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px;
 }
 
 .car-card {
-  background: white;
-  border-radius: 24px;
-  padding: 24px;
-  border: 1px solid #e2e8f0;
+  padding: 26px;
 }
 
 .car-top {
@@ -65,104 +250,62 @@ button {
 }
 
 .car-icon {
-  font-size: 40px;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: #eaf2ff;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
 }
 
 .car-card h3 {
-  font-size: 28px;
-  margin-bottom: 6px;
+  color: #073b8e;
+  font-size: 30px;
+  margin: 22px 0 8px;
 }
 
-.car-card p {
-  color: #475569;
-}
-
+.car-card p,
 .car-detail {
-  margin-top: 18px;
-  display: grid;
-  gap: 10px;
+  color: #56657a;
+  line-height: 1.7;
 }
 
 .status {
   border-radius: 999px;
-  padding: 8px 14px;
-  font-weight: bold;
+  padding: 8px 16px;
+  font-weight: 700;
+  display: inline-block;
 }
 
-.green {
+.green,
+.status.green {
   background: #dcfce7;
   color: #15803d;
 }
 
-.blue {
+.blue,
+.status.blue {
   background: #dbeafe;
-  color: #1d4ed8;
+  color: #1455c8;
 }
 
-.amber {
+.amber,
+.status.amber {
   background: #fef3c7;
   color: #b45309;
 }
 
-@media (max-width: 900px) {
-  .car-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.form-card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 24px;
-  padding: 24px;
-  margin-bottom: 24px;
+.red,
+.status.red {
+  background: #fee2e2;
+  color: #dc2626;
 }
 
-.form-card h3 {
-  margin-top: 0;
-  font-size: 24px;
-  color: #0f172a;
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-  margin-bottom: 20px;
-}
-
-.form-grid label {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: #334155;
-}
-
-.form-grid input,
-.form-grid select {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  padding: 14px;
-  font-size: 16px;
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-@media (max-width: 900px) {
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.nav {
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 16px 24px;
-  display: flex;
-  gap: 12px;
+.gray,
+.status.gray {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .table-wrap {
@@ -173,133 +316,47 @@ table {
   width: 100%;
   border-collapse: collapse;
   min-width: 900px;
+  background: white;
 }
 
 th {
-  background: #eff6ff;
-  color: #1e3a8a;
-  text-align: left;
+  background: #eaf2ff;
+  color: #073b8e;
+  font-weight: 800;
 }
 
 th,
 td {
-  border-bottom: 1px solid #e2e8f0;
-  padding: 14px;
-}
-.approval-card {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 20px;
-  padding: 20px;
-  margin-bottom: 18px;
-  background: #ffffff;
-}
-
-.approval-card h3 {
-  margin-top: 0;
-  color: #1e3a8a;
-}
-
-.approval-card p {
-  color: #475569;
-  font-size: 16px;
-}
-
-.approval-form {
-  display: grid;
-  gap: 10px;
-}
-
-.approval-form label {
-  font-weight: 700;
-  color: #334155;
-}
-
-.approval-form input,
-.approval-form select {
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
-  padding: 13px;
-  font-size: 16px;
-}
-
-@media (max-width: 900px) {
-  .approval-card {
-    grid-template-columns: 1fr;
-  }
-}
-.calendar-card {
-  background: white;
-  border-radius: 24px;
-  padding: 24px;
-  border: 1px solid #e2e8f0;
-}
-
-.rbc-calendar {
-  font-family: sans-serif;
-}
-
-.rbc-toolbar {
-  margin-bottom: 20px;
-}
-
-.rbc-toolbar button {
-  background: #eff6ff !important;
-  color: #1e3a8a !important;
-  border: 1px solid #bfdbfe !important;
-}
-
-.rbc-toolbar button.rbc-active {
-  background: #2563eb !important;
-  color: white !important;
-}
-
-.rbc-today {
-  background: #eff6ff !important;
-}
-.danger-button {
-  background: #dc2626;
-}
-
-.danger-button:hover {
-  background: #b91c1c;
-}
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 18px;
-  margin-bottom: 24px;
+  padding: 16px;
+  border-bottom: 1px solid #dbe6f3;
+  text-align: left;
 }
 
 .summary-card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 24px;
-  padding: 24px;
+  padding: 26px;
+  text-align: center;
 }
 
 .summary-card h3 {
   margin: 0 0 12px;
-  color: #475569;
+  color: #173b69;
 }
 
 .summary-card strong {
-  font-size: 42px;
-  color: #0f172a;
+  font-size: 46px;
+  color: #073b8e;
 }
 
 .amber-box {
-  background: #fffbeb;
+  background: #fff9e8;
 }
 
 .blue-box {
-  background: #eff6ff;
+  background: #eaf2ff;
 }
 
 .green-box {
-  background: #f0fdf4;
+  background: #eafaf0;
 }
 
 .gray-box {
@@ -307,82 +364,572 @@ td {
 }
 
 .red-box {
-  background: #fef2f2;
+  background: #fff1f1;
 }
 
-@media (max-width: 900px) {
-  .summary-grid {
-    grid-template-columns: 1fr;
-  }
-}
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.user-box {
-  text-align: right;
+.approval-card {
   display: grid;
-  gap: 6px;
-}
-
-.user-box button {
+  grid-template-columns: 1.3fr 1fr;
+  gap: 24px;
+  border: 1px solid #dbe6f3;
+  border-radius: 20px;
+  padding: 22px;
+  margin-bottom: 18px;
   background: white;
-  color: #1d4ed8;
-  padding: 8px 12px;
 }
 
+.approval-card h3 {
+  text-align: left;
+  color: #073b8e;
+}
+
+.approval-form {
+  display: grid;
+  gap: 12px;
+}
+
+.approval-form input,
+.approval-form select {
+  border: 1px solid #c9d8eb;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.danger-button {
+  background: #dc2626;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+}
+
+.calendar-card {
+  padding: 28px;
+}
+
+.rbc-toolbar button {
+  background: #eaf2ff !important;
+  color: #073b8e !important;
+  border: 1px solid #b8d2f5 !important;
+}
+
+.rbc-toolbar button.rbc-active {
+  background: #1455c8 !important;
+  color: white !important;
+}
+
+.rbc-today {
+  background: #eaf2ff !important;
+}
+
+/* Login */
 .login-page {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: #eff6ff;
+  background: #eaf2ff;
 }
 
 .login-card {
-  width: 420px;
+  width: 520px;
   max-width: calc(100% - 32px);
   background: white;
   border-radius: 28px;
-  padding: 32px;
-  border: 1px solid #dbeafe;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  padding: 38px;
+  border: 1px solid #dbe6f3;
+  box-shadow: 0 14px 34px rgba(15, 47, 92, 0.1);
 }
 
 .login-card h1 {
+  text-align: center;
   margin: 0;
-  color: #1e3a8a;
+  color: #073b8e;
+  font-size: 42px;
 }
 
 .login-card p {
+  text-align: center;
   color: #64748b;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .login-card label {
   display: block;
-  font-weight: 700;
+  font-weight: 800;
+  color: #173b69;
   margin-bottom: 8px;
 }
 
 .login-card input {
-  width: 100%;
-  box-sizing: border-box;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 14px;
-  font-size: 18px;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .login-card button {
   width: 100%;
-  padding: 14px;
+  padding: 16px;
+  font-size: 20px;
 }
 
 .login-help {
-  margin-top: 18px;
+  margin-top: 22px;
+  text-align: center;
   color: #64748b;
   line-height: 1.7;
+}
+
+@media (max-width: 1000px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid #dbe6f3;
+  }
+
+  .sidebar-help {
+    display: none;
+  }
+
+  .car-grid,
+  .summary-grid,
+  .form-grid,
+  .approval-card {
+    grid-template-columns: 1fr;
+  }
+
+  .gov-header {
+    height: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .profile-box {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+/* Fix full-width government layout */
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+.app-shell {
+  width: 100%;
+  max-width: none;
+}
+
+.gov-header {
+  width: 100%;
+}
+
+.layout {
+  width: 100%;
+  max-width: none;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.main-content {
+  width: 100%;
+  max-width: none;
+  padding: 36px 44px;
+}
+
+.form-card,
+.calendar-card {
+  width: 100%;
+  max-width: none;
+}
+
+.form-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.car-grid {
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+}
+
+.summary-grid {
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+}
+
+/* TH Sarabun should be larger */
+body {
+  font-size: 24px;
+}
+
+button,
+input,
+select,
+textarea,
+table {
+  font-size: 22px;
+}
+
+.page-header h2 {
+  font-size: 38px;
+}
+
+.form-card h3 {
+  font-size: 34px;
+}
+
+.brand h1 {
+  font-size: 40px;
+}
+
+.brand p {
+  font-size: 26px;
+}
+
+.sidebar button {
+  font-size: 24px;
+}
+
+/* Table readable */
+th,
+td {
+  font-size: 22px;
+  padding: 18px;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .main-content {
+    padding: 24px;
+  }
+}
+.staff-section {
+  background: white;
+  border: 1px solid #dbe6f3;
+  border-radius: 24px;
+  padding: 28px;
+  margin-bottom: 28px;
+  box-shadow: 0 8px 24px rgba(15, 47, 92, 0.06);
+}
+
+.staff-section h3 {
+  color: #073b8e;
+  font-size: 32px;
+  text-align: left;
+  margin-bottom: 20px;
+}
+
+.staff-card {
+  border: 1px solid #dbe6f3;
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 18px;
+  background: #ffffff;
+}
+
+.staff-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid #e5edf7;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.staff-card-title {
+  font-size: 30px;
+  font-weight: 700;
+  color: #073b8e;
+}
+
+.staff-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 24px;
+  margin-bottom: 18px;
+}
+
+.staff-info-item {
+  background: #f8fbff;
+  border: 1px solid #e5edf7;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.staff-info-item b {
+  display: block;
+  color: #173b69;
+  margin-bottom: 4px;
+}
+
+.staff-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+
+.staff-action-grid label {
+  font-weight: 700;
+  color: #173b69;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.staff-action-grid input,
+.staff-action-grid select {
+  width: 100%;
+  border: 1px solid #c9d8eb;
+  border-radius: 14px;
+  padding: 14px;
+  background: white;
+}
+
+.staff-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.staff-buttons button {
+  padding: 12px 22px;
+  min-width: 150px;
+}
+
+.small-button {
+  padding: 10px 18px;
+  font-size: 22px;
+  border-radius: 12px;
+}
+
+.staff-empty {
+  background: #f8fbff;
+  border: 1px dashed #b8d2f5;
+  color: #64748b;
+  padding: 22px;
+  border-radius: 18px;
+  text-align: center;
+}
+
+@media (max-width: 1200px) {
+  .staff-info-grid,
+  .staff-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.staff-card-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 22px;
+}
+
+.section-counter {
+  display: inline-flex;
+  align-items: center;
+  background: #eaf2ff;
+  color: #073b8e;
+  border: 1px solid #b8d2f5;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.pagination button {
+  min-width: 44px;
+  padding: 8px 14px;
+  background: #eaf2ff;
+  color: #073b8e;
+}
+
+.pagination button.active-page {
+  background: #1455c8;
+  color: white;
+}
+
+@media (max-width: 1100px) {
+  .staff-card-list {
+    grid-template-columns: 1fr;
+  }
+}
+.staff-card-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  gap: 22px;
+}
+
+.section-counter {
+  display: inline-flex;
+  align-items: center;
+  background: #eaf2ff;
+  color: #073b8e;
+  border: 1px solid #b8d2f5;
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+}
+
+.pagination {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.pagination button {
+  min-width: 44px;
+  padding: 8px 14px;
+  background: #eaf2ff;
+  color: #073b8e;
+}
+
+.pagination button.active-page {
+  background: #1455c8;
+  color: white;
+}
+
+@media (max-width: 1100px) {
+  .staff-card-list {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 700px) {
+  .gov-header {
+    padding: 18px;
+    display: grid;
+    gap: 16px;
+  }
+
+  .brand {
+    align-items: flex-start;
+  }
+
+  .brand-logo {
+    width: 56px;
+    height: 56px;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+
+  .brand h1 {
+    font-size: 30px;
+  }
+
+  .brand p {
+    font-size: 20px;
+  }
+
+  .profile-box {
+    display: grid;
+    grid-template-columns: 48px 1fr auto;
+    width: 100%;
+    text-align: left;
+  }
+
+  .logout-btn {
+    padding: 10px 12px;
+    font-size: 18px;
+  }
+
+  .sidebar {
+    width: 100%;
+    padding: 14px;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .sidebar button {
+    flex: 0 0 auto;
+    font-size: 20px;
+    padding: 14px 18px;
+  }
+
+  .main-content {
+    padding: 18px;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  .page-header {
+    display: grid;
+    gap: 14px;
+  }
+
+  .page-header h2 {
+    font-size: 30px;
+  }
+
+  .form-card,
+  .calendar-card,
+  .staff-section {
+    padding: 18px;
+    overflow-x: hidden;
+  }
+
+  .form-grid,
+  .car-grid,
+  .summary-grid,
+  .staff-card-list,
+  .staff-info-grid,
+  .staff-action-grid,
+  .approval-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  .form-grid input,
+  .form-grid select,
+  .form-grid textarea {
+    min-width: 0;
+  }
+
+  .car-card {
+    width: 100%;
+  }
+
+  table {
+    min-width: 720px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+}
+.form-card table .status {
+  padding: 6px 14px;
+  font-size: 20px;
+}
+
+.form-card table td,
+.form-card table th {
+  vertical-align: middle;
 }
