@@ -1,5 +1,5 @@
-// const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";
-const API_BASE_URL = "http://localhost:8787";
+const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";
+// const API_BASE_URL = "http://localhost:8787";
 // ---------------------
 // VEHICLES
 // ---------------------
