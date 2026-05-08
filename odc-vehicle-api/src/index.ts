@@ -273,6 +273,65 @@ if (url.pathname === "/api/users/reset-password" && request.method === "POST") {
 
     return jsonResponse(sheetJson);
   }
+if (url.pathname === "/api/users/disable" && request.method === "POST") {
+  const body = await request.json();
+
+  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "disableUser",
+      data: body,
+    }),
+  });
+
+  return jsonResponse(sheetJson);
+    }
+
+    if (url.pathname === "/api/users/delete" && request.method === "POST") {
+      const body = await request.json();
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "deleteUser",
+          data: body,
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
+if (url.pathname === "/api/drivers/update" && request.method === "POST") {
+  const body = await request.json();
+
+  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      action: "updateDriver",
+      data: body,
+    }),
+  });
+
+  return jsonResponse(sheetJson);
+  }
+
+  if (url.pathname === "/api/drivers/delete" && request.method === "POST") {
+    const body = await request.json();
+
+    const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "deleteDriver",
+        data: body,
+      }),
+    });
+
+    return jsonResponse(sheetJson);
+  }
+
     return jsonResponse(
       {
         success: false,

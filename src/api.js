@@ -1,5 +1,5 @@
-const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";;
-
+// const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";
+const API_BASE_URL = "http://localhost:8787";
 // ---------------------
 // VEHICLES
 // ---------------------
@@ -256,6 +256,72 @@ export async function deleteVehicle(vehicle_id) {
 
   if (!json.success) {
     throw new Error(json.message || "ลบข้อมูลรถไม่สำเร็จ");
+  }
+
+  return json.data;
+}
+export async function disableUser(user_id) {
+  const res = await fetch(`${API_BASE_URL}/api/users/disable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ user_id }),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "Disable failed");
+  }
+
+  return json.data;
+}
+
+export async function deleteUser(user_id) {
+  const res = await fetch(`${API_BASE_URL}/api/users/delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ user_id }),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "Delete failed");
+  }
+
+  return json.data;
+}
+export async function updateDriver(data) {
+  const res = await fetch(`${API_BASE_URL}/api/drivers/update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "แก้ไขคนขับไม่สำเร็จ");
+  }
+
+  return json.data;
+}
+
+export async function deleteDriver(driver_id) {
+  const res = await fetch(`${API_BASE_URL}/api/drivers/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ driver_id }),
+  });
+
+  const json = await res.json();
+
+  if (!json.success) {
+    throw new Error(json.message || "ลบคนขับไม่สำเร็จ");
   }
 
   return json.data;

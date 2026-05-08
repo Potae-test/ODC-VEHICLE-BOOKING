@@ -6,6 +6,13 @@ import {
   updateVehicle,
 } from "../api";
 import { formatThaiDateTime } from "../utils/date";
+import Swal from "sweetalert2";
+import {
+  showConfirm,
+  showError,
+  showSuccess,
+} from "../utils/alert";
+
 function getStatusText(status) {
   if (status === "AVAILABLE") return "พร้อมใช้งาน";
   if (status === "IN_USE") return "กำลังใช้งาน";
@@ -20,19 +27,78 @@ function getStatusClass(status) {
   if (status === "MAINTENANCE") return "status amber";
   return "status";
 }
-function handleEdit(car) {
-  setEditingId(car.vehicle_id);
+async function handleEdit(car) {
+  const result = await Swal.fire({
+    title: "แก้ไขข้อมูลรถ",
+    html: `
+      <div class="swal-form">
+        <label>รหัสรถ</label>
+        <input id="vehicle_code" class="swal2-input" value="${car.vehicle_code || ""}">
 
-  setForm({
-    vehicle_code: car.vehicle_code || "",
-    vehicle_type: car.vehicle_type || "รถตู้",
-    plate_no: car.plate_no || "",
-    status: car.status || "AVAILABLE",
-    driver_name: car.driver_name || "-",
-    next_booking: car.next_booking || "-",
+        <label>ประเภทรถ</label>
+        <select id="vehicle_type" class="swal2-select">
+          <option value="รถตู้" ${car.vehicle_type === "รถตู้" ? "selected" : ""}>รถตู้</option>
+          <option value="รถพยาบาล" ${car.vehicle_type === "รถพยาบาล" ? "selected" : ""}>รถพยาบาล</option>
+          <option value="รถกระบะ" ${car.vehicle_type === "รถกระบะ" ? "selected" : ""}>รถกระบะ</option>
+          <option value="รถเก๋ง" ${car.vehicle_type === "รถเก๋ง" ? "selected" : ""}>รถเก๋ง</option>
+        </select>
+
+        <label>ทะเบียนรถ</label>
+        <input id="plate_no" class="swal2-input" value="${car.plate_no || ""}">
+
+        <label>สถานะ</label>
+        <select id="status" class="swal2-select">
+          <option value="AVAILABLE" ${car.status === "AVAILABLE" ? "selected" : ""}>พร้อมใช้งาน</option>
+          <option value="IN_USE" ${car.status === "IN_USE" ? "selected" : ""}>กำลังใช้งาน</option>
+          <option value="MAINTENANCE" ${car.status === "MAINTENANCE" ? "selected" : ""}>ซ่อมบำรุง</option>
+        </select>
+
+        <label>คนขับประจำ</label>
+        <input id="driver_name" class="swal2-input" value="${car.driver_name || ""}">
+
+        
+      </div>
+    `,
+    width: 650,
+    showCancelButton: true,
+    confirmButtonText: "บันทึกการแก้ไข",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: "#1455c8",
+    cancelButtonColor: "#64748b",
+    preConfirm: () => {
+      const vehicle_code = document.getElementById("vehicle_code").value.trim();
+      const vehicle_type = document.getElementById("vehicle_type").value;
+      const plate_no = document.getElementById("plate_no").value.trim();
+      const status = document.getElementById("status").value;
+      const driver_name = document.getElementById("driver_name").value.trim();
+
+
+      if (!vehicle_code || !plate_no) {
+        Swal.showValidationMessage("กรุณากรอกรหัสรถและทะเบียนรถ");
+        return false;
+      }
+
+      return {
+        vehicle_id: car.vehicle_id,
+        vehicle_code,
+        vehicle_type,
+        plate_no,
+        status,
+        driver_name,
+  
+      };
+    },
   });
 
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (!result.isConfirmed) return;
+
+  try {
+    await updateVehicle(result.value);
+    await loadVehicles();
+    await showSuccess("แก้ไขข้อมูลรถสำเร็จ");
+  } catch (err) {
+    showError(err.message || "แก้ไขข้อมูลรถไม่สำเร็จ");
+  }
 }
 
 
@@ -48,7 +114,7 @@ export default function Cars() {
     plate_no: "",
     status: "AVAILABLE",
     driver_name: "-",
-    next_booking: "-",
+
   });
 
   async function loadVehicles() {
@@ -62,17 +128,21 @@ export default function Cars() {
       setLoading(false);
     }
   }
-  async function handleDelete(car) {
-    if (!confirm(`ยืนยันลบรถ ${car.vehicle_code} ใช่หรือไม่?`)) return;
+async function handleDelete(car) {
+  const confirmed = await showConfirm(
+    `ยืนยันลบรถ ${car.vehicle_code} ใช่หรือไม่?`
+  );
 
-    try {
-      await deleteVehicle(car.vehicle_id);
-      await loadVehicles();
-      alert("ลบข้อมูลสำเร็จ");
-    } catch (err) {
-      alert(err.message || "ลบรถไม่สำเร็จ");
-    }
+  if (!confirmed) return;
+
+  try {
+    await deleteVehicle(car.vehicle_id);
+    await loadVehicles();
+    await showSuccess("ลบข้อมูลรถสำเร็จ");
+  } catch (err) {
+    showError(err.message || "ลบข้อมูลรถไม่สำเร็จ");
   }
+}
   async function handleSubmit(e) {
     e.preventDefault();
 
@@ -97,7 +167,7 @@ export default function Cars() {
         plate_no: "",
         status: "AVAILABLE",
         driver_name: "-",
-        next_booking: "-",
+    
       });
 
       await loadVehicles();
@@ -206,17 +276,6 @@ export default function Cars() {
               placeholder="เช่น คุณสมชาย"
             />
           </div>
-
-          <div>
-            <label>รายการถัดไป</label>
-            <input
-              value={form.next_booking}
-              onChange={(e) =>
-                setForm({ ...form, next_booking: e.target.value })
-              }
-              placeholder="-"
-            />
-          </div>
         </div>
 
       <button disabled={saving}>
@@ -239,7 +298,6 @@ export default function Cars() {
               plate_no: "",
               status: "AVAILABLE",
               driver_name: "-",
-              next_booking: "-",
             });
           }}
           style={{ marginLeft: 12 }}
@@ -264,7 +322,6 @@ export default function Cars() {
                 <th>ทะเบียน</th>
                 <th>สถานะ</th>
                 <th>คนขับประจำ</th>
-                <th>รายการถัดไป</th>
                 <th>จัดการ</th>
               </tr>
             </thead>
@@ -281,7 +338,6 @@ export default function Cars() {
                     </span>
                   </td>
                   <td>{car.driver_name || "-"}</td>
-                  <td>{formatThaiDateTime(car.next_booking)}</td>
                   <td>
                     <button type="button" onClick={() => handleEdit(car)}>
                       แก้ไข

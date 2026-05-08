@@ -9,6 +9,12 @@ import {
   getVehicles,
   startTrip,
 } from "../api";
+import {
+  showConfirm,
+  showError,
+  showInput,
+  showSuccess,
+} from "../utils/alert";
 
 const ITEMS_PER_PAGE = 2;
 
@@ -126,29 +132,28 @@ export default function Staff() {
         );
       });
     }
-
   async function handleApprove(booking) {
     const data = selected[booking.booking_id] || {};
 
     if (!data.vehicle_id) {
-      alert("กรุณาเลือกรถ");
+      showError("กรุณาเลือกรถ");
       return;
     }
 
     if (!data.driver_name) {
-      alert("กรุณาเลือกคนขับ");
+      showError("กรุณาเลือกคนขับ");
       return;
     }
 
     const vehicle = vehicles.find((v) => v.vehicle_id === data.vehicle_id);
 
     if (!vehicle || !isVehicleAvailable(vehicle, booking, bookings)) {
-      alert("รถคันนี้ไม่ว่าง หรือไม่พร้อมใช้งาน กรุณาเลือกรถคันอื่น");
+      showError("รถคันนี้ไม่ว่าง หรือไม่พร้อมใช้งาน กรุณาเลือกรถคันอื่น");
       return;
     }
 
     if (!isDriverAvailable(data.driver_name, booking, bookings)) {
-      alert("คนขับท่านนี้ไม่ว่าง กรุณาเลือกคนขับท่านอื่น");
+      showError("คนขับท่านนี้ไม่ว่าง กรุณาเลือกคนขับท่านอื่น");
       return;
     }
 
@@ -160,15 +165,20 @@ export default function Staff() {
         staff_note: data.staff_note || "",
       });
 
-      alert("อนุมัติรายการสำเร็จ");
+      await showSuccess("อนุมัติรายการสำเร็จ");
       await loadData();
     } catch (err) {
-      alert(err.message || "อนุมัติไม่สำเร็จ");
+      showError(err.message || "อนุมัติไม่สำเร็จ");
     }
   }
 
   async function handleStartTrip(booking) {
-    const outMileage = prompt("กรอกเลขไมล์ตอนรถออก");
+    const outMileage = await showInput(
+      "บันทึกรถออก",
+      "กรอกเลขไมล์ตอนรถออก",
+      "เช่น 125000"
+    );
+
     if (!outMileage) return;
 
     try {
@@ -179,15 +189,20 @@ export default function Staff() {
         remark: "",
       });
 
-      alert("บันทึกรถออกสำเร็จ");
+      await showSuccess("บันทึกรถออกสำเร็จ");
       await loadData();
     } catch (err) {
-      alert(err.message || "บันทึกรถออกไม่สำเร็จ");
+      showError(err.message || "บันทึกรถออกไม่สำเร็จ");
     }
   }
 
   async function handleCompleteTrip(booking) {
-    const inMileage = prompt("กรอกเลขไมล์ตอนรถเข้า");
+    const inMileage = await showInput(
+      "บันทึกรถเข้า",
+      "กรอกเลขไมล์ตอนรถเข้า",
+      "เช่น 125500"
+    );
+
     if (!inMileage) return;
 
     try {
@@ -198,22 +213,27 @@ export default function Staff() {
         remark: "",
       });
 
-      alert("บันทึกรถเข้าสำเร็จ");
+      await showSuccess("บันทึกรถเข้าสำเร็จ");
       await loadData();
     } catch (err) {
-      alert(err.message || "บันทึกรถเข้าไม่สำเร็จ");
+      showError(err.message || "บันทึกรถเข้าไม่สำเร็จ");
     }
   }
 
   async function handleCancelBooking(booking) {
-    const reason = prompt("กรอกเหตุผลการยกเลิก");
+    const reason = await showInput(
+      "ยกเลิกรายการ",
+      "กรอกเหตุผลการยกเลิก",
+      "เช่น เปลี่ยนวันจอง / ยกเลิกภารกิจ"
+    );
+
     if (!reason) return;
 
-    const confirmCancel = confirm(
+    const confirmed = await showConfirm(
       `ยืนยันยกเลิกรายการ ${booking.booking_no} ใช่หรือไม่?`
     );
 
-    if (!confirmCancel) return;
+    if (!confirmed) return;
 
     try {
       await cancelBooking({
@@ -221,10 +241,10 @@ export default function Staff() {
         reason,
       });
 
-      alert("ยกเลิกรายการสำเร็จ");
+      await showSuccess("ยกเลิกรายการสำเร็จ");
       await loadData();
     } catch (err) {
-      alert(err.message || "ยกเลิกไม่สำเร็จ");
+      showError(err.message || "ยกเลิกไม่สำเร็จ");
     }
   }
 

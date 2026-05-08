@@ -10,7 +10,18 @@ import {
   resetUserPassword,
   updateDriverStatus,
   updateUser,
+  disableUser,
+  deleteUser,
+  updateDriver,
+  deleteDriver,
 } from "../api";
+import {
+  showConfirm,
+  showError,
+  showInput,
+  showSuccess,
+} from "../utils/alert";
+import Swal from "sweetalert2";
 
 function countByStatus(items, status) {
   return items.filter((x) => x.status === status).length;
@@ -83,9 +94,9 @@ export default function Admin() {
       });
 
       await loadData();
-      alert("เพิ่มคนขับสำเร็จ");
+      await showSuccess("เพิ่มคนขับสำเร็จ");
     } catch (err) {
-      alert(err.message || "เพิ่มคนขับไม่สำเร็จ");
+      showError(err.message || "เพิ่มคนขับไม่สำเร็จ");
     }
   }
 
@@ -97,8 +108,10 @@ export default function Admin() {
         .map((r, index) => `${index + 1}. ${r}`)
         .join("\n");
 
-      const answer = prompt(
-        `เลือกเหตุผลการปิดใช้งาน\n\n${reasonText}\n\nพิมพ์เลขข้อ หรือพิมพ์เหตุผลใหม่`
+      const answer = await showInput(
+        "ปิดใช้งานคนขับ",
+        `เลือกเหตุผลการปิดใช้งาน\n\n${reasonText}\n\nพิมพ์เลขข้อ หรือพิมพ์เหตุผลใหม่`,
+        "เช่น 1 หรือ ลาป่วย"
       );
 
       if (!answer) return;
@@ -152,38 +165,32 @@ export default function Admin() {
     e.preventDefault();
 
     if (!userForm.name || !userForm.email) {
-      alert("กรุณากรอกชื่อและ Email");
+      showError("กรุณากรอกชื่อและ Email");
       return;
     }
 
     try {
       if (userForm.user_id) {
         await updateUser(userForm);
-        alert("แก้ไขผู้ใช้งานสำเร็จ");
+        await showSuccess("แก้ไขผู้ใช้งานสำเร็จ");
       } else {
         await createUser(userForm);
-        alert("เพิ่มผู้ใช้งานสำเร็จ");
+        await showSuccess("เพิ่มผู้ใช้งานสำเร็จ");
       }
 
-      setUserForm({
-        user_id: "",
-        name: "",
-        email: "",
-        password: "1234",
-        department: "ศูนย์รับบริจาคอวัยวะ",
-        phone: "",
-        role: "USER",
-        status: "ACTIVE",
-      });
-
+      clearUserForm();
       await loadData();
     } catch (err) {
-      alert(err.message || "บันทึกไม่สำเร็จ");
+      showError(err.message || "บันทึกไม่สำเร็จ");
     }
   }
 
   async function handleResetPassword(u) {
-    const password = prompt(`กรอกรหัสผ่านใหม่ของ ${u.name}`);
+    const password = await showInput(
+      "เปลี่ยนรหัสผ่าน",
+      `กรอกรหัสผ่านใหม่ของ ${u.name}`,
+      "เช่น 1234"
+    );
 
     if (!password) return;
 
@@ -193,13 +200,82 @@ export default function Admin() {
         password,
       });
 
-      alert("เปลี่ยนรหัสผ่านสำเร็จ");
+      await showSuccess("เปลี่ยนรหัสผ่านสำเร็จ");
       await loadData();
     } catch (err) {
-      alert(err.message || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
+      showError(err.message || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
     }
   }
+    async function handleDisableUser(u) {
+    const confirmed = await showConfirm(
+      `ยืนยันปิดใช้งาน ${u.name} ใช่หรือไม่?`
+    );
 
+    if (!confirmed) return;
+
+    try {
+      await disableUser(u.user_id);
+
+      await showSuccess("ปิดใช้งานผู้ใช้สำเร็จ");
+
+      await loadData();
+    } catch (err) {
+      showError(err.message || "ปิดใช้งานไม่สำเร็จ");
+    }
+  }
+async function handleDeleteUser(u) {
+  const confirmed = await showConfirm(
+    `ยืนยันลบผู้ใช้ ${u.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await deleteUser(u.user_id);
+
+    await showSuccess("ลบผู้ใช้สำเร็จ");
+
+    await loadData();
+  } catch (err) {
+    showError(err.message || "ลบไม่สำเร็จ");
+  }
+  }
+  async function handleDeleteUser(u) {
+    const confirmed = await showConfirm(
+      `ยืนยันลบผู้ใช้ ${u.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      await deleteUser(u.user_id);
+
+      await showSuccess("ลบผู้ใช้สำเร็จ");
+
+      await loadData();
+    } catch (err) {
+      showError(err.message || "ลบไม่สำเร็จ");
+    }
+  }
+  async function handleEnableUser(u) {
+  const confirmed = await showConfirm(
+    `ยืนยันเปิดใช้งาน ${u.name} ใช่หรือไม่?`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await updateUser({
+      ...u,
+      status: "ACTIVE",
+    });
+
+    await showSuccess("เปิดใช้งานผู้ใช้สำเร็จ");
+    await loadData();
+  } catch (err) {
+    showError(err.message || "เปิดใช้งานไม่สำเร็จ");
+  }
+}
   function clearUserForm() {
     setUserForm({
       user_id: "",
@@ -212,7 +288,80 @@ export default function Admin() {
       status: "ACTIVE",
     });
   }
+async function handleEditDriver(d) {
+  const result = await Swal.fire({
+    title: "แก้ไขข้อมูลคนขับ",
+    html: `
+      <div class="swal-form">
+        <label>ชื่อคนขับ</label>
+        <input id="driver_name" class="swal2-input" value="${d.name || ""}">
 
+        <label>เบอร์โทร</label>
+        <input id="driver_phone" class="swal2-input" value="${d.phone || ""}">
+
+        <label>สถานะ</label>
+        <select id="driver_status" class="swal2-select">
+          <option value="ACTIVE" ${d.status === "ACTIVE" ? "selected" : ""}>ใช้งาน</option>
+          <option value="INACTIVE" ${d.status === "INACTIVE" ? "selected" : ""}>ปิดใช้งาน</option>
+        </select>
+
+        <label>หมายเหตุ</label>
+        <input id="driver_remark" class="swal2-input" value="${d.remark || ""}">
+      </div>
+    `,
+    width: 700,
+    showCancelButton: true,
+    confirmButtonText: "บันทึกการแก้ไข",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: "#1455c8",
+    cancelButtonColor: "#64748b",
+    preConfirm: () => {
+      const name = document.getElementById("driver_name").value.trim();
+      const phone = document.getElementById("driver_phone").value.trim();
+      const status = document.getElementById("driver_status").value;
+      const remark = document.getElementById("driver_remark").value.trim();
+
+      if (!name || !phone) {
+        Swal.showValidationMessage("กรุณากรอกชื่อและเบอร์โทร");
+        return false;
+      }
+
+      return {
+        driver_id: d.driver_id,
+        name,
+        phone,
+        status,
+        remark,
+      };
+    },
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await updateDriver(result.value);
+    await showSuccess("แก้ไขข้อมูลคนขับสำเร็จ");
+    await loadData();
+  } catch (err) {
+    showError(err.message || "แก้ไขคนขับไม่สำเร็จ");
+  }
+}
+
+async function handleDeleteDriver(d) {
+  const confirmed = await showConfirm(
+    `ยืนยันลบคนขับ ${d.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await deleteDriver(d.driver_id);
+    await showSuccess("ลบคนขับสำเร็จ");
+    await loadData();
+  } catch (err) {
+    showError(err.message || "ลบคนขับไม่สำเร็จ");
+  }
+}
   useEffect(() => {
     loadData();
   }, []);
@@ -335,26 +484,42 @@ export default function Admin() {
 
             <tbody>
               {drivers.map((d) => (
-                <tr key={d.driver_id}>
+                <tr 
+                key={d.driver_id}
+                className={d.status === "INACTIVE" ? "inactive-row" : ""}
+              >
                   <td>{d.driver_id}</td>
                   <td>{d.name}</td>
                   <td>{d.phone}</td>
                   <td>{d.status}</td>
                   <td>{d.remark || "-"}</td>
-                  <td>
-                    {d.status === "ACTIVE" ? (
-                      <button
-                        className="danger-button"
-                        onClick={() => handleDriverStatus(d, "INACTIVE")}
-                      >
-                        ปิดใช้งาน
-                      </button>
-                    ) : (
-                      <button onClick={() => handleDriverStatus(d, "ACTIVE")}>
-                        เปิดใช้งาน
-                      </button>
-                    )}
-                  </td>
+                  <td className="action-buttons">
+                  <button type="button" onClick={() => handleEditDriver(d)}>
+                    แก้ไข
+                  </button>
+
+                  {d.status === "INACTIVE" ? (
+                    <button type="button" onClick={() => handleDriverStatus(d, "ACTIVE")}>
+                      เปิดใช้งาน
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="warning-button"
+                      onClick={() => handleDriverStatus(d, "INACTIVE")}
+                    >
+                      ปิดใช้งาน
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDeleteDriver(d)}
+                  >
+                    ลบ
+                  </button>
+                </td>
                 </tr>
               ))}
             </tbody>
@@ -476,28 +641,51 @@ export default function Admin() {
               </tr>
             </thead>
 
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.user_id}>
-                  <td>{u.user_id}</td>
-                  <td>{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.role}</td>
-                  <td>{u.status}</td>
-                  <td>
-                    <button onClick={() => editUser(u)}>แก้ไข</button>
+        <tbody>
+            {users.map((u) => (
+              <tr
+                key={u.user_id}
+                className={u.status === "INACTIVE" ? "inactive-row" : ""}
+              >
+                <td>{u.user_id}</td>
+                <td>{u.name}</td>
+                <td>{u.email}</td>
+                <td>{u.role}</td>
+                <td>{u.status}</td>
+                <td className="action-buttons">
+                  <button type="button" onClick={() => editUser(u)}>
+                    แก้ไข
+                  </button>
 
+                  <button type="button" onClick={() => handleResetPassword(u)}>
+                    เปลี่ยนรหัส
+                  </button>
+
+                  {u.status === "INACTIVE" ? (
+                    <button type="button" onClick={() => handleEnableUser(u)}>
+                      เปิดใช้งาน
+                    </button>
+                  ) : (
                     <button
                       type="button"
-                      style={{ marginLeft: 8 }}
-                      onClick={() => handleResetPassword(u)}
+                      className="warning-button"
+                      onClick={() => handleDisableUser(u)}
                     >
-                      เปลี่ยนรหัส
+                      ปิดใช้งาน
                     </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+                  )}
+
+                  <button
+                    type="button"
+                    className="danger-button"
+                    onClick={() => handleDeleteUser(u)}
+                  >
+                    ลบ
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
           </table>
         </div>
       </div>
