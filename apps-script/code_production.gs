@@ -120,19 +120,6 @@ function jsonOutput(obj) {
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
-
-function ensureColumn(sheet, headers, columnName) {
-  let index = headers.indexOf(columnName);
-
-  if (index === -1) {
-    index = headers.length;
-    sheet.getRange(1, index + 1).setValue(columnName);
-    headers.push(columnName);
-  }
-
-  return index;
-}
-
 function getBookings() {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
@@ -217,7 +204,6 @@ function approveBooking(data) {
 
   const bookingIdCol = headers.indexOf("booking_id");
   const vehicleIdCol = headers.indexOf("vehicle_id");
-  const driverIdCol = ensureColumn(sheet, headers, "driver_id");
   const driverNameCol = headers.indexOf("driver_name");
   const statusCol = headers.indexOf("status");
   const staffNoteCol = headers.indexOf("staff_note");
@@ -261,7 +247,6 @@ function approveBooking(data) {
       }
 
       sheet.getRange(row, vehicleIdCol + 1).setValue(data.vehicle_id || "");
-      sheet.getRange(row, driverIdCol + 1).setValue(data.driver_id || "");
       sheet.getRange(row, driverNameCol + 1).setValue(data.driver_name || "");
       sheet.getRange(row, statusCol + 1).setValue("APPROVED");
       sheet.getRange(row, staffNoteCol + 1).setValue(data.staff_note || "");
@@ -273,7 +258,6 @@ function approveBooking(data) {
         data: {
           booking_id: data.booking_id,
           vehicle_id: data.vehicle_id || "",
-          driver_id: data.driver_id || "",
           driver_name: data.driver_name || "",
           status: "APPROVED"
         }

@@ -28,6 +28,7 @@ npx wrangler pages deploy dist --project-name odc-vehicle-booking
 
 7) Deploy API Worker
 cd odc-vehicle-api
+npx wrangler deploy 
 npx wrangler deploy src/index.ts --name odc-vehicle-api
 
 -----------------------------

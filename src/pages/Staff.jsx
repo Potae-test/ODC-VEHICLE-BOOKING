@@ -15,6 +15,7 @@ import {
   showInput,
   showSuccess,
 } from "../utils/alert";
+import { hasPermission } from "../permissions";
 
 const ITEMS_PER_PAGE = 2;
 
@@ -114,10 +115,12 @@ export default function Staff() {
     });
   }
 
-    function isDriverAvailable(driverName, currentBooking, allBookings) {
+    function isDriverAvailable(driver, currentBooking, allBookings) {
       return !allBookings.some((b) => {
         const isSameBooking = b.booking_id === currentBooking.booking_id;
-        const isSameDriver = b.driver_name === driverName;
+        const isSameDriver = b.driver_id
+          ? b.driver_id === driver.driver_id
+          : b.driver_name === driver.name;
         const activeStatus = b.status === "APPROVED" || b.status === "IN_USE";
 
         if (isSameBooking || !isSameDriver || !activeStatus) {
@@ -152,7 +155,7 @@ export default function Staff() {
       return;
     }
 
-    if (!isDriverAvailable(data.driver_name, booking, bookings)) {
+    if (!isDriverAvailable({ driver_id: data.driver_id, name: data.driver_name }, booking, bookings)) {
       showError("คนขับท่านนี้ไม่ว่าง กรุณาเลือกคนขับท่านอื่น");
       return;
     }
@@ -161,6 +164,7 @@ export default function Staff() {
       await approveBooking({
         booking_id: booking.booking_id,
         vehicle_id: data.vehicle_id,
+        driver_id: data.driver_id || "",
         driver_name: data.driver_name,
         staff_note: data.staff_note || "",
       });
@@ -262,6 +266,9 @@ export default function Staff() {
 
   const pendingPageItems = paginate(pendingBookings, pendingPage);
   const activePageItems = paginate(activeBookings, activePage);
+  const canApproveBookings = hasPermission(null, "bookings_approve");
+  const canEditBookings = hasPermission(null, "bookings_edit");
+  const canCancelBookings = hasPermission(null, "bookings_cancel");
 
   return (
     <div>
@@ -335,6 +342,7 @@ export default function Staff() {
                 </div>
               </div>
 
+              {canApproveBookings && (
               <div className="staff-action-grid">
                 <div>
                   <label>เลือกรถ</label>
@@ -366,30 +374,30 @@ export default function Staff() {
                 <div>
                   <label>เลือกคนขับ</label>
                   <select
-                    value={selected[b.booking_id]?.driver_name || ""}
-                    onChange={(e) =>
-                      updateSelected(
-                        b.booking_id,
-                        "driver_name",
-                        e.target.value
-                      )
-                    }
+                    value={selected[b.booking_id]?.driver_id || ""}
+                    onChange={(e) => {
+                      const driver = drivers.find((d) => d.driver_id === e.target.value);
+                      setSelected({
+                        ...selected,
+                        [b.booking_id]: {
+                          ...selected[b.booking_id],
+                          driver_id: driver?.driver_id || "",
+                          driver_name: driver?.name || "",
+                        },
+                      });
+                    }}
                   >
                     <option value="">-- เลือกคนขับ --</option>
 
                     {drivers
                       .filter((d) => d.status === "ACTIVE")
                       .map((d) => {
-                        const available = isDriverAvailable(
-                          d.name,
-                          b,
-                          bookings
-                        );
+                        const available = isDriverAvailable(d, b, bookings);
 
                         return (
                           <option
                             key={d.driver_id}
-                            value={d.name}
+                            value={d.driver_id}
                             disabled={!available}
                           >
                             {d.name} ({d.phone})
@@ -416,15 +424,21 @@ export default function Staff() {
                 </div>
               </div>
 
-              <div className="staff-buttons">
-                <button onClick={() => handleApprove(b)}>อนุมัติรายการ</button>
+              )}
 
+              <div className="staff-buttons">
+                {canApproveBookings && (
+                  <button onClick={() => handleApprove(b)}>อนุมัติรายการ</button>
+                )}
+
+                {canCancelBookings && (
                 <button
                   className="danger-button"
                   onClick={() => handleCancelBooking(b)}
                 >
                   ยกเลิกรายการ
                 </button>
+                )}
               </div>
             </div>
           ))}
@@ -496,24 +510,26 @@ export default function Staff() {
               </div>
 
               <div className="staff-buttons">
-                {b.status === "APPROVED" && (
+                {canEditBookings && b.status === "APPROVED" && (
                   <button onClick={() => handleStartTrip(b)}>
                     🚗 บันทึกรถออก
                   </button>
                 )}
 
-                {b.status === "IN_USE" && (
+                {canEditBookings && b.status === "IN_USE" && (
                   <button onClick={() => handleCompleteTrip(b)}>
                     ✅ บันทึกรถเข้า
                   </button>
                 )}
 
+                {canCancelBookings && (
                 <button
                   className="danger-button"
                   onClick={() => handleCancelBooking(b)}
                 >
                   ยกเลิกรายการ
                 </button>
+                )}
               </div>
             </div>
           ))}
@@ -528,3 +544,5 @@ export default function Staff() {
     </div>
   );
 }
+
+

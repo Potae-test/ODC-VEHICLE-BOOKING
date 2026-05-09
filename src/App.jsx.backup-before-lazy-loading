@@ -1,0 +1,125 @@
+import { useEffect, useState } from "react";
+import Cars from "./pages/Cars";
+import Booking from "./pages/Booking";
+import Staff from "./pages/Staff";
+import CalendarPage from "./pages/Calendar";
+import Admin from "./pages/Admin";
+import Login from "./pages/Login";
+import DriverSummary from "./pages/DriverSummary";
+import "./App.css";
+
+function canAccess(role, page) {
+  const permissions = {
+    ADMIN: ["cars", "booking", "staff", "calendar", "driver-summary", "admin"],
+    STAFF: ["cars", "booking", "staff", "calendar", "driver-summary"],
+    USER: ["cars", "booking", "calendar"],
+  };
+
+  return permissions[role]?.includes(page);
+}
+
+export default function App() {
+  const [page, setPage] = useState("cars");
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("odc_user");
+    if (saved) setUser(JSON.parse(saved));
+  }, []);
+
+  function goPage(nextPage) {
+    if (!canAccess(user.role, nextPage)) {
+      alert("คุณไม่มีสิทธิ์เข้าเมนูนี้");
+      return;
+    }
+    setPage(nextPage);
+  }
+
+  function logout() {
+    localStorage.removeItem("odc_user");
+    setUser(null);
+    setPage("cars");
+  }
+
+  if (!user) return <Login onLogin={setUser} />;
+
+  return (
+    <div className="app-shell">
+      <header className="gov-header">
+        <div className="brand">
+          <div className="brand-logo">🚑</div>
+          <div>
+            <h1>ระบบงานจองรถ</h1>
+            <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+          </div>
+        </div>
+
+        <div className="profile-box">
+          <div className="profile-icon">👤</div>
+          <div>
+            <b>{user.name}</b>
+            <span>{user.role}</span>
+          </div>
+          <button className="logout-btn" onClick={logout}>
+            ออกจากระบบ
+          </button>
+        </div>
+      </header>
+
+      <div className="layout">
+        <aside className="sidebar">
+          {canAccess(user.role, "cars") && (
+            <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
+              🚐 หน้าจอรถ
+            </button>
+          )}
+
+          {canAccess(user.role, "booking") && (
+            <button className={page === "booking" ? "active" : ""} onClick={() => goPage("booking")}>
+              📝 จองรถ
+            </button>
+          )}
+
+          {canAccess(user.role, "staff") && (
+            <button className={page === "staff" ? "active" : ""} onClick={() => goPage("staff")}>
+              👥 เจ้าหน้าที่
+            </button>
+          )}
+
+          {canAccess(user.role, "calendar") && (
+            <button className={page === "calendar" ? "active" : ""} onClick={() => goPage("calendar")}>
+              📅 ปฏิทิน
+            </button>
+          )}
+
+          {canAccess(user.role, "driver-summary") && (
+            <button className={page === "driver-summary" ? "active" : ""} onClick={() => goPage("driver-summary")}>
+              สรุปงานคนขับ
+            </button>
+          )}
+
+          {canAccess(user.role, "admin") && (
+            <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
+              ⚙️ Admin
+            </button>
+          )}
+
+          <div className="sidebar-help">
+            <b>ศูนย์ช่วยเหลือ</b>
+            <p>ฝ่ายระบบงาน</p>
+            <p>02-xxx-xxxx</p>
+          </div>
+        </aside>
+
+        <main className="main-content">
+          {page === "cars" && <Cars />}
+          {page === "booking" && <Booking />}
+          {page === "staff" && <Staff />}
+          {page === "calendar" && <CalendarPage />}
+          {page === "driver-summary" && <DriverSummary />}
+          {page === "admin" && <Admin />}
+        </main>
+      </div>
+    </div>
+  );
+}

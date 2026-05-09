@@ -1,33 +1,64 @@
-import { useEffect, useState } from "react";
-import Cars from "./pages/Cars";
-import Booking from "./pages/Booking";
-import Staff from "./pages/Staff";
-import CalendarPage from "./pages/Calendar";
-import Admin from "./pages/Admin";
+import { Suspense, lazy, useEffect, useState } from "react";
 import Login from "./pages/Login";
+import {
+  canAccessPage,
+  getFirstAllowedPage,
+  loadPermissionConfig,
+} from "./permissions";
 import "./App.css";
 
-function canAccess(role, page) {
-  const permissions = {
-    ADMIN: ["cars", "booking", "staff", "calendar", "admin"],
-    STAFF: ["cars", "booking", "staff", "calendar"],
-    USER: ["cars", "booking", "calendar"],
-  };
-
-  return permissions[role]?.includes(page);
+const Cars = lazy(() => import("./pages/Cars"));
+const Booking = lazy(() => import("./pages/Booking"));
+const Staff = lazy(() => import("./pages/Staff"));
+const CalendarPage = lazy(() => import("./pages/Calendar"));
+const DriverSummary = lazy(() => import("./pages/DriverSummary"));
+const Admin = lazy(() => import("./pages/Admin"));
+function getDefaultPageByRole(role) {
+  if (role === "ADMIN") return "admin";
+  if (role === "STAFF") return "staff";
+  return "booking";
 }
-
 export default function App() {
   const [page, setPage] = useState("cars");
   const [user, setUser] = useState(null);
+  const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
 
   useEffect(() => {
     const saved = localStorage.getItem("odc_user");
-    if (saved) setUser(JSON.parse(saved));
+
+    if (saved) {
+      const savedUser = JSON.parse(saved);
+      setUser(savedUser);
+      setPage(getDefaultPageByRole(savedUser.role));
+    }
   }, []);
 
+  useEffect(() => {
+    function refreshPermissions() {
+      setPermissionConfig(loadPermissionConfig());
+    }
+
+    window.addEventListener("storage", refreshPermissions);
+    window.addEventListener("odc-permissions-updated", refreshPermissions);
+    window.addEventListener("odc-action-permissions-updated", refreshPermissions);
+
+    return () => {
+      window.removeEventListener("storage", refreshPermissions);
+      window.removeEventListener("odc-permissions-updated", refreshPermissions);
+      window.removeEventListener("odc-action-permissions-updated", refreshPermissions);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    if (canAccessPage(user.role, page, permissionConfig)) return;
+
+    const firstAllowedPage = getFirstAllowedPage(user.role, permissionConfig);
+    if (firstAllowedPage) setPage(firstAllowedPage);
+  }, [page, permissionConfig, user]);
+
   function goPage(nextPage) {
-    if (!canAccess(user.role, nextPage)) {
+    if (!canAccessPage(user.role, nextPage, permissionConfig)) {
       alert("คุณไม่มีสิทธิ์เข้าเมนูนี้");
       return;
     }
@@ -40,7 +71,18 @@ export default function App() {
     setPage("cars");
   }
 
-  if (!user) return <Login onLogin={setUser} />;
+  if (!user) {
+    return (
+      <Login
+        onLogin={(loggedInUser) => {
+          setUser(loggedInUser);
+          setPage(getDefaultPageByRole(loggedInUser.role));
+        }}
+      />
+    );
+  }
+ 
+  const hasPageAccess = canAccessPage(user.role, page, permissionConfig);
 
   return (
     <div className="app-shell">
@@ -67,31 +109,37 @@ export default function App() {
 
       <div className="layout">
         <aside className="sidebar">
-          {canAccess(user.role, "cars") && (
+          {canAccessPage(user.role, "cars", permissionConfig) && (
             <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
               🚐 หน้าจอรถ
             </button>
           )}
 
-          {canAccess(user.role, "booking") && (
+          {canAccessPage(user.role, "booking", permissionConfig) && (
             <button className={page === "booking" ? "active" : ""} onClick={() => goPage("booking")}>
               📝 จองรถ
             </button>
           )}
 
-          {canAccess(user.role, "staff") && (
+          {canAccessPage(user.role, "staff", permissionConfig) && (
             <button className={page === "staff" ? "active" : ""} onClick={() => goPage("staff")}>
               👥 เจ้าหน้าที่
             </button>
           )}
 
-          {canAccess(user.role, "calendar") && (
+          {canAccessPage(user.role, "calendar", permissionConfig) && (
             <button className={page === "calendar" ? "active" : ""} onClick={() => goPage("calendar")}>
               📅 ปฏิทิน
             </button>
           )}
 
-          {canAccess(user.role, "admin") && (
+          {canAccessPage(user.role, "driver-summary", permissionConfig) && (
+            <button className={page === "driver-summary" ? "active" : ""} onClick={() => goPage("driver-summary")}>
+              📊 สรุปงานคนขับ
+            </button>
+          )}
+
+          {canAccessPage(user.role, "admin", permissionConfig) && (
             <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
               ⚙️ Admin
             </button>
@@ -105,11 +153,15 @@ export default function App() {
         </aside>
 
         <main className="main-content">
-          {page === "cars" && <Cars />}
-          {page === "booking" && <Booking />}
-          {page === "staff" && <Staff />}
-          {page === "calendar" && <CalendarPage />}
-          {page === "admin" && <Admin />}
+          <Suspense fallback={<p>กำลังโหลดหน้า...</p>}>
+            {!hasPageAccess && <div className="form-card">ไม่มีสิทธิ์เข้าถึง</div>}
+            {hasPageAccess && page === "cars" && <Cars />}
+            {hasPageAccess && page === "booking" && <Booking />}
+            {hasPageAccess && page === "staff" && <Staff />}
+            {hasPageAccess && page === "calendar" && <CalendarPage />}
+            {hasPageAccess && page === "driver-summary" && <DriverSummary />}
+            {hasPageAccess && page === "admin" && <Admin />}
+          </Suspense>
         </main>
       </div>
     </div>

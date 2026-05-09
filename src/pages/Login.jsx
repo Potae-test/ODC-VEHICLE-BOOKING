@@ -16,9 +16,22 @@ export default function Login({ onLogin }) {
 
     try {
       setLoading(true);
+
       const user = await login(email, password);
+
       localStorage.setItem("odc_user", JSON.stringify(user));
+
       onLogin(user);
+
+      // Redirect ตามสิทธิ์
+      if (user.role === "ADMIN") {
+        window.location.href = "/admin";
+      } else if (user.role === "STAFF") {
+        window.location.href = "/staff";
+      } else {
+        window.location.href = "/booking";
+      }
+
     } catch (err) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
     } finally {

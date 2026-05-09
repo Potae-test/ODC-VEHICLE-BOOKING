@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { createBooking, getBookings } from "../api";
 import { formatThaiDateTime } from "../utils/date";
+import { hasPermission } from "../permissions";
 
 export default function Booking() {
   const [bookings, setBookings] = useState([]);
   const [saving, setSaving] = useState(false);
+  const canCreateBookings = hasPermission(null, "bookings_create");
+  const canViewBookings = hasPermission(null, "bookings_view");
 
   const [form, setForm] = useState({
     requester_name: "",
@@ -75,6 +78,7 @@ export default function Booking() {
         </div>
       </div>
 
+      {canCreateBookings && (
       <form className="form-card" onSubmit={handleSubmit}>
         <h3>แบบฟอร์มจองรถ</h3>
 
@@ -160,7 +164,9 @@ export default function Booking() {
           {saving ? "กำลังบันทึก..." : "ส่งคำขอจองรถ"}
         </button>
       </form>
+      )}
 
+      {canViewBookings && (
       <div className="form-card">
         <h3>รายการจองล่าสุด</h3>
 
@@ -197,6 +203,7 @@ export default function Booking() {
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

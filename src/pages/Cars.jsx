@@ -12,6 +12,7 @@ import {
   showError,
   showSuccess,
 } from "../utils/alert";
+import { hasPermission } from "../permissions";
 
 function getStatusText(status) {
   if (status === "AVAILABLE") return "พร้อมใช้งาน";
@@ -116,6 +117,9 @@ export default function Cars() {
     driver_name: "-",
 
   });
+  const canCreateVehicles = hasPermission(null, "vehicles_create");
+  const canEditVehicles = hasPermission(null, "vehicles_edit");
+  const canDeleteVehicles = hasPermission(null, "vehicles_delete");
 
   async function loadVehicles() {
     try {
@@ -210,6 +214,7 @@ async function handleDelete(car) {
         </button>
       </div>
 
+      {canCreateVehicles && (
       <form className="form-card" onSubmit={handleSubmit}>
         <h3>เพิ่มรถใหม่</h3>
 
@@ -306,6 +311,7 @@ async function handleDelete(car) {
         </button>
       )}
       </form>
+      )}
 
       {loading ? (
         <p>กำลังโหลดข้อมูลรถ...</p>
@@ -339,9 +345,12 @@ async function handleDelete(car) {
                   </td>
                   <td>{car.driver_name || "-"}</td>
                   <td>
+                    {canEditVehicles && (
                     <button type="button" onClick={() => handleEdit(car)}>
                       แก้ไข
                     </button>
+                    )}
+                  {canDeleteVehicles && (
                   <button
                     className="danger-button"
                     style={{ marginLeft: 8 }}
@@ -349,6 +358,7 @@ async function handleDelete(car) {
                   >
                     ลบข้อมูล
                   </button>
+                  )}
                 </td>
                 </tr>
               ))}

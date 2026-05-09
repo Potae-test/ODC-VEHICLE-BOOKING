@@ -21,6 +21,18 @@ import {
   showInput,
   showSuccess,
 } from "../utils/alert";
+import {
+  ACTION_PERMISSION_GROUPS,
+  DEFAULT_ROLE_ACTION_PERMISSIONS,
+  DEFAULT_ROLE_PERMISSIONS,
+  PERMISSION_ITEMS,
+  hasPermission,
+  loadActionPermissionConfig,
+  loadPermissionConfig,
+  normalizeRole,
+  saveActionPermissionConfig,
+  savePermissionConfig,
+} from "../permissions";
 import Swal from "sweetalert2";
 
 function countByStatus(items, status) {
@@ -32,6 +44,9 @@ export default function Admin() {
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [users, setUsers] = useState([]);
+  const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
+  const [actionPermissionConfig, setActionPermissionConfig] = useState(loadActionPermissionConfig);
+  const [selectedPermissionRole, setSelectedPermissionRole] = useState("STAFF");
   const [bookingPage, setBookingPage] = useState(1);
   const BOOKING_PER_PAGE = 5;
   const [driverInactiveReasons, setDriverInactiveReasons] = useState([
@@ -415,6 +430,97 @@ async function handleDeleteUser(u) {
       status: "ACTIVE",
     });
   }
+
+  const permissionRoles = Array.from(
+    new Set([
+      ...Object.keys(DEFAULT_ROLE_PERMISSIONS),
+      ...users.map((u) => normalizeRole(u.role)).filter(Boolean),
+    ])
+  );
+  const canManageSettings = hasPermission(null, "settings_manage");
+  const canViewDrivers = hasPermission(null, "drivers_view");
+  const canCreateDrivers = hasPermission(null, "drivers_create");
+  const canEditDrivers = hasPermission(null, "drivers_edit");
+  const canDeleteDrivers = hasPermission(null, "drivers_delete");
+  const canViewUsers = hasPermission(null, "users_view");
+  const canCreateUsers = hasPermission(null, "users_create");
+  const canEditUsers = hasPermission(null, "users_edit");
+  const canDeleteUsers = hasPermission(null, "users_delete");
+
+  function roleHasPermission(role, permissionId) {
+    if (role === "ADMIN") return true;
+    return (permissionConfig[role] || []).includes(permissionId);
+  }
+
+  function toggleRolePermission(role, permissionId) {
+    if (role === "ADMIN") return;
+
+    const currentPermissions = new Set(permissionConfig[role] || []);
+
+    if (currentPermissions.has(permissionId)) {
+      currentPermissions.delete(permissionId);
+    } else {
+      currentPermissions.add(permissionId);
+    }
+
+    setPermissionConfig({
+      ...permissionConfig,
+      [role]: [...currentPermissions],
+    });
+  }
+
+  async function handleSavePermissions() {
+    const savedConfig = savePermissionConfig(permissionConfig);
+    setPermissionConfig(savedConfig);
+    await showSuccess("บันทึกสิทธิ์การมองเห็นเมนูสำเร็จ");
+  }
+
+  async function handleResetPermissions() {
+    const confirmed = await showConfirm("ยืนยันคืนค่าสิทธิ์เริ่มต้นใช่หรือไม่?");
+    if (!confirmed) return;
+
+    const savedConfig = savePermissionConfig(DEFAULT_ROLE_PERMISSIONS);
+    setPermissionConfig(savedConfig);
+    await showSuccess("คืนค่าสิทธิ์เริ่มต้นสำเร็จ");
+  }
+
+  function roleHasActionPermission(role, permissionId) {
+    if (role === "ADMIN") return true;
+    return (actionPermissionConfig[role] || []).includes(permissionId);
+  }
+
+  function toggleRoleActionPermission(role, permissionId) {
+    if (role === "ADMIN") return;
+
+    const currentPermissions = new Set(actionPermissionConfig[role] || []);
+
+    if (currentPermissions.has(permissionId)) {
+      currentPermissions.delete(permissionId);
+    } else {
+      currentPermissions.add(permissionId);
+    }
+
+    setActionPermissionConfig({
+      ...actionPermissionConfig,
+      [role]: [...currentPermissions],
+    });
+  }
+
+  async function handleSaveActionPermissions() {
+    const savedConfig = saveActionPermissionConfig(actionPermissionConfig);
+    setActionPermissionConfig(savedConfig);
+    await showSuccess("บันทึกสิทธิ์ action สำเร็จ");
+  }
+
+  async function handleResetActionPermissions() {
+    const confirmed = await showConfirm("ยืนยันคืนค่าสิทธิ์ action เริ่มต้นใช่หรือไม่?");
+    if (!confirmed) return;
+
+    const savedConfig = saveActionPermissionConfig(DEFAULT_ROLE_ACTION_PERMISSIONS);
+    setActionPermissionConfig(savedConfig);
+    await showSuccess("คืนค่าสิทธิ์ action เริ่มต้นสำเร็จ");
+  }
+
 async function handleEditDriver(d) {
   const result = await Swal.fire({
     title: "แก้ไขข้อมูลคนขับ",
@@ -546,12 +652,117 @@ async function handleDeleteDriver(d) {
         </div>
       </div>
  <br></br>
+      <div className="form-card permission-card">
+        <h3>จัดการสิทธิ์</h3>
+        <div className="section-toolbar permission-toolbar">
+          <button type="button" onClick={handleSavePermissions}>
+            บันทึกสิทธิ์
+          </button>
+          <button type="button" className="warning-button" onClick={handleResetPermissions}>
+            คืนค่าเริ่มต้น
+          </button>
+        </div>
+
+        <div className="table-wrap">
+          <table className="permission-table">
+            <thead>
+              <tr>
+                <th>Role</th>
+                {PERMISSION_ITEMS.map((permission) => (
+                  <th key={permission.id}>{permission.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {permissionRoles.map((role) => (
+                <tr key={role}>
+                  <td>
+                    <b>{role}</b>
+                    {role === "ADMIN" && <span className="permission-note">เห็นทุกเมนูเสมอ</span>}
+                  </td>
+                  {PERMISSION_ITEMS.map((permission) => (
+                    <td key={permission.id}>
+                      <label className="permission-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={roleHasPermission(role, permission.id)}
+                          disabled={role === "ADMIN"}
+                          onChange={() => toggleRolePermission(role, permission.id)}
+                        />
+                      </label>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {canManageSettings && (
+      <div className="form-card permission-card">
+        <h3>จัดการสิทธิ์ Action</h3>
+        <div className="permission-action-header">
+          <div>
+            <label>Role</label>
+            <select
+              value={selectedPermissionRole}
+              onChange={(e) => setSelectedPermissionRole(e.target.value)}
+            >
+              {permissionRoles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="section-toolbar permission-toolbar">
+            <button type="button" onClick={handleSaveActionPermissions}>
+              บันทึกสิทธิ์ Action
+            </button>
+            <button type="button" className="warning-button" onClick={handleResetActionPermissions}>
+              คืนค่าเริ่มต้น
+            </button>
+          </div>
+        </div>
+
+        <div className="permission-action-grid">
+          {ACTION_PERMISSION_GROUPS.map((group) => (
+            <div className="permission-action-group" key={group.id}>
+              <h4>{group.label}</h4>
+              {group.permissions.map((permission) => (
+                <label className="permission-action-row" key={permission.id}>
+                  <input
+                    type="checkbox"
+                    checked={roleHasActionPermission(selectedPermissionRole, permission.id)}
+                    disabled={selectedPermissionRole === "ADMIN"}
+                    onChange={() =>
+                      toggleRoleActionPermission(selectedPermissionRole, permission.id)
+                    }
+                  />
+                  <span>{permission.label}</span>
+                  <code>{permission.id}</code>
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {selectedPermissionRole === "ADMIN" && (
+          <p className="permission-note">ADMIN ได้ทุกสิทธิ์เสมอและไม่สามารถปิดได้</p>
+        )}
+      </div>
+      )}
+
+      {canViewUsers && (
       <div className="form-card">
         <h3>จัดการคนขับ</h3>
         <div className="section-toolbar">
+        {canCreateDrivers && (
         <button type="button" onClick={handleOpenCreateDriver}>
           เพิ่มข้อมูลคนขับ
         </button>
+        )}
       </div>
         <div className="table-wrap" style={{ marginTop: 24 }}>
           <table>
@@ -578,15 +789,17 @@ async function handleDeleteDriver(d) {
                   <td>{d.status}</td>
                   <td>{d.remark || "-"}</td>
                   <td className="action-buttons">
+                  {canEditDrivers && (
                   <button type="button" onClick={() => handleEditDriver(d)}>
                     แก้ไข
                   </button>
+                  )}
 
-                  {d.status === "INACTIVE" ? (
+                  {canEditDrivers && d.status === "INACTIVE" ? (
                     <button type="button" onClick={() => handleDriverStatus(d, "ACTIVE")}>
                       เปิดใช้งาน
                     </button>
-                  ) : (
+                  ) : canEditDrivers ? (
                     <button
                       type="button"
                       className="warning-button"
@@ -594,8 +807,9 @@ async function handleDeleteDriver(d) {
                     >
                       ปิดใช้งาน
                     </button>
-                  )}
+                  ) : null}
 
+                  {canDeleteDrivers && (
                   <button
                     type="button"
                     className="danger-button"
@@ -603,6 +817,7 @@ async function handleDeleteDriver(d) {
                   >
                     ลบ
                   </button>
+                  )}
                 </td>
                 </tr>
               ))}
@@ -610,13 +825,17 @@ async function handleDeleteDriver(d) {
           </table>
         </div>
       </div>
+      )}
 
+      {canViewUsers && (
       <div className="form-card">
         <h3>จัดการผู้ใช้งาน</h3>
       <div className="section-toolbar">
+        {canCreateUsers && (
         <button type="button" onClick={handleOpenCreateUser}>
           เพิ่มผู้ใช้งาน
         </button>
+        )}
       </div>
         <div className="table-wrap" style={{ marginTop: 24 }}>
           <table>
@@ -643,19 +862,23 @@ async function handleDeleteDriver(d) {
                 <td>{u.role}</td>
                 <td>{u.status}</td>
                 <td className="action-buttons">
+                  {canEditUsers && (
                   <button type="button" onClick={() => editUser(u)}>
                     แก้ไข
                   </button>
+                  )}
 
+                  {canEditUsers && (
                   <button type="button" onClick={() => handleResetPassword(u)}>
                     เปลี่ยนรหัส
                   </button>
+                  )}
 
-                  {u.status === "INACTIVE" ? (
+                  {canEditUsers && u.status === "INACTIVE" ? (
                     <button type="button" onClick={() => handleEnableUser(u)}>
                       เปิดใช้งาน
                     </button>
-                  ) : (
+                  ) : canEditUsers ? (
                     <button
                       type="button"
                       className="warning-button"
@@ -663,8 +886,9 @@ async function handleDeleteDriver(d) {
                     >
                       ปิดใช้งาน
                     </button>
-                  )}
+                  ) : null}
 
+                  {canDeleteUsers && (
                   <button
                     type="button"
                     className="danger-button"
@@ -672,6 +896,7 @@ async function handleDeleteDriver(d) {
                   >
                     ลบ
                   </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -679,6 +904,7 @@ async function handleDeleteDriver(d) {
           </table>
         </div>
       </div>
+      )}
 
       <div className="form-card">
         <h3>รายการจองทั้งหมด</h3>
@@ -728,3 +954,4 @@ async function handleDeleteDriver(d) {
     </div>
   );
 }
+
