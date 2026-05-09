@@ -365,18 +365,24 @@ td {
 }
 
 .summary-card {
-  padding: 26px;
-  text-align: center;
+  padding: 20px 12px;
+  border-radius: 18px;
+  min-height: 120px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .summary-card h3 {
-  margin: 0 0 12px;
-  color: #173b69;
+  font-size: 20px;
+  margin-bottom: 10px;
 }
 
 .summary-card strong {
-  font-size: 46px;
-  color: #073b8e;
+  font-size: 42px;
+  font-weight: 700;
 }
 
 .amber-box {
@@ -592,9 +598,23 @@ body {
 }
 
 .summary-grid {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+    display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16px;
+  margin-top: 24px;
 }
 
+@media (max-width: 1200px) {
+  .summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 /* TH Sarabun should be larger */
 body {
   font-size: 24px;
@@ -1222,4 +1242,9 @@ label {
 
 .action-buttons button {
   margin: 0 !important;
+}
+.section-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24px;
 }

@@ -32,7 +32,8 @@ export default function Admin() {
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [users, setUsers] = useState([]);
-
+  const [bookingPage, setBookingPage] = useState(1);
+  const BOOKING_PER_PAGE = 5;
   const [driverInactiveReasons, setDriverInactiveReasons] = useState([
     "ลาป่วย",
     "ลาหยุด",
@@ -147,7 +148,58 @@ export default function Admin() {
       alert(err.message || "อัปเดตไม่สำเร็จ");
     }
   }
+    async function handleOpenCreateDriver() {
+    const result = await Swal.fire({
+      title: "เพิ่มข้อมูลคนขับ",
+      html: `
+        <div class="swal-form">
+          <label>ชื่อคนขับ</label>
+          <input id="driver_name" class="swal2-input" placeholder="เช่น นายสมชาย">
 
+          <label>เบอร์โทร</label>
+          <input id="driver_phone" class="swal2-input" placeholder="08x-xxx-xxxx">
+
+          <label>สถานะ</label>
+          <select id="driver_status" class="swal2-select">
+            <option value="ACTIVE">ใช้งาน</option>
+            <option value="INACTIVE">ปิดใช้งาน</option>
+          </select>
+
+          <label>หมายเหตุ</label>
+          <input id="driver_remark" class="swal2-input" placeholder="-">
+        </div>
+      `,
+      width: 750,
+      showCancelButton: true,
+      confirmButtonText: "เพิ่มคนขับ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const name = document.getElementById("driver_name").value.trim();
+        const phone = document.getElementById("driver_phone").value.trim();
+        const status = document.getElementById("driver_status").value;
+        const remark = document.getElementById("driver_remark").value.trim();
+
+        if (!name || !phone) {
+          Swal.showValidationMessage("กรุณากรอกชื่อคนขับและเบอร์โทร");
+          return false;
+        }
+
+        return { name, phone, status, remark };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await createDriver(result.value);
+      await showSuccess("เพิ่มคนขับสำเร็จ");
+      await loadData();
+    } catch (err) {
+      showError(err.message || "เพิ่มคนขับไม่สำเร็จ");
+    }
+  }
   function editUser(u) {
     setUserForm({
       user_id: u.user_id,
@@ -160,7 +212,82 @@ export default function Admin() {
       status: u.status || "ACTIVE",
     });
   }
+async function handleOpenCreateUser() {
+  const result = await Swal.fire({
+    title: "เพิ่มผู้ใช้งาน",
+    html: `
+      <div class="swal-form">
+        <label>ชื่อผู้ใช้งาน</label>
+        <input id="user_name" class="swal2-input" placeholder="เช่น ผู้ดูแลระบบ">
 
+        <label>Email</label>
+        <input id="user_email" class="swal2-input" placeholder="email@domain.com">
+
+        <label>Password เริ่มต้น</label>
+        <input id="user_password" class="swal2-input" value="1234">
+
+        <label>หน่วยงาน</label>
+        <input id="user_department" class="swal2-input" value="ศูนย์รับบริจาคอวัยวะ">
+
+        <label>เบอร์โทร</label>
+        <input id="user_phone" class="swal2-input" placeholder="08x-xxx-xxxx">
+
+        <label>Role</label>
+        <select id="user_role" class="swal2-select">
+          <option value="USER">USER</option>
+          <option value="STAFF">STAFF</option>
+          <option value="ADMIN">ADMIN</option>
+        </select>
+
+        <label>สถานะ</label>
+        <select id="user_status" class="swal2-select">
+          <option value="ACTIVE">ใช้งาน</option>
+          <option value="INACTIVE">ปิดใช้งาน</option>
+        </select>
+      </div>
+    `,
+    width: 750,
+    showCancelButton: true,
+    confirmButtonText: "เพิ่มผู้ใช้งาน",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: "#1455c8",
+    cancelButtonColor: "#64748b",
+    preConfirm: () => {
+      const name = document.getElementById("user_name").value.trim();
+      const email = document.getElementById("user_email").value.trim();
+      const password = document.getElementById("user_password").value.trim();
+      const department = document.getElementById("user_department").value.trim();
+      const phone = document.getElementById("user_phone").value.trim();
+      const role = document.getElementById("user_role").value;
+      const status = document.getElementById("user_status").value;
+
+      if (!name || !email || !password) {
+        Swal.showValidationMessage("กรุณากรอกชื่อ Email และ Password");
+        return false;
+      }
+
+      return {
+        name,
+        email,
+        password,
+        department,
+        phone,
+        role,
+        status,
+      };
+    },
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await createUser(result.value);
+    await showSuccess("เพิ่มผู้ใช้งานสำเร็จ");
+    await loadData();
+  } catch (err) {
+    showError(err.message || "เพิ่มผู้ใช้งานไม่สำเร็จ");
+  }
+}
   async function handleSaveUser(e) {
     e.preventDefault();
 
@@ -365,7 +492,12 @@ async function handleDeleteDriver(d) {
   useEffect(() => {
     loadData();
   }, []);
+    const totalBookingPages = Math.ceil(bookings.length / BOOKING_PER_PAGE);
 
+    const bookingPageItems = bookings.slice(
+      (bookingPage - 1) * BOOKING_PER_PAGE,
+      bookingPage * BOOKING_PER_PAGE
+    );
   return (
     <div>
       <div className="page-header">
@@ -413,62 +545,14 @@ async function handleDeleteDriver(d) {
           <strong>{countByStatus(bookings, "CANCELLED")}</strong>
         </div>
       </div>
-
+ <br></br>
       <div className="form-card">
         <h3>จัดการคนขับ</h3>
-
-        <form onSubmit={handleCreateDriver}>
-          <div className="form-grid">
-            <div>
-              <label>ชื่อคนขับ</label>
-              <input
-                value={driverForm.name}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, name: e.target.value })
-                }
-                placeholder="เช่น นายสมชาย"
-              />
-            </div>
-
-            <div>
-              <label>เบอร์โทร</label>
-              <input
-                value={driverForm.phone}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, phone: e.target.value })
-                }
-                placeholder="08x-xxx-xxxx"
-              />
-            </div>
-
-            <div>
-              <label>สถานะ</label>
-              <select
-                value={driverForm.status}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, status: e.target.value })
-                }
-              >
-                <option value="ACTIVE">ใช้งาน</option>
-                <option value="INACTIVE">ปิดใช้งาน</option>
-              </select>
-            </div>
-
-            <div>
-              <label>หมายเหตุ</label>
-              <input
-                value={driverForm.remark}
-                onChange={(e) =>
-                  setDriverForm({ ...driverForm, remark: e.target.value })
-                }
-                placeholder="-"
-              />
-            </div>
-          </div>
-
-          <button>เพิ่มคนขับ</button>
-        </form>
-
+        <div className="section-toolbar">
+        <button type="button" onClick={handleOpenCreateDriver}>
+          เพิ่มข้อมูลคนขับ
+        </button>
+      </div>
         <div className="table-wrap" style={{ marginTop: 24 }}>
           <table>
             <thead>
@@ -529,105 +613,11 @@ async function handleDeleteDriver(d) {
 
       <div className="form-card">
         <h3>จัดการผู้ใช้งาน</h3>
-
-        <form onSubmit={handleSaveUser}>
-          <div className="form-grid">
-            <div>
-              <label>ชื่อผู้ใช้งาน</label>
-              <input
-                value={userForm.name}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, name: e.target.value })
-                }
-                placeholder="เช่น ผู้ดูแลระบบ"
-              />
-            </div>
-
-            <div>
-              <label>Email</label>
-              <input
-                value={userForm.email}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, email: e.target.value })
-                }
-                placeholder="email@domain.com"
-              />
-            </div>
-
-            {!userForm.user_id && (
-              <div>
-                <label>Password เริ่มต้น</label>
-                <input
-                  value={userForm.password}
-                  onChange={(e) =>
-                    setUserForm({ ...userForm, password: e.target.value })
-                  }
-                  placeholder="1234"
-                />
-              </div>
-            )}
-
-            <div>
-              <label>หน่วยงาน</label>
-              <input
-                value={userForm.department}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, department: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label>เบอร์โทร</label>
-              <input
-                value={userForm.phone}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, phone: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label>Role</label>
-              <select
-                value={userForm.role}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, role: e.target.value })
-                }
-              >
-                <option value="ADMIN">ADMIN</option>
-                <option value="STAFF">STAFF</option>
-                <option value="USER">USER</option>
-              </select>
-            </div>
-
-            <div>
-              <label>สถานะ</label>
-              <select
-                value={userForm.status}
-                onChange={(e) =>
-                  setUserForm({ ...userForm, status: e.target.value })
-                }
-              >
-                <option value="ACTIVE">ใช้งาน</option>
-                <option value="INACTIVE">ปิดใช้งาน</option>
-              </select>
-            </div>
-          </div>
-
-          <button>{userForm.user_id ? "บันทึกการแก้ไข" : "เพิ่มผู้ใช้งาน"}</button>
-
-          {userForm.user_id && (
-            <button
-              type="button"
-              onClick={clearUserForm}
-              style={{ marginLeft: 12 }}
-            >
-              ยกเลิกแก้ไข
-            </button>
-          )}
-        </form>
-
+      <div className="section-toolbar">
+        <button type="button" onClick={handleOpenCreateUser}>
+          เพิ่มผู้ใช้งาน
+        </button>
+      </div>
         <div className="table-wrap" style={{ marginTop: 24 }}>
           <table>
             <thead>
@@ -708,7 +698,7 @@ async function handleDeleteDriver(d) {
             </thead>
 
             <tbody>
-              {bookings.map((b) => (
+              {bookingPageItems.map((b) => (
                 <tr key={b.booking_id}>
                   <td>{b.booking_no}</td>
                   <td>{b.requester_name}</td>
@@ -721,6 +711,18 @@ async function handleDeleteDriver(d) {
               ))}
             </tbody>
           </table>
+          <div className="pagination">
+          {Array.from({ length: totalBookingPages }).map((_, index) => (
+            <button
+              key={index}
+              type="button"
+              className={bookingPage === index + 1 ? "active-page" : ""}
+              onClick={() => setBookingPage(index + 1)}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
         </div>
       </div>
     </div>
