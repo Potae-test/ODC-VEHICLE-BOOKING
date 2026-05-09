@@ -1,0 +1,68 @@
+1) Clone โปรเจกต์
+git clone YOUR_GITHUB_URL
+
+เช่น:
+
+git clone https://github.com/yourname/ODC-VEHICLE-BOOKING.git
+
+เข้าโปรเจกต์:
+
+cd ODC-VEHICLE-BOOKING
+2) ติดตั้ง package ทั้งหมด
+
+สำคัญมาก ต้องทำทุกครั้งบนเครื่องใหม่
+
+npm install
+
+ถ้ามี SweetAlert:
+
+npm install sweetalert2
+3) Login Cloudflare ใหม่
+npx wrangler login
+
+Browser จะเด้งให้ login Cloudflare
+
+4) รัน Frontend
+npm run dev
+5) รัน API Worker local
+
+เปิด terminal ใหม่:
+
+cd odc-vehicle-api
+npm install
+npm run dev
+6) Deploy Frontend ขึ้น Cloudflare Pages
+npm run build
+npx wrangler pages deploy dist --project-name odc-vehicle-booking
+7) Deploy API Worker
+cd odc-vehicle-api
+npx wrangler deploy src/index.ts --name odc-vehicle-api
+สรุปชุดคำสั่งสั้น ๆ
+Frontend
+npm install
+npm run dev
+
+Deploy:
+
+npm run build
+npx wrangler pages deploy dist --project-name odc-vehicle-booking
+API
+cd odc-vehicle-api
+npm install
+npm run dev
+
+Deploy:
+
+npx wrangler deploy src/index.ts --name odc-vehicle-api
+ถ้าจะดึง code ล่าสุดจาก GitHub
+git pull
+
+ถ้ามี conflict:
+
+git stash
+git pull
+git stash pop
+ถ้าจะอัพ code ขึ้น GitHub
+git add .
+git commit -m "update"
+git push
