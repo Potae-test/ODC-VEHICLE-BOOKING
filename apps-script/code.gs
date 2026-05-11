@@ -32,6 +32,7 @@ function doPost(e) {
 
     if (action === "createVehicle") return createVehicle(body.data);
     if (action === "createBooking") return createBooking(body.data);
+    if (action === "updateBooking") return updateBooking(body.data);
     if (action === "approveBooking") return approveBooking(body.data);
     if (action === "startTrip") return startTrip(body.data);
     if (action === "completeTrip") return completeTrip(body.data);
@@ -230,6 +231,55 @@ function createBooking(data) {
       ...data
     }
   });
+}
+
+function updateBooking(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Bookings");
+  const { headers, rows } = readSheetTable(sheet);
+
+  const bookingIdCol = headers.indexOf("booking_id");
+  const editableFields = [
+    "requester_name",
+    "department",
+    "phone",
+    "start_datetime",
+    "end_datetime",
+    "destination",
+    "purpose",
+    "vehicle_type_request",
+  ];
+  const updatedAtCol = headers.indexOf("updated_at");
+
+  if (!data.booking_id) {
+    return jsonOutput({ success: false, message: "booking_id is required" });
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][bookingIdCol] === data.booking_id) {
+      const row = i + 1;
+
+      editableFields.forEach((field) => {
+        const col = headers.indexOf(field);
+        if (col !== -1 && data[field] !== undefined) {
+          sheet.getRange(row, col + 1).setValue(data[field]);
+        }
+      });
+
+      if (updatedAtCol !== -1) {
+        sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+      }
+
+      return jsonOutput({
+        success: true,
+        message: "Update booking success",
+        data: {
+          booking_id: data.booking_id
+        }
+      });
+    }
+  }
+
+  return jsonOutput({ success: false, message: "Booking not found" });
 }
 function approveBooking(data) {
   const sheet = SpreadsheetApp
