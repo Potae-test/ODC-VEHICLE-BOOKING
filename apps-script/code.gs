@@ -14,6 +14,10 @@ function doGet(e) {
   if (action === "users") {
     return getUsers();
   }
+
+  if (action === "bookingCancellations") {
+    return getBookingCancellations();
+  }
   
   return jsonOutput({
     success: false,
@@ -64,17 +68,17 @@ function getVehicles() {
     .getActiveSpreadsheet()
     .getSheetByName("Vehicles");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const rows = values.slice(1);
+  const { headers, rows } = readSheetTable(sheet);
 
-  const data = rows.map(row => {
-    let obj = {};
-    headers.forEach((header, index) => {
-      obj[header] = row[index];
+  if (rows.length === 0) {
+    return jsonOutput({
+      success: true,
+      total: 0,
+      data: []
     });
-    return obj;
-  });
+  }
+
+  const data = rowsToObjects(headers, rows);
 
   return jsonOutput({
     success: true,
@@ -133,14 +137,43 @@ function ensureColumn(sheet, headers, columnName) {
   return index;
 }
 
+function readSheetTable(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+
+  if (lastRow < 2 || lastColumn === 0) {
+    return {
+      headers: [],
+      rows: [],
+    };
+  }
+
+  const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
+
+  return {
+    headers: values[0] || [],
+    rows: values.slice(1),
+  };
+}
+
+function rowsToObjects(headers, rows) {
+  return rows.map((row) => {
+    const obj = {};
+    headers.forEach((header, index) => {
+      obj[header] = row[index];
+    });
+    return obj;
+  });
+}
+
 function getBookings() {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName("Bookings");
 
-  const values = sheet.getDataRange().getValues();
+  const { headers, rows } = readSheetTable(sheet);
 
-  if (values.length <= 1) {
+  if (rows.length === 0) {
     return jsonOutput({
       success: true,
       total: 0,
@@ -148,16 +181,7 @@ function getBookings() {
     });
   }
 
-  const headers = values[0];
-  const rows = values.slice(1);
-
-  const data = rows.map(row => {
-    let obj = {};
-    headers.forEach((header, index) => {
-      obj[header] = row[index];
-    });
-    return obj;
-  });
+  const data = rowsToObjects(headers, rows);
 
   return jsonOutput({
     success: true,
@@ -407,6 +431,18 @@ function cancelBooking(data) {
   const headers = values[0];
 
   const bookingIdCol = headers.indexOf("booking_id");
+  const bookingNoCol = headers.indexOf("booking_no");
+  const requesterNameCol = headers.indexOf("requester_name");
+  const departmentCol = headers.indexOf("department");
+  const phoneCol = headers.indexOf("phone");
+  const startCol = headers.indexOf("start_datetime");
+  const endCol = headers.indexOf("end_datetime");
+  const destinationCol = headers.indexOf("destination");
+  const purposeCol = headers.indexOf("purpose");
+  const vehicleTypeRequestCol = headers.indexOf("vehicle_type_request");
+  const vehicleIdCol = headers.indexOf("vehicle_id");
+  const driverIdCol = ensureColumn(sheet, headers, "driver_id");
+  const driverNameCol = headers.indexOf("driver_name");
   const statusCol = headers.indexOf("status");
   const staffNoteCol = headers.indexOf("staff_note");
   const updatedAtCol = headers.indexOf("updated_at");
@@ -421,10 +457,41 @@ function cancelBooking(data) {
   for (let i = 1; i < values.length; i++) {
     if (values[i][bookingIdCol] === data.booking_id) {
       const row = i + 1;
+      const now = new Date();
+      const reason = String(data.reason || "").trim();
+      const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
+      const booking = values[i];
 
       sheet.getRange(row, statusCol + 1).setValue("CANCELLED");
-      sheet.getRange(row, staffNoteCol + 1).setValue(data.reason || "");
-      sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+      sheet.getRange(row, staffNoteCol + 1).setValue(reason);
+      sheet.getRange(row, updatedAtCol + 1).setValue(now);
+
+      const historySheet = ensureCancellationHistorySheet();
+      const historyHeaders = historySheet.getDataRange().getValues()[0] || [];
+      const historyId = "BCH" + Utilities.formatString("%04d", historySheet.getLastRow());
+      const historyRow = Array(historyHeaders.length).fill("");
+
+      setHistoryValue(historyHeaders, historyRow, "cancellation_id", historyId);
+      setHistoryValue(historyHeaders, historyRow, "booking_id", booking[bookingIdCol]);
+      setHistoryValue(historyHeaders, historyRow, "booking_no", booking[bookingNoCol]);
+      setHistoryValue(historyHeaders, historyRow, "requester_name", booking[requesterNameCol]);
+      setHistoryValue(historyHeaders, historyRow, "department", booking[departmentCol]);
+      setHistoryValue(historyHeaders, historyRow, "phone", booking[phoneCol]);
+      setHistoryValue(historyHeaders, historyRow, "start_datetime", booking[startCol]);
+      setHistoryValue(historyHeaders, historyRow, "end_datetime", booking[endCol]);
+      setHistoryValue(historyHeaders, historyRow, "destination", booking[destinationCol]);
+      setHistoryValue(historyHeaders, historyRow, "purpose", booking[purposeCol]);
+      setHistoryValue(historyHeaders, historyRow, "vehicle_type_request", booking[vehicleTypeRequestCol]);
+      setHistoryValue(historyHeaders, historyRow, "vehicle_id", booking[vehicleIdCol]);
+      setHistoryValue(historyHeaders, historyRow, "driver_id", booking[driverIdCol]);
+      setHistoryValue(historyHeaders, historyRow, "driver_name", booking[driverNameCol]);
+      setHistoryValue(historyHeaders, historyRow, "reason", reason);
+      setHistoryValue(historyHeaders, historyRow, "cancelled_by", cancelledBy);
+      setHistoryValue(historyHeaders, historyRow, "cancelled_at", now);
+      setHistoryValue(historyHeaders, historyRow, "status", "CANCELLED");
+      setHistoryValue(historyHeaders, historyRow, "updated_at", now);
+
+      historySheet.appendRow(historyRow);
 
       return jsonOutput({
         success: true,
@@ -432,7 +499,8 @@ function cancelBooking(data) {
         data: {
           booking_id: data.booking_id,
           status: "CANCELLED",
-          reason: data.reason || ""
+          reason,
+          cancelled_by: cancelledBy,
         }
       });
     }
@@ -443,22 +511,86 @@ function cancelBooking(data) {
     message: "Booking not found"
   });
 }
+
+function ensureCancellationHistorySheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("BookingCancellations");
+
+  const headers = [
+    "cancellation_id",
+    "booking_id",
+    "booking_no",
+    "requester_name",
+    "department",
+    "phone",
+    "start_datetime",
+    "end_datetime",
+    "destination",
+    "purpose",
+    "vehicle_type_request",
+    "vehicle_id",
+    "driver_id",
+    "driver_name",
+    "reason",
+    "cancelled_by",
+    "cancelled_at",
+    "status",
+    "updated_at",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("BookingCancellations");
+    sheet.appendRow(headers);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+  }
+
+  return sheet;
+}
+
+function setHistoryValue(headers, row, columnName, value) {
+  const index = headers.indexOf(columnName);
+  if (index !== -1) {
+    row[index] = value;
+  }
+}
+
+function getBookingCancellations() {
+  const sheet = ensureCancellationHistorySheet();
+  const { headers, rows } = readSheetTable(sheet);
+
+  if (rows.length === 0) {
+    return jsonOutput({
+      success: true,
+      total: 0,
+      data: []
+    });
+  }
+
+  const data = rowsToObjects(headers, rows);
+
+  return jsonOutput({
+    success: true,
+    total: data.length,
+    data: data
+  });
+}
 function loginUser(data) {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName("Users");
 
-  const values = sheet.getDataRange().getValues();
+  const { headers, rows } = readSheetTable(sheet);
 
-  if (values.length <= 1) {
+  if (rows.length === 0) {
     return jsonOutput({
       success: false,
       message: "Users not found"
     });
   }
-
-  const headers = values[0];
-  const rows = values.slice(1);
 
   const emailCol = headers.indexOf("email");
   const passwordCol = headers.indexOf("password");
@@ -505,8 +637,7 @@ function checkVehicleAvailability(data) {
     .getActiveSpreadsheet()
     .getSheetByName("Bookings");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const bookingIdCol = headers.indexOf("booking_id");
   const vehicleIdCol = headers.indexOf("vehicle_id");
@@ -515,8 +646,8 @@ function checkVehicleAvailability(data) {
   const statusCol = headers.indexOf("status");
   const bookingNoCol = headers.indexOf("booking_no");
 
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
 
     const isSameBooking = row[bookingIdCol] === data.booking_id;
     const isSameVehicle = row[vehicleIdCol] === data.vehicle_id;
@@ -549,9 +680,9 @@ function getDrivers() {
     .getActiveSpreadsheet()
     .getSheetByName("Drivers");
 
-  const values = sheet.getDataRange().getValues();
+  const { headers, rows } = readSheetTable(sheet);
 
-  if (values.length <= 1) {
+  if (rows.length === 0) {
     return jsonOutput({
       success: true,
       total: 0,
@@ -559,16 +690,7 @@ function getDrivers() {
     });
   }
 
-  const headers = values[0];
-  const rows = values.slice(1);
-
-  const data = rows.map(row => {
-    let obj = {};
-    headers.forEach((header, index) => {
-      obj[header] = row[index];
-    });
-    return obj;
-  });
+  const data = rowsToObjects(headers, rows);
 
   return jsonOutput({
     success: true,
@@ -643,16 +765,16 @@ function updateDriverStatus(data) {
 }
 function getUsers() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const rows = values.slice(1);
+  const { headers, rows } = readSheetTable(sheet);
 
-  const data = rows.map(row => {
-    let obj = {};
-    headers.forEach((h, i) => obj[h] = row[i]);
-    obj.password = "********";
-    return obj;
-  });
+  if (rows.length === 0) {
+    return jsonOutput({ success: true, total: 0, data: [] });
+  }
+
+  const data = rowsToObjects(headers, rows).map((obj) => ({
+    ...obj,
+    password: "********",
+  }));
 
   return jsonOutput({ success: true, total: data.length, data });
 }
@@ -684,8 +806,7 @@ function createUser(data) {
 
 function updateUser(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const userIdCol = headers.indexOf("user_id");
   const nameCol = headers.indexOf("name");
@@ -696,8 +817,8 @@ function updateUser(data) {
   const statusCol = headers.indexOf("status");
   const updatedAtCol = headers.indexOf("updated_at");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][userIdCol] === data.user_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][userIdCol] === data.user_id) {
       const row = i + 1;
 
       sheet.getRange(row, nameCol + 1).setValue(data.name || "");
@@ -717,15 +838,14 @@ function updateUser(data) {
 
 function resetUserPassword(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const userIdCol = headers.indexOf("user_id");
   const passwordCol = headers.indexOf("password");
   const updatedAtCol = headers.indexOf("updated_at");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][userIdCol] === data.user_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][userIdCol] === data.user_id) {
       const row = i + 1;
 
       sheet.getRange(row, passwordCol + 1).setValue(data.password || "1234");
@@ -739,13 +859,12 @@ function resetUserPassword(data) {
 }
 function updateVehicle(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Vehicles");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const vehicleIdCol = headers.indexOf("vehicle_id");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][vehicleIdCol] === data.vehicle_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][vehicleIdCol] === data.vehicle_id) {
       const row = i + 1;
 
       headers.forEach((header, index) => {
@@ -772,13 +891,12 @@ function deleteVehicle(data) {
     .getActiveSpreadsheet()
     .getSheetByName("Vehicles");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const vehicleIdCol = headers.indexOf("vehicle_id");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][vehicleIdCol] === data.vehicle_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][vehicleIdCol] === data.vehicle_id) {
 
       sheet.deleteRow(i + 1);
 
@@ -797,14 +915,13 @@ function deleteVehicle(data) {
 function disableUser(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const userIdCol = headers.indexOf("user_id");
   const statusCol = headers.indexOf("status");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][userIdCol] === data.user_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][userIdCol] === data.user_id) {
       sheet.getRange(i + 1, statusCol + 1).setValue("INACTIVE");
 
       return jsonOutput({
@@ -822,13 +939,12 @@ function disableUser(data) {
 function deleteUser(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const userIdCol = headers.indexOf("user_id");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][userIdCol] === data.user_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][userIdCol] === data.user_id) {
       sheet.deleteRow(i + 1);
 
       return jsonOutput({
@@ -844,13 +960,12 @@ function deleteUser(data) {
 }
 function updateDriver(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Drivers");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const driverIdCol = headers.indexOf("driver_id");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][driverIdCol] === data.driver_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][driverIdCol] === data.driver_id) {
       const row = i + 1;
 
       headers.forEach((header, index) => {
@@ -874,13 +989,12 @@ function updateDriver(data) {
 
 function deleteDriver(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Drivers");
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const { headers, rows } = readSheetTable(sheet);
 
   const driverIdCol = headers.indexOf("driver_id");
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][driverIdCol] === data.driver_id) {
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i][driverIdCol] === data.driver_id) {
       sheet.deleteRow(i + 1);
 
       return jsonOutput({

@@ -149,6 +149,10 @@ export default {
 
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/bookings/cancellations" && request.method === "GET") {
+      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookingCancellations`);
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/login" && request.method === "POST") {
       const body = await request.json();
 
@@ -331,7 +335,20 @@ if (url.pathname === "/api/drivers/update" && request.method === "POST") {
 
     return jsonResponse(sheetJson);
   }
+  if (url.pathname === "/api/bookings/update" && request.method === "POST") {
+    const body = await request.json();
 
+    const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "updateBooking",
+        data: body,
+      }),
+    });
+
+    return jsonResponse(sheetJson);
+  }
     return jsonResponse(
       {
         success: false,

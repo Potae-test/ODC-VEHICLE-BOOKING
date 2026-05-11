@@ -9,15 +9,18 @@ import "./App.css";
 
 const Cars = lazy(() => import("./pages/Cars"));
 const Booking = lazy(() => import("./pages/Booking"));
+const BookingCancellationHistory = lazy(() => import("./pages/BookingCancellationHistory"));
 const Staff = lazy(() => import("./pages/Staff"));
 const CalendarPage = lazy(() => import("./pages/Calendar"));
 const DriverSummary = lazy(() => import("./pages/DriverSummary"));
 const Admin = lazy(() => import("./pages/Admin"));
+
 function getDefaultPageByRole(role) {
   if (role === "ADMIN") return "admin";
   if (role === "STAFF") return "staff";
   return "booking";
 }
+
 export default function App() {
   const [page, setPage] = useState("cars");
   const [user, setUser] = useState(null);
@@ -81,17 +84,17 @@ export default function App() {
       />
     );
   }
- 
+
   const hasPageAccess = canAccessPage(user.role, page, permissionConfig);
 
   return (
     <div className="app-shell">
       <header className="gov-header">
         <div className="brand">
-          <div className="brand-logo">🚑</div>
+          <div className="brand-logo">🚐</div>
           <div>
             <h1>ระบบงานจองรถ</h1>
-            <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+            <p>ศูนย์รับบริการประชาชน เครือข่ายภาครัฐไทย</p>
           </div>
         </div>
 
@@ -111,13 +114,22 @@ export default function App() {
         <aside className="sidebar">
           {canAccessPage(user.role, "cars", permissionConfig) && (
             <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
-              🚐 หน้าจอรถ
+              🚐 เพิ่มรถใหม่
             </button>
           )}
 
           {canAccessPage(user.role, "booking", permissionConfig) && (
             <button className={page === "booking" ? "active" : ""} onClick={() => goPage("booking")}>
               📝 จองรถ
+            </button>
+          )}
+
+          {canAccessPage(user.role, "booking-cancellation-history", permissionConfig) && (
+            <button
+              className={page === "booking-cancellation-history" ? "active" : ""}
+              onClick={() => goPage("booking-cancellation-history")}
+            >
+              📚 ประวัติการยกเลิก
             </button>
           )}
 
@@ -141,7 +153,7 @@ export default function App() {
 
           {canAccessPage(user.role, "admin", permissionConfig) && (
             <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
-              ⚙️ Admin
+              🛠 Admin
             </button>
           )}
 
@@ -157,6 +169,7 @@ export default function App() {
             {!hasPageAccess && <div className="form-card">ไม่มีสิทธิ์เข้าถึง</div>}
             {hasPageAccess && page === "cars" && <Cars />}
             {hasPageAccess && page === "booking" && <Booking />}
+            {hasPageAccess && page === "booking-cancellation-history" && <BookingCancellationHistory />}
             {hasPageAccess && page === "staff" && <Staff />}
             {hasPageAccess && page === "calendar" && <CalendarPage />}
             {hasPageAccess && page === "driver-summary" && <DriverSummary />}

@@ -10,12 +10,20 @@ export const PERMISSION_ITEMS = [
   { id: "user-management", label: "จัดการผู้ใช้งาน", pages: ["admin"] },
   { id: "driver-management", label: "จัดการคนขับ", pages: ["admin"] },
   { id: "vehicle-management", label: "จัดการรถ", pages: ["cars"] },
+  { id: "booking-cancellation-history", label: "ประวัติการยกเลิก", pages: ["booking-cancellation-history"] },
   { id: "system-settings", label: "ตั้งค่าระบบ", pages: ["admin"] },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS = {
   ADMIN: PERMISSION_ITEMS.map((item) => item.id),
-  STAFF: ["booking-list", "calendar", "booking-approval", "driver-summary", "vehicle-management"],
+  STAFF: [
+    "booking-list",
+    "calendar",
+    "booking-approval",
+    "driver-summary",
+    "vehicle-management",
+    "booking-cancellation-history",
+  ],
   USER: ["booking-list", "calendar", "vehicle-management"],
   DRIVER: ["driver-summary"],
 };
@@ -97,10 +105,11 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
 const PAGE_ACTION_REQUIREMENTS = {
   cars: ["vehicles_view"],
   booking: ["bookings_view", "bookings_create"],
+  "booking-cancellation-history": ["bookings_view"],
   staff: ["bookings_view", "bookings_approve"],
   calendar: ["bookings_view"],
   "driver-summary": ["driver_summary_view"],
-  admin: ["settings_manage", "users_view", "drivers_view"],
+  admin: ["settings_manage", "users_view", "drivers_view", "vehicles_view"],
 };
 
 export function normalizeRole(role) {
@@ -233,7 +242,15 @@ export function canAccessPage(role, page, config = loadPermissionConfig()) {
 }
 
 export function getFirstAllowedPage(role, config = loadPermissionConfig()) {
-  const preferredOrder = ["cars", "booking", "staff", "calendar", "driver-summary", "admin"];
+  const preferredOrder = [
+    "cars",
+    "booking",
+    "booking-cancellation-history",
+    "staff",
+    "calendar",
+    "driver-summary",
+    "admin",
+  ];
   const allowedPages = getAllowedPages(role, config);
   return preferredOrder.find((page) => allowedPages.has(page)) || "";
 }

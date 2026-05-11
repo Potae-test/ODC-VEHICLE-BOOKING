@@ -1,5 +1,5 @@
 import { formatThaiDateTime } from "../utils/date";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   approveBooking,
   cancelBooking,
@@ -71,6 +71,11 @@ export default function Staff() {
     setBookings(bookingData);
     setVehicles(vehicleData);
     setDrivers(driverData);
+  }
+
+  async function refreshBookings() {
+    const bookingData = await getBookings();
+    setBookings(bookingData);
   }
 
   function updateSelected(bookingId, field, value) {
@@ -170,7 +175,7 @@ export default function Staff() {
       });
 
       await showSuccess("อนุมัติรายการสำเร็จ");
-      await loadData();
+      await refreshBookings();
     } catch (err) {
       showError(err.message || "อนุมัติไม่สำเร็จ");
     }
@@ -194,7 +199,7 @@ export default function Staff() {
       });
 
       await showSuccess("บันทึกรถออกสำเร็จ");
-      await loadData();
+      await refreshBookings();
     } catch (err) {
       showError(err.message || "บันทึกรถออกไม่สำเร็จ");
     }
@@ -218,7 +223,7 @@ export default function Staff() {
       });
 
       await showSuccess("บันทึกรถเข้าสำเร็จ");
-      await loadData();
+      await refreshBookings();
     } catch (err) {
       showError(err.message || "บันทึกรถเข้าไม่สำเร็จ");
     }
@@ -246,7 +251,7 @@ export default function Staff() {
       });
 
       await showSuccess("ยกเลิกรายการสำเร็จ");
-      await loadData();
+      await refreshBookings();
     } catch (err) {
       showError(err.message || "ยกเลิกไม่สำเร็จ");
     }
@@ -256,12 +261,14 @@ export default function Staff() {
     loadData();
   }, []);
 
-  const pendingBookings = sortLatestFirst(
-    bookings.filter((b) => b.status === "PENDING")
+  const pendingBookings = useMemo(
+    () => sortLatestFirst(bookings.filter((b) => b.status === "PENDING")),
+    [bookings]
   );
 
-  const activeBookings = sortLatestFirst(
-    bookings.filter((b) => b.status === "APPROVED" || b.status === "IN_USE")
+  const activeBookings = useMemo(
+    () => sortLatestFirst(bookings.filter((b) => b.status === "APPROVED" || b.status === "IN_USE")),
+    [bookings]
   );
 
   const pendingPageItems = paginate(pendingBookings, pendingPage);

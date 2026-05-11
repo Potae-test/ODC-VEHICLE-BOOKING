@@ -1,208 +1,776 @@
-import { useEffect, useState } from "react";
-import { createBooking, getBookings } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import Swal from "sweetalert2";
+import {
+  approveBooking,
+  cancelBooking,
+  createBooking,
+  getBookings,
+  getDrivers,
+  getVehicles,
+  updateBooking,
+} from "../api";
 import { formatThaiDateTime } from "../utils/date";
+import { showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
+
+const ROWS_PER_PAGE = 5;
+
+const STATUS_META = {
+  PENDING: {
+    label: "รออนุมัติ",
+    className: "amber",
+    help: "รายการที่ผู้จองส่งเข้ามาและรอเจ้าหน้าที่พิจารณา",
+  },
+  APPROVED: {
+    label: "อนุมัติแล้ว",
+    className: "blue",
+    help: "รายการที่ได้รับอนุมัติและรอเริ่มใช้งาน",
+  },
+  IN_USE: {
+    label: "กำลังใช้งาน",
+    className: "green",
+    help: "รถและคนขับกำลังปฏิบัติงานตามรายการนี้",
+  },
+  COMPLETED: {
+    label: "เสร็จสิ้น",
+    className: "gray",
+    help: "รายการที่ปิดงานเรียบร้อยแล้ว",
+  },
+  CANCELLED: {
+    label: "ยกเลิกแล้ว",
+    className: "red",
+    help: "รายการที่ถูกยกเลิกและบันทึกลงประวัติการยกเลิก",
+  },
+};
+
+function normalizeStatus(status) {
+  return String(status || "").trim().toUpperCase();
+}
+
+function getStatusMeta(status) {
+  return STATUS_META[normalizeStatus(status)] || {
+    label: status || "-",
+    className: "gray",
+    help: "สถานะรายการจอง",
+  };
+}
+
+function sortLatestFirst(items) {
+  return [...items].sort((a, b) => {
+    const dateA = new Date(a.created_at || a.updated_at || a.start_datetime).getTime();
+    const dateB = new Date(b.created_at || b.updated_at || b.start_datetime).getTime();
+    return dateB - dateA;
+  });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("odc_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function isTimeOverlap(startA, endA, startB, endB) {
+  const aStart = new Date(startA).getTime();
+  const aEnd = new Date(endA).getTime();
+  const bStart = new Date(startB).getTime();
+  const bEnd = new Date(endB).getTime();
+
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function isVehicleAvailable(vehicle, currentBooking, allBookings) {
+  if (normalizeStatus(vehicle.status) !== "AVAILABLE") {
+    return false;
+  }
+
+  return !allBookings.some((booking) => {
+    const isSameBooking = booking.booking_id === currentBooking.booking_id;
+    const isSameVehicle = booking.vehicle_id === vehicle.vehicle_id;
+    const activeStatus = ["APPROVED", "IN_USE"].includes(normalizeStatus(booking.status));
+
+    if (isSameBooking || !isSameVehicle || !activeStatus) {
+      return false;
+    }
+
+    return isTimeOverlap(
+      currentBooking.start_datetime,
+      currentBooking.end_datetime,
+      booking.start_datetime,
+      booking.end_datetime
+    );
+  });
+}
+
+function isDriverAvailable(driver, currentBooking, allBookings) {
+  return !allBookings.some((booking) => {
+    const isSameBooking = booking.booking_id === currentBooking.booking_id;
+    const isSameDriver = booking.driver_id
+      ? booking.driver_id === driver.driver_id
+      : booking.driver_name === driver.name;
+    const activeStatus = ["APPROVED", "IN_USE"].includes(normalizeStatus(booking.status));
+
+    if (isSameBooking || !isSameDriver || !activeStatus) {
+      return false;
+    }
+
+    return isTimeOverlap(
+      currentBooking.start_datetime,
+      currentBooking.end_datetime,
+      booking.start_datetime,
+      booking.end_datetime
+    );
+  });
+}
+
+function paginate(items, page) {
+  const start = (page - 1) * ROWS_PER_PAGE;
+  return items.slice(start, start + ROWS_PER_PAGE);
+}
+
+function totalPages(items) {
+  return Math.max(1, Math.ceil(items.length / ROWS_PER_PAGE));
+}
+
+function Pagination({ page, total, onChange }) {
+  return (
+    <div className="pagination">
+      {Array.from({ length: total }).map((_, index) => (
+        <button
+          key={index}
+          type="button"
+          className={page === index + 1 ? "active-page" : ""}
+          onClick={() => onChange(index + 1)}
+        >
+          {index + 1}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function Booking() {
   const [bookings, setBookings] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const canCreateBookings = hasPermission(null, "bookings_create");
-  const canViewBookings = hasPermission(null, "bookings_view");
-
-  const [form, setForm] = useState({
-    requester_name: "",
-    department: "",
-    phone: "",
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({
+    requester: "",
     start_datetime: "",
     end_datetime: "",
     destination: "",
-    purpose: "",
-    vehicle_type_request: "รถตู้",
-    vehicle_id: "",
-    driver_name: "",
+    status: "",
   });
 
-  async function loadBookings() {
-    const data = await getBookings();
-    setBookings(data);
+  const canCreateBookings = hasPermission(null, "bookings_create");
+  const canViewBookings = hasPermission(null, "bookings_view");
+  const canProcessBookings = hasPermission(null, "bookings_approve");
+  const canCancelBookings = hasPermission(null, "bookings_cancel");
+  const currentUser = getCurrentUser();
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const [bookingData, vehicleData, driverData] = await Promise.all([
+        getBookings(),
+        getVehicles(),
+        getDrivers(),
+      ]);
+
+      setBookings(Array.isArray(bookingData) ? bookingData : []);
+      setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
+      setDrivers(Array.isArray(driverData) ? driverData : []);
+    } catch (err) {
+      const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
+      setError(message);
+      showError(message);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    if (!form.requester_name || !form.phone || !form.start_datetime || !form.end_datetime || !form.destination) {
-      alert("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
-      return;
-    }
-    if (new Date(form.end_datetime) <= new Date(form.start_datetime)) {
-        alert("วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม");
-        return;
-    }
-
+  async function refreshBookings() {
     try {
-      setSaving(true);
-      await createBooking(form);
-
-      setForm({
-        requester_name: "",
-        department: "",
-        phone: "",
-        start_datetime: "",
-        end_datetime: "",
-        destination: "",
-        purpose: "",
-        vehicle_type_request: "รถตู้",
-        vehicle_id: "",
-        driver_name: "",
-      });
-
-      await loadBookings();
-      alert("ส่งคำขอจองรถสำเร็จ");
+      const bookingData = await getBookings();
+      setBookings(Array.isArray(bookingData) ? bookingData : []);
     } catch (err) {
-      alert(err.message || "จองรถไม่สำเร็จ");
-    } finally {
-      setSaving(false);
+      const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
+      setError(message);
+      showError(message);
     }
   }
 
   useEffect(() => {
-    loadBookings();
+    loadData();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
+
+  const vehicleTypes = useMemo(
+    () => [...new Set(vehicles.map((vehicle) => vehicle.vehicle_type).filter(Boolean))],
+    [vehicles]
+  );
+
+  const filteredBookings = useMemo(() => {
+    const requester = filters.requester.trim().toLowerCase();
+    const destination = filters.destination.trim().toLowerCase();
+    const status = normalizeStatus(filters.status);
+    const startFilter = filters.start_datetime ? new Date(filters.start_datetime).getTime() : null;
+    const endFilter = filters.end_datetime ? new Date(filters.end_datetime).getTime() : null;
+
+    return sortLatestFirst(bookings).filter((booking) => {
+      const bookingStatus = normalizeStatus(booking.status);
+
+        if (bookingStatus === "CANCELLED") {
+          return false;
+        }
+      const bookingRequester = String(booking.requester_name || "").toLowerCase();
+      const bookingDestination = String(booking.destination || "").toLowerCase();
+      const bookingStart = new Date(booking.start_datetime).getTime();
+      const bookingEnd = new Date(booking.end_datetime).getTime();
+
+      if (requester && !bookingRequester.includes(requester)) return false;
+      if (destination && !bookingDestination.includes(destination)) return false;
+      if (status && bookingStatus !== status) return false;
+      if (startFilter && bookingStart < startFilter) return false;
+      if (endFilter && bookingEnd > endFilter) return false;
+
+  
+      return true;
+    });
+  }, [bookings, filters]);
+
+  const bookingPages = totalPages(filteredBookings);
+  const pageItems = paginate(filteredBookings, page);
+
+  useEffect(() => {
+    if (page > bookingPages) {
+      setPage(bookingPages);
+    }
+  }, [page, bookingPages]);
+
+  async function handleCreateBooking() {
+    const vehicleTypeOptions = [
+      '<option value="">-- เลือกประเภทรถ --</option>',
+      ...vehicleTypes.map(
+        (type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`
+      ),
+    ].join("");
+
+    const result = await Swal.fire({
+      title: "Book Vehicle",
+      html: `
+        <div class="swal-form">
+          <label>ชื่อผู้จอง</label>
+          <input id="requester_name" class="swal2-input" placeholder="ชื่อ-นามสกุล">
+
+          <label>หน่วยงาน</label>
+          <input id="department" class="swal2-input" placeholder="เช่น ฝ่ายประสานงาน">
+
+          <label>เบอร์โทร</label>
+          <input id="phone" class="swal2-input" placeholder="08x-xxx-xxxx">
+
+          <label>วันเวลาเริ่ม</label>
+          <input id="start_datetime" class="swal2-input" type="datetime-local">
+
+          <label>วันเวลาสิ้นสุด</label>
+          <input id="end_datetime" class="swal2-input" type="datetime-local">
+
+          <label>ประเภทรถ</label>
+          <select id="vehicle_type_request" class="swal2-select">
+            ${vehicleTypeOptions}
+          </select>
+
+          <label>ปลายทาง</label>
+          <input id="destination" class="swal2-input" placeholder="เช่น ศาลากลางจังหวัด">
+
+          <label>เหตุผลการใช้รถ</label>
+          <input id="purpose" class="swal2-input" placeholder="เช่น ประชุมราชการ">
+        </div>
+      `,
+      width: 780,
+      showCancelButton: true,
+      confirmButtonText: "ส่งคำขอจองรถ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const requester_name = document.getElementById("requester_name").value.trim();
+        const department = document.getElementById("department").value.trim();
+        const phone = document.getElementById("phone").value.trim();
+        const start_datetime = document.getElementById("start_datetime").value;
+        const end_datetime = document.getElementById("end_datetime").value;
+        const vehicle_type_request = document.getElementById("vehicle_type_request").value.trim();
+        const destination = document.getElementById("destination").value.trim();
+        const purpose = document.getElementById("purpose").value.trim();
+
+        if (!requester_name || !phone || !start_datetime || !end_datetime || !destination) {
+          Swal.showValidationMessage("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
+          return false;
+        }
+
+        if (new Date(end_datetime) <= new Date(start_datetime)) {
+          Swal.showValidationMessage("วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม");
+          return false;
+        }
+
+        return {
+          requester_name,
+          department,
+          phone,
+          start_datetime,
+          end_datetime,
+          vehicle_type_request,
+          destination,
+          purpose,
+          vehicle_id: "",
+          driver_name: "",
+        };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await createBooking(result.value);
+      await showSuccess("ส่งคำขอจองรถสำเร็จ");
+      await refreshBookings();
+    } catch (err) {
+      showError(err.message || "จองรถไม่สำเร็จ");
+    }
+  }
+
+  async function handleProcessBooking(booking) {
+    const result = await Swal.fire({
+      title: "ดำเนินการจอง",
+      html: `
+        <div class="swal-form">
+          <label>เลือกรถ</label>
+          <select id="vehicle_id" class="swal2-select">
+            <option value="">-- เลือกรถ --</option>
+            ${vehicles
+              .map((vehicle) => {
+                const available = isVehicleAvailable(vehicle, booking, bookings);
+                const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
+                  vehicle.license_plate || vehicle.plate_no || "-"
+                }`;
+                return `<option value="${escapeHtml(vehicle.vehicle_id)}" ${
+                  available ? "" : "disabled"
+                }>${escapeHtml(label)}${available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"}</option>`;
+              })
+              .join("")}
+          </select>
+
+          <label>เลือกคนขับ</label>
+          <select id="driver_id" class="swal2-select">
+            <option value="">-- เลือกคนขับ --</option>
+            ${drivers
+              .filter((driver) => normalizeStatus(driver.status) === "ACTIVE")
+              .map((driver) => {
+                const available = isDriverAvailable(driver, booking, bookings);
+                return `<option value="${escapeHtml(driver.driver_id)}" ${
+                  available ? "" : "disabled"
+                }>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
+                  available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"
+                }</option>`;
+              })
+              .join("")}
+          </select>
+
+          <label>หมายเหตุเจ้าหน้าที่</label>
+          <input id="staff_note" class="swal2-input" placeholder="-">
+        </div>
+      `,
+      width: 760,
+      showCancelButton: true,
+      confirmButtonText: "อนุมัติรายการ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const vehicle_id = document.getElementById("vehicle_id").value;
+        const driver_id = document.getElementById("driver_id").value;
+        const staff_note = document.getElementById("staff_note").value.trim();
+
+        if (!vehicle_id || !driver_id) {
+          Swal.showValidationMessage("กรุณาเลือกรถและคนขับ");
+          return false;
+        }
+
+        const vehicle = vehicles.find((item) => item.vehicle_id === vehicle_id);
+        const driver = drivers.find((item) => item.driver_id === driver_id);
+
+        if (!vehicle || !isVehicleAvailable(vehicle, booking, bookings)) {
+          Swal.showValidationMessage("รถคันนี้ไม่ว่างหรือไม่พร้อมใช้งาน");
+          return false;
+        }
+
+        if (!driver || !isDriverAvailable(driver, booking, bookings)) {
+          Swal.showValidationMessage("คนขับท่านนี้ไม่ว่าง");
+          return false;
+        }
+
+        return {
+          booking_id: booking.booking_id,
+          vehicle_id,
+          driver_id,
+          driver_name: driver.name,
+          staff_note,
+        };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await approveBooking(result.value);
+      await showSuccess("อนุมัติรายการสำเร็จ");
+      await refreshBookings();
+    } catch (err) {
+      showError(err.message || "อนุมัติรายการไม่สำเร็จ");
+    }
+  }
+
+  async function handleEditBooking(booking) {
+      const result = await Swal.fire({
+        title: "แก้ไขรายการจอง",
+        html: `
+          <div class="swal-form">
+            <label>ชื่อผู้จอง</label>
+            <input
+              id="requester_name"
+              class="swal2-input"
+              value="${escapeHtml(booking.requester_name || "")}"
+            >
+
+            <label>หน่วยงาน</label>
+            <input
+              id="department"
+              class="swal2-input"
+              value="${escapeHtml(booking.department || "")}"
+            >
+
+            <label>เบอร์โทร</label>
+            <input
+              id="phone"
+              class="swal2-input"
+              value="${escapeHtml(booking.phone || "")}"
+            >
+
+            <label>วันเวลาเริ่ม</label>
+            <input
+              id="start_datetime"
+              type="datetime-local"
+              class="swal2-input"
+              value="${booking.start_datetime || ""}"
+            >
+
+            <label>วันเวลาสิ้นสุด</label>
+            <input
+              id="end_datetime"
+              type="datetime-local"
+              class="swal2-input"
+              value="${booking.end_datetime || ""}"
+            >
+
+            <label>ปลายทาง</label>
+            <input
+              id="destination"
+              class="swal2-input"
+              value="${escapeHtml(booking.destination || "")}"
+            >
+
+            <label>เหตุผลการใช้รถ</label>
+            <input
+              id="purpose"
+              class="swal2-input"
+              value="${escapeHtml(booking.purpose || "")}"
+            >
+          </div>
+        `,
+        width: 760,
+        showCancelButton: true,
+        confirmButtonText: "บันทึก",
+        cancelButtonText: "ยกเลิก",
+        confirmButtonColor: "#1455c8",
+        cancelButtonColor: "#64748b",
+
+        preConfirm: () => {
+          return {
+            booking_id: booking.booking_id,
+            requester_name: document.getElementById("requester_name").value,
+            department: document.getElementById("department").value,
+            phone: document.getElementById("phone").value,
+            start_datetime: document.getElementById("start_datetime").value,
+            end_datetime: document.getElementById("end_datetime").value,
+            destination: document.getElementById("destination").value,
+            purpose: document.getElementById("purpose").value,
+          };
+        },
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        await updateBooking(result.value);
+
+        await showSuccess("แก้ไขรายการสำเร็จ");
+
+        await refreshBookings();
+      } catch (err) {
+        showError(err.message || "แก้ไขรายการไม่สำเร็จ");
+      }
+    }
+
+  async function handleCancelBooking(booking) {
+    const result = await Swal.fire({
+      title: normalizeStatus(booking.status) === "PENDING" ? "Cancel Booking" : "Delete Booking",
+      html: `
+        <div class="swal-form">
+          <label>เหตุผลการยกเลิก</label>
+          <textarea id="cancel_reason" class="swal2-textarea" rows="5" placeholder="ระบุเหตุผลให้ชัดเจน"></textarea>
+        </div>
+      `,
+      width: 720,
+      showCancelButton: true,
+      confirmButtonText: "ยืนยัน",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const reason = document.getElementById("cancel_reason").value.trim();
+
+        if (!reason) {
+          Swal.showValidationMessage("กรุณาระบุเหตุผลการยกเลิก");
+          return false;
+        }
+
+        return reason;
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await cancelBooking({
+        booking_id: booking.booking_id,
+        reason: result.value,
+        cancelled_by: currentUser?.name || currentUser?.email || "",
+      });
+
+      await showSuccess("ยกเลิกรายการสำเร็จ");
+      await refreshBookings();
+    } catch (err) {
+      showError(err.message || "ยกเลิกรายการไม่สำเร็จ");
+    }
+  }
+
+  function setFilter(field, value) {
+    setFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function clearFilters() {
+    setFilters({
+      requester: "",
+      start_datetime: "",
+      end_datetime: "",
+      destination: "",
+      status: "",
+    });
+  }
 
   return (
     <div>
       <div className="page-header">
         <div>
           <h2>จองรถ</h2>
-          <p>บันทึกคำขอจองรถลง Google Sheet จริง</p>
+          <p>จองรถผ่านแบบฟอร์มแบบโมดัล และติดตามรายการจองล่าสุดได้ในตารางด้านล่าง</p>
         </div>
+
+        {canCreateBookings && (
+          <button type="button" onClick={handleCreateBooking}>
+              ➕ เพิ่มรายการจองใหม่
+          </button>
+        )}
       </div>
 
-      {canCreateBookings && (
-      <form className="form-card" onSubmit={handleSubmit}>
-        <h3>แบบฟอร์มจองรถ</h3>
+      {loading && <div className="form-card">กำลังโหลดข้อมูล...</div>}
 
-        <div className="form-grid">
-          <div>
-            <label>ชื่อผู้จอง *</label>
-            <input
-              value={form.requester_name}
-              onChange={(e) => setForm({ ...form, requester_name: e.target.value })}
-              placeholder="ชื่อ-นามสกุล"
-            />
-          </div>
-
-          <div>
-            <label>หน่วยงาน</label>
-            <input
-              value={form.department}
-              onChange={(e) => setForm({ ...form, department: e.target.value })}
-              placeholder="เช่น ฝ่ายประสานงาน"
-            />
-          </div>
-
-          <div>
-            <label>เบอร์โทร *</label>
-            <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="08x-xxx-xxxx"
-            />
-          </div>
-
-          <div>
-            <label>วันเวลาเริ่ม *</label>
-            <input
-              type="datetime-local"
-              value={form.start_datetime}
-              onChange={(e) => setForm({ ...form, start_datetime: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label>วันเวลาสิ้นสุด *</label>
-            <input
-              type="datetime-local"
-              value={form.end_datetime}
-              onChange={(e) => setForm({ ...form, end_datetime: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label>ประเภทรถ</label>
-            <select
-              value={form.vehicle_type_request}
-              onChange={(e) => setForm({ ...form, vehicle_type_request: e.target.value })}
-            >
-              <option value="รถตู้">รถตู้</option>
-              <option value="รถพยาบาล">รถพยาบาล</option>
-              <option value="รถกระบะ">รถกระบะ</option>
-              <option value="รถเก๋ง">รถเก๋ง</option>
-            </select>
-          </div>
-
-          <div>
-            <label>ปลายทาง *</label>
-            <input
-              value={form.destination}
-              onChange={(e) => setForm({ ...form, destination: e.target.value })}
-              placeholder="เช่น รพ.จุฬาลงกรณ์"
-            />
-          </div>
-
-          <div>
-            <label>เหตุผลการใช้รถ</label>
-            <input
-              value={form.purpose}
-              onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-              placeholder="เช่น ประสานงานรับบริจาคอวัยวะ"
-            />
-          </div>
-        </div>
-
-        <button disabled={saving}>
-          {saving ? "กำลังบันทึก..." : "ส่งคำขอจองรถ"}
-        </button>
-      </form>
-      )}
+      {error && !loading && <div className="form-card">{error}</div>}
 
       {canViewBookings && (
-      <div className="form-card">
-        <h3>รายการจองล่าสุด</h3>
+        <div className="form-card">
+            <div className="section-header">
+              <h3>ค้นหารายการจอง</h3>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>เลขที่</th>
-                <th>ผู้จอง</th>
-                <th>วันเวลาเริ่ม</th>
-                <th>วันเวลาสิ้นสุด</th>
-                <th>ปลายทาง</th>
-                <th>สถานะ</th>
-              </tr>
-            </thead>
+              <button
+                type="button"
+                className="warning-button booking-filter-clear-button"
+                onClick={clearFilters}
+              >
+                ล้างตัวกรอง
+              </button>
+            </div>
+          <div className="form-grid booking-filter-grid" style={{ marginTop: 16 }}>
+            <div>
+              <label>ผู้จอง</label>
+              <input
+                value={filters.requester}
+                onChange={(e) => setFilter("requester", e.target.value)}
+                placeholder="ค้นหาจากชื่อผู้จอง"
+              />
+            </div>
 
-            <tbody>
-                  {bookings.map((b) => (
-                    <tr key={b.booking_id}>
-                      <td>{b.booking_no}</td>
-                      <td>{b.requester_name}</td>
-                      <td>{formatThaiDateTime(b.start_datetime)}</td>
-                      <td>{formatThaiDateTime(b.end_datetime)}</td>
-                      <td>{b.destination}</td>
-                      <td>{b.status}</td>
+            <div>
+              <label>วันเวลาเริ่ม</label>
+              <input
+                type="datetime-local"
+                value={filters.start_datetime}
+                onChange={(e) => setFilter("start_datetime", e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>วันเวลาสิ้นสุด</label>
+              <input
+                type="datetime-local"
+                value={filters.end_datetime}
+                onChange={(e) => setFilter("end_datetime", e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>ปลายทาง</label>
+              <input
+                value={filters.destination}
+                onChange={(e) => setFilter("destination", e.target.value)}
+                placeholder="ค้นหาปลายทาง"
+              />
+            </div>
+
+            <div>
+              <label>สถานะ</label>
+              <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+                <option value="">ทั้งหมด</option>
+                {Object.entries(STATUS_META).map(([status, meta]) => (
+                  <option key={status} value={status}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {loading ? (
+            <p>กำลังโหลดข้อมูลรายการจอง...</p>
+          ) : (
+            <>
+              <div className="table-wrap" style={{ marginTop: 24 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>เลขที่</th>
+                      <th>ผู้จอง</th>
+                      <th>เริ่ม</th>
+                      <th>สิ้นสุด</th>
+                      <th>ปลายทาง</th>
+                      <th>สถานะ</th>
+                      <th>จัดการ</th>
                     </tr>
-                  ))}
-              {bookings.length === 0 && (
-                <tr>
-                  <td colSpan="6">ยังไม่มีรายการจอง</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                  </thead>
+                  <tbody>
+                    {pageItems.length === 0 ? (
+                      <tr>
+                        <td colSpan="7">ไม่พบรายการจอง</td>
+                      </tr>
+                    ) : (
+                      pageItems.map((booking) => {
+                        const statusMeta = getStatusMeta(booking.status);
+                        const status = normalizeStatus(booking.status);
+                        const canShowProcess =
+                          canProcessBookings &&
+                          ["PENDING", "APPROVED"].includes(status);
+
+                        const canShowEdit =
+                          canProcessBookings &&
+                          ["PENDING", "APPROVED"].includes(status);
+
+                        const canShowCancel =
+                          canCancelBookings &&
+                          !["COMPLETED", "CANCELLED", "APPROVED", "IN_USE"].includes(status);
+
+                        return (
+                          <tr key={booking.booking_id}>
+                            <td>{booking.booking_no || "-"}</td>
+                            <td>{booking.requester_name || "-"}</td>
+                            <td>{formatThaiDateTime(booking.start_datetime)}</td>
+                            <td>{formatThaiDateTime(booking.end_datetime)}</td>
+                            <td>{booking.destination || "-"}</td>
+                            <td>
+                              <span
+                                className={`status ${statusMeta.className}`}
+                                title={statusMeta.help}
+                              >
+                                {statusMeta.label}
+                              </span>
+                            </td>
+                            <td className="action-buttons">
+                              {canShowProcess && (
+                                <button type="button" onClick={() => handleProcessBooking(booking)}>
+                                  ดำเนินการ
+                                </button>
+                              )}
+                              {/* {canShowEdit && (
+                                <button
+                                  type="button"
+                                  className="warning-button booking-action-button"
+                                  onClick={() => handleEditBooking(booking)}
+                                >
+                                  แก้ไข
+                                </button>
+                              )} */}
+                              {canShowCancel && (
+                                <button
+                                  type="button"
+                                  // className="danger-button booking-action-button"
+                                  className="danger-button"
+                                  onClick={() => handleCancelBooking(booking)}
+                                >
+                                  {status === "PENDING" ? "ยกเลิก" : "ลบ"}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <Pagination page={page} total={bookingPages} onChange={setPage} />
+            </>
+          )}
         </div>
-      </div>
       )}
     </div>
   );

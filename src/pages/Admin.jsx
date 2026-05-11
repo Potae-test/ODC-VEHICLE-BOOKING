@@ -1,13 +1,16 @@
 import { formatThaiDateTime } from "../utils/date";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  createVehicle,
   createDriver,
   createUser,
+  deleteVehicle,
   getBookings,
   getDrivers,
   getUsers,
   getVehicles,
   resetUserPassword,
+  updateVehicle,
   updateDriverStatus,
   updateUser,
   disableUser,
@@ -39,16 +42,55 @@ function countByStatus(items, status) {
   return items.filter((x) => x.status === status).length;
 }
 
+function normalizeVehicle(vehicle) {
+  return {
+    ...vehicle,
+    vehicle_id: vehicle.vehicle_id || "",
+    vehicle_name: vehicle.vehicle_name || vehicle.vehicle_code || "",
+    license_plate: vehicle.license_plate || vehicle.plate_no || "",
+    vehicle_type: vehicle.vehicle_type || "",
+    status: String(vehicle.status || "").trim().toUpperCase(),
+    note: vehicle.note || vehicle.driver_name || vehicle.next_booking || "",
+  };
+}
+
+function getVehicleStatusText(status) {
+  if (status === "AVAILABLE") return "พร้อมใช้งาน";
+  if (status === "IN_USE") return "กำลังใช้งาน";
+  if (status === "MAINTENANCE") return "ซ่อมบำรุง";
+  if (status === "INACTIVE") return "ปิดใช้งาน";
+  return status || "-";
+}
+
+function getVehicleStatusClass(status) {
+  if (status === "AVAILABLE") return "status green";
+  if (status === "IN_USE") return "status blue";
+  if (status === "MAINTENANCE") return "status amber";
+  if (status === "INACTIVE") return "status gray";
+  return "status";
+}
+
+function SummaryCard({ title, value, className = "" }) {
+  return (
+    <div className={`summary-card ${className}`.trim()}>
+      <h3>{title}</h3>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+const BOOKING_PER_PAGE = 5;
+
 export default function Admin() {
   const [vehicles, setVehicles] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
   const [actionPermissionConfig, setActionPermissionConfig] = useState(loadActionPermissionConfig);
   const [selectedPermissionRole, setSelectedPermissionRole] = useState("STAFF");
   const [bookingPage, setBookingPage] = useState(1);
-  const BOOKING_PER_PAGE = 5;
   const [driverInactiveReasons, setDriverInactiveReasons] = useState([
     "ลาป่วย",
     "ลาหยุด",
@@ -73,17 +115,45 @@ export default function Admin() {
   });
 
   async function loadData() {
-    const [vehicleData, bookingData, driverData, userData] = await Promise.all([
-      getVehicles(),
-      getBookings(),
-      getDrivers(),
-      getUsers(),
-    ]);
+    try {
+      setLoading(true);
 
-    setVehicles(vehicleData);
-    setBookings(bookingData);
-    setDrivers(driverData);
-    setUsers(userData);
+      const [vehicleData, bookingData, driverData, userData] = await Promise.all([
+        getVehicles(),
+        getBookings(),
+        getDrivers(),
+        getUsers(),
+      ]);
+
+      setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
+      setBookings(Array.isArray(bookingData) ? bookingData : []);
+      setDrivers(Array.isArray(driverData) ? driverData : []);
+      setUsers(Array.isArray(userData) ? userData : []);
+    } catch (err) {
+      showError(err.message || "โหลดข้อมูลไม่สำเร็จ");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function refreshVehicles() {
+    const vehicleData = await getVehicles();
+    setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
+  }
+
+  async function refreshBookings() {
+    const bookingData = await getBookings();
+    setBookings(Array.isArray(bookingData) ? bookingData : []);
+  }
+
+  async function refreshDrivers() {
+    const driverData = await getDrivers();
+    setDrivers(Array.isArray(driverData) ? driverData : []);
+  }
+
+  async function refreshUsers() {
+    const userData = await getUsers();
+    setUsers(Array.isArray(userData) ? userData : []);
   }
 
   async function handleCreateDriver(e) {
@@ -109,7 +179,7 @@ export default function Admin() {
         remark: "",
       });
 
-      await loadData();
+      await refreshDrivers();
       await showSuccess("เพิ่มคนขับสำเร็จ");
     } catch (err) {
       showError(err.message || "เพิ่มคนขับไม่สำเร็จ");
@@ -157,7 +227,7 @@ export default function Admin() {
         remark,
       });
 
-      await loadData();
+      await refreshDrivers();
       alert("อัปเดตสถานะสำเร็จ");
     } catch (err) {
       alert(err.message || "อัปเดตไม่สำเร็จ");
@@ -210,7 +280,7 @@ export default function Admin() {
     try {
       await createDriver(result.value);
       await showSuccess("เพิ่มคนขับสำเร็จ");
-      await loadData();
+      await refreshDrivers();
     } catch (err) {
       showError(err.message || "เพิ่มคนขับไม่สำเร็จ");
     }
@@ -298,7 +368,7 @@ async function handleOpenCreateUser() {
   try {
     await createUser(result.value);
     await showSuccess("เพิ่มผู้ใช้งานสำเร็จ");
-    await loadData();
+    await refreshUsers();
   } catch (err) {
     showError(err.message || "เพิ่มผู้ใช้งานไม่สำเร็จ");
   }
@@ -321,7 +391,7 @@ async function handleOpenCreateUser() {
       }
 
       clearUserForm();
-      await loadData();
+      await refreshUsers();
     } catch (err) {
       showError(err.message || "บันทึกไม่สำเร็จ");
     }
@@ -343,7 +413,7 @@ async function handleOpenCreateUser() {
       });
 
       await showSuccess("เปลี่ยนรหัสผ่านสำเร็จ");
-      await loadData();
+      await refreshUsers();
     } catch (err) {
       showError(err.message || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
     }
@@ -360,7 +430,7 @@ async function handleOpenCreateUser() {
 
       await showSuccess("ปิดใช้งานผู้ใช้สำเร็จ");
 
-      await loadData();
+      await refreshUsers();
     } catch (err) {
       showError(err.message || "ปิดใช้งานไม่สำเร็จ");
     }
@@ -377,7 +447,7 @@ async function handleDeleteUser(u) {
 
     await showSuccess("ลบผู้ใช้สำเร็จ");
 
-    await loadData();
+    await refreshUsers();
   } catch (err) {
     showError(err.message || "ลบไม่สำเร็จ");
   }
@@ -394,7 +464,7 @@ async function handleDeleteUser(u) {
 
       await showSuccess("ลบผู้ใช้สำเร็จ");
 
-      await loadData();
+      await refreshUsers();
     } catch (err) {
       showError(err.message || "ลบไม่สำเร็จ");
     }
@@ -413,7 +483,7 @@ async function handleDeleteUser(u) {
     });
 
     await showSuccess("เปิดใช้งานผู้ใช้สำเร็จ");
-    await loadData();
+    await refreshUsers();
   } catch (err) {
     showError(err.message || "เปิดใช้งานไม่สำเร็จ");
   }
@@ -431,17 +501,62 @@ async function handleDeleteUser(u) {
     });
   }
 
-  const permissionRoles = Array.from(
-    new Set([
-      ...Object.keys(DEFAULT_ROLE_PERMISSIONS),
-      ...users.map((u) => normalizeRole(u.role)).filter(Boolean),
-    ])
+  const bookingStatusCounts = useMemo(
+    () => ({
+      PENDING: countByStatus(bookings, "PENDING"),
+      APPROVED: countByStatus(bookings, "APPROVED"),
+      IN_USE: countByStatus(bookings, "IN_USE"),
+      COMPLETED: countByStatus(bookings, "COMPLETED"),
+      CANCELLED: countByStatus(bookings, "CANCELLED"),
+    }),
+    [bookings]
   );
+
+  const permissionRoles = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...Object.keys(DEFAULT_ROLE_PERMISSIONS),
+          ...users.map((u) => normalizeRole(u.role)).filter(Boolean),
+        ])
+      ),
+    [users]
+  );
+
+  const bookingPageCount = useMemo(
+    () => Math.max(1, Math.ceil(bookings.length / BOOKING_PER_PAGE)),
+    [bookings.length]
+  );
+
+  const bookingPageItems = useMemo(
+    () => bookings.slice((bookingPage - 1) * BOOKING_PER_PAGE, bookingPage * BOOKING_PER_PAGE),
+    [bookings, bookingPage]
+  );
+
+  const normalizedVehicles = useMemo(() => vehicles.map(normalizeVehicle), [vehicles]);
+
+  const summaryCards = useMemo(
+    () => [
+      { title: "รถทั้งหมด", value: vehicles.length },
+      { title: "รายการจองทั้งหมด", value: bookings.length },
+      { title: "รออนุมัติ", value: bookingStatusCounts.PENDING, className: "amber-box" },
+      { title: "อนุมัติแล้ว", value: bookingStatusCounts.APPROVED, className: "blue-box" },
+      { title: "กำลังใช้งาน", value: bookingStatusCounts.IN_USE, className: "green-box" },
+      { title: "เสร็จสิ้น", value: bookingStatusCounts.COMPLETED, className: "gray-box" },
+      { title: "ยกเลิก", value: bookingStatusCounts.CANCELLED, className: "red-box" },
+    ],
+    [vehicles.length, bookings.length, bookingStatusCounts]
+  );
+
   const canManageSettings = hasPermission(null, "settings_manage");
   const canViewDrivers = hasPermission(null, "drivers_view");
   const canCreateDrivers = hasPermission(null, "drivers_create");
   const canEditDrivers = hasPermission(null, "drivers_edit");
   const canDeleteDrivers = hasPermission(null, "drivers_delete");
+  const canViewVehicles = hasPermission(null, "vehicles_view");
+  const canCreateVehicles = hasPermission(null, "vehicles_create");
+  const canEditVehicles = hasPermission(null, "vehicles_edit");
+  const canDeleteVehicles = hasPermission(null, "vehicles_delete");
   const canViewUsers = hasPermission(null, "users_view");
   const canCreateUsers = hasPermission(null, "users_create");
   const canEditUsers = hasPermission(null, "users_edit");
@@ -574,7 +689,7 @@ async function handleEditDriver(d) {
   try {
     await updateDriver(result.value);
     await showSuccess("แก้ไขข้อมูลคนขับสำเร็จ");
-    await loadData();
+    await refreshDrivers();
   } catch (err) {
     showError(err.message || "แก้ไขคนขับไม่สำเร็จ");
   }
@@ -590,20 +705,163 @@ async function handleDeleteDriver(d) {
   try {
     await deleteDriver(d.driver_id);
     await showSuccess("ลบคนขับสำเร็จ");
-    await loadData();
+    await refreshDrivers();
   } catch (err) {
     showError(err.message || "ลบคนขับไม่สำเร็จ");
   }
 }
+
+async function handleOpenCreateVehicle() {
+  const result = await Swal.fire({
+    title: "เพิ่มข้อมูลรถ",
+    html: `
+      <div class="swal-form">
+        <label>ชื่อรถ</label>
+        <input id="vehicle_name" class="swal2-input" placeholder="เช่น รถตู้ Toyota">
+
+        <label>ทะเบียนรถ</label>
+        <input id="license_plate" class="swal2-input" placeholder="เช่น 1ข 1234">
+
+        <label>ประเภทรถ</label>
+        <input id="vehicle_type" class="swal2-input" placeholder="เช่น รถตู้">
+
+        <label>สถานะ</label>
+        <select id="vehicle_status" class="swal2-select">
+          <option value="AVAILABLE">พร้อมใช้งาน</option>
+          <option value="IN_USE">กำลังใช้งาน</option>
+          <option value="MAINTENANCE">ซ่อมบำรุง</option>
+          <option value="INACTIVE">ปิดใช้งาน</option>
+        </select>
+
+        <label>หมายเหตุ</label>
+        <input id="vehicle_note" class="swal2-input" placeholder="-">
+      </div>
+    `,
+    width: 750,
+    showCancelButton: true,
+    confirmButtonText: "เพิ่มรถ",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: "#1455c8",
+    cancelButtonColor: "#64748b",
+    preConfirm: () => {
+      const vehicle_name = document.getElementById("vehicle_name").value.trim();
+      const license_plate = document.getElementById("license_plate").value.trim();
+      const vehicle_type = document.getElementById("vehicle_type").value.trim();
+      const status = document.getElementById("vehicle_status").value;
+      const note = document.getElementById("vehicle_note").value.trim();
+
+      if (!vehicle_name || !license_plate || !vehicle_type) {
+        Swal.showValidationMessage("กรุณากรอกชื่อรถ ทะเบียนรถ และประเภทรถ");
+        return false;
+      }
+
+      return {
+        vehicle_name,
+        license_plate,
+        vehicle_type,
+        status,
+        note,
+      };
+    },
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await createVehicle(result.value);
+    await showSuccess("เพิ่มรถสำเร็จ");
+    await refreshVehicles();
+  } catch (err) {
+    showError(err.message || "เพิ่มรถไม่สำเร็จ");
+  }
+}
+
+async function handleEditVehicle(vehicle) {
+  const result = await Swal.fire({
+    title: "แก้ไขข้อมูลรถ",
+    html: `
+      <div class="swal-form">
+        <label>ชื่อรถ</label>
+        <input id="vehicle_name" class="swal2-input" value="${vehicle.vehicle_name || ""}">
+
+        <label>ทะเบียนรถ</label>
+        <input id="license_plate" class="swal2-input" value="${vehicle.license_plate || ""}">
+
+        <label>ประเภทรถ</label>
+        <input id="vehicle_type" class="swal2-input" value="${vehicle.vehicle_type || ""}">
+
+        <label>สถานะ</label>
+        <select id="vehicle_status" class="swal2-select">
+          <option value="AVAILABLE" ${vehicle.status === "AVAILABLE" ? "selected" : ""}>พร้อมใช้งาน</option>
+          <option value="IN_USE" ${vehicle.status === "IN_USE" ? "selected" : ""}>กำลังใช้งาน</option>
+          <option value="MAINTENANCE" ${vehicle.status === "MAINTENANCE" ? "selected" : ""}>ซ่อมบำรุง</option>
+          <option value="INACTIVE" ${vehicle.status === "INACTIVE" ? "selected" : ""}>ปิดใช้งาน</option>
+        </select>
+
+        <label>หมายเหตุ</label>
+        <input id="vehicle_note" class="swal2-input" value="${vehicle.note || ""}">
+      </div>
+    `,
+    width: 750,
+    showCancelButton: true,
+    confirmButtonText: "บันทึกการแก้ไข",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: "#1455c8",
+    cancelButtonColor: "#64748b",
+    preConfirm: () => {
+      const vehicle_name = document.getElementById("vehicle_name").value.trim();
+      const license_plate = document.getElementById("license_plate").value.trim();
+      const vehicle_type = document.getElementById("vehicle_type").value.trim();
+      const status = document.getElementById("vehicle_status").value;
+      const note = document.getElementById("vehicle_note").value.trim();
+
+      if (!vehicle_name || !license_plate || !vehicle_type) {
+        Swal.showValidationMessage("กรุณากรอกชื่อรถ ทะเบียนรถ และประเภทรถ");
+        return false;
+      }
+
+      return {
+        vehicle_id: vehicle.vehicle_id,
+        vehicle_name,
+        license_plate,
+        vehicle_type,
+        status,
+        note,
+      };
+    },
+  });
+
+  if (!result.isConfirmed) return;
+
+  try {
+    await updateVehicle(result.value);
+    await showSuccess("แก้ไขข้อมูลรถสำเร็จ");
+    await refreshVehicles();
+  } catch (err) {
+    showError(err.message || "แก้ไขข้อมูลรถไม่สำเร็จ");
+  }
+}
+
+async function handleDeleteVehicle(vehicle) {
+  const confirmed = await showConfirm(
+    `ยืนยันลบรถ ${vehicle.vehicle_name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await deleteVehicle(vehicle.vehicle_id);
+    await showSuccess("ลบรถสำเร็จ");
+    await refreshVehicles();
+  } catch (err) {
+    showError(err.message || "ลบรถไม่สำเร็จ");
+  }
+}
+
   useEffect(() => {
     loadData();
   }, []);
-    const totalBookingPages = Math.ceil(bookings.length / BOOKING_PER_PAGE);
 
-    const bookingPageItems = bookings.slice(
-      (bookingPage - 1) * BOOKING_PER_PAGE,
-      bookingPage * BOOKING_PER_PAGE
-    );
   return (
     <div>
       <div className="page-header">
@@ -616,40 +874,9 @@ async function handleDeleteDriver(d) {
       </div>
 
       <div className="summary-grid">
-        <div className="summary-card">
-          <h3>รถทั้งหมด</h3>
-          <strong>{vehicles.length}</strong>
-        </div>
-
-        <div className="summary-card">
-          <h3>รายการจองทั้งหมด</h3>
-          <strong>{bookings.length}</strong>
-        </div>
-
-        <div className="summary-card amber-box">
-          <h3>รออนุมัติ</h3>
-          <strong>{countByStatus(bookings, "PENDING")}</strong>
-        </div>
-
-        <div className="summary-card blue-box">
-          <h3>อนุมัติแล้ว</h3>
-          <strong>{countByStatus(bookings, "APPROVED")}</strong>
-        </div>
-
-        <div className="summary-card green-box">
-          <h3>กำลังใช้งาน</h3>
-          <strong>{countByStatus(bookings, "IN_USE")}</strong>
-        </div>
-
-        <div className="summary-card gray-box">
-          <h3>เสร็จสิ้น</h3>
-          <strong>{countByStatus(bookings, "COMPLETED")}</strong>
-        </div>
-
-        <div className="summary-card red-box">
-          <h3>ยกเลิก</h3>
-          <strong>{countByStatus(bookings, "CANCELLED")}</strong>
-        </div>
+        {summaryCards.map((card) => (
+          <SummaryCard key={card.title} title={card.title} value={card.value} className={card.className} />
+        ))}
       </div>
  <br></br>
       <div className="form-card permission-card">
@@ -754,7 +981,83 @@ async function handleDeleteDriver(d) {
       </div>
       )}
 
-      {canViewUsers && (
+      {canViewVehicles && (
+      <div className="form-card">
+        <h3>Vehicle Management</h3>
+        <div className="section-toolbar">
+          {canCreateVehicles && (
+          <button type="button" onClick={handleOpenCreateVehicle}>
+            เพิ่มรถ
+          </button>
+          )}
+        </div>
+
+        {loading ? (
+          <p>กำลังโหลดข้อมูลรถ...</p>
+        ) : (
+        <div className="table-wrap" style={{ marginTop: 24 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสรถ</th>
+                <th>ชื่อรถ</th>
+                <th>ทะเบียนรถ</th>
+                <th>ประเภทรถ</th>
+                <th>สถานะ</th>
+                <th>หมายเหตุ</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {normalizedVehicles.length === 0 ? (
+                <tr>
+                  <td colSpan="7">ไม่มีข้อมูลรถ</td>
+                </tr>
+              ) : (
+                normalizedVehicles.map((vehicle) => (
+                  <tr
+                    key={vehicle.vehicle_id}
+                    className={vehicle.status === "INACTIVE" ? "inactive-row" : ""}
+                  >
+                    <td>{vehicle.vehicle_id || "-"}</td>
+                    <td>{vehicle.vehicle_name || "-"}</td>
+                    <td>{vehicle.license_plate || "-"}</td>
+                    <td>{vehicle.vehicle_type || "-"}</td>
+                    <td>
+                      <span className={getVehicleStatusClass(vehicle.status)}>
+                        {getVehicleStatusText(vehicle.status)}
+                      </span>
+                    </td>
+                    <td>{vehicle.note || "-"}</td>
+                    <td className="action-buttons">
+                      {canEditVehicles && (
+                      <button type="button" onClick={() => handleEditVehicle(vehicle)}>
+                        แก้ไข
+                      </button>
+                      )}
+
+                      {canDeleteVehicles && (
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteVehicle(vehicle)}
+                      >
+                        ลบ
+                      </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        )}
+      </div>
+      )}
+
+      {canViewDrivers && (
       <div className="form-card">
         <h3>จัดการคนขับ</h3>
         <div className="section-toolbar">
@@ -938,7 +1241,7 @@ async function handleDeleteDriver(d) {
             </tbody>
           </table>
           <div className="pagination">
-          {Array.from({ length: totalBookingPages }).map((_, index) => (
+          {Array.from({ length: bookingPageCount }).map((_, index) => (
             <button
               key={index}
               type="button"

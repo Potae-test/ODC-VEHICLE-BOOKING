@@ -1230,9 +1230,23 @@ label {
 }
 
 .danger-button {
-  background: #dc2626;
-  margin-left: 8px;
+  
+  font-size: px;
+  min-width: auto;
+  width: auto;
+  height: auto;
+  border-radius: 10px;
+  
 }
+/* .booking-action-button {
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  border-radius: 999px !important;
+  min-width: auto !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: 1.2;
+} */
 .action-buttons {
   display: flex;
   gap: 12px;
@@ -1618,4 +1632,21 @@ label {
   .driver-summary-modal-header {
     display: grid;
   }
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.booking-filter-clear-button {
+  padding: 8px 14px !important;
+  font-size: 20px !important;
+  min-height: auto !important;
 }
