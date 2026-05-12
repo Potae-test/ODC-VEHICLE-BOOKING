@@ -40,3 +40,9 @@ git pull
 git add .
 git commit -m "update"
 git push origin main
+
+Extension
+Auto Close Tag
+Auto Rename Tag
+Auto-Save on Window Change
+Material Icon Theme

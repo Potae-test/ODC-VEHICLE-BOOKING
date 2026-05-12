@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { getBookingCancellationHistory } from "../api";
+import { deleteBookingCancellationHistory, getBookingCancellationHistory } from "../api";
 import { formatThaiDateTime } from "../utils/date";
-import { hasPermission } from "../permissions";
-import { showError } from "../utils/alert";
+import { hasPermission, normalizeRole } from "../permissions";
+import { showConfirm, showError, showSuccess } from "../utils/alert";
 
 const ROWS_PER_PAGE = 5;
 
@@ -53,6 +53,7 @@ export default function BookingCancellationHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [deletingId, setDeletingId] = useState("");
   const [filters, setFilters] = useState({
     requester: "",
     destination: "",
@@ -61,6 +62,15 @@ export default function BookingCancellationHistory() {
   });
 
   const canViewHistory = hasPermission(null, "bookings_view");
+  const currentRole = useMemo(() => {
+    try {
+      const savedUser = JSON.parse(localStorage.getItem("odc_user") || "null");
+      return normalizeRole(savedUser?.role);
+    } catch {
+      return "";
+    }
+  }, []);
+  const canManageHistory = currentRole === "ADMIN" || currentRole === "STAFF";
 
   async function loadData() {
     try {
@@ -138,10 +148,42 @@ export default function BookingCancellationHistory() {
     });
   }
 
+  async function handleDelete(item) {
+    if (!canManageHistory) {
+      return;
+    }
+
+    const cancellationId = item.cancellation_id;
+    if (!cancellationId) {
+      showError("ไม่พบรหัสรายการที่ต้องการลบ");
+      return;
+    }
+
+    const confirmed = await showConfirm(
+      `ต้องการลบประวัติการยกเลิกรายการ ${item.booking_no || cancellationId} ใช่หรือไม่`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingId(cancellationId);
+      await deleteBookingCancellationHistory(cancellationId);
+      await loadData();
+      showSuccess("ลบประวัติการยกเลิกสำเร็จ");
+    } catch (err) {
+      const message = err.message || "ลบประวัติการยกเลิกไม่สำเร็จ";
+      showError(message);
+    } finally {
+      setDeletingId("");
+    }
+  }
+
   const statusMeta = getStatusMeta();
 
   if (!canViewHistory) {
-    return <div className="form-card">ไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+    return <div className="form-card">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
 
   return (
@@ -224,13 +266,14 @@ export default function BookingCancellationHistory() {
                   <th>ผู้ยกเลิก</th>
                   <th>ยกเลิกเมื่อ</th>
                   <th>สถานะ</th>
+                  <th>จัดการ</th>
                 </tr>
               </thead>
 
               <tbody>
                 {pageItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7">ไม่พบประวัติการยกเลิก</td>
+                    <td colSpan="8">ไม่พบประวัติการยกเลิก</td>
                   </tr>
                 ) : (
                   pageItems.map((item) => (
@@ -245,6 +288,20 @@ export default function BookingCancellationHistory() {
                         <span className={`status ${statusMeta.className}`} title={statusMeta.help}>
                           {statusMeta.label}
                         </span>
+                      </td>
+                      <td>
+                        {canManageHistory ? (
+                          <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => handleDelete(item)}
+                            disabled={deletingId === item.cancellation_id}
+                          >
+                            {deletingId === item.cancellation_id ? "กำลังลบ..." : "ลบ"}
+                          </button>
+                        ) : (
+                          "-"
+                        )}
                       </td>
                     </tr>
                   ))

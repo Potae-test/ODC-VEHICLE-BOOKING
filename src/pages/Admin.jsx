@@ -79,6 +79,15 @@ function SummaryCard({ title, value, className = "" }) {
   );
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 const BOOKING_PER_PAGE = 5;
 
 export default function Admin() {
@@ -285,17 +294,78 @@ export default function Admin() {
       showError(err.message || "เพิ่มคนขับไม่สำเร็จ");
     }
   }
-  function editUser(u) {
-    setUserForm({
-      user_id: u.user_id,
-      name: u.name || "",
-      email: u.email || "",
-      password: "",
-      department: u.department || "",
-      phone: u.phone || "",
-      role: u.role || "USER",
-      status: u.status || "ACTIVE",
+  async function editUser(u) {
+    const result = await Swal.fire({
+      title: "แก้ไขผู้ใช้งาน",
+      html: `
+        <div class="swal-form">
+          <label>ชื่อผู้ใช้งาน</label>
+          <input id="user_name" class="swal2-input" value="${escapeHtml(u.name || "")}" placeholder="ชื่อ-นามสกุล">
+
+          <label>Email</label>
+          <input id="user_email" class="swal2-input" value="${escapeHtml(u.email || "")}" placeholder="email@domain.com">
+
+          <label>หน่วยงาน</label>
+          <input id="user_department" class="swal2-input" value="${escapeHtml(u.department || "")}">
+
+          <label>เบอร์โทร</label>
+          <input id="user_phone" class="swal2-input" value="${escapeHtml(u.phone || "")}" placeholder="08x-xxx-xxxx">
+
+          <label>Role</label>
+          <select id="user_role" class="swal2-select">
+            <option value="USER" ${normalizeRole(u.role) === "USER" ? "selected" : ""}>USER</option>
+            <option value="STAFF" ${normalizeRole(u.role) === "STAFF" ? "selected" : ""}>STAFF</option>
+            <option value="DRIVER" ${normalizeRole(u.role) === "DRIVER" ? "selected" : ""}>DRIVER</option>
+            <option value="ADMIN" ${normalizeRole(u.role) === "ADMIN" ? "selected" : ""}>ADMIN</option>
+          </select>
+
+          <label>สถานะ</label>
+          <select id="user_status" class="swal2-select">
+            <option value="ACTIVE" ${normalizeRole(u.status) === "ACTIVE" ? "selected" : ""}>ใช้งาน</option>
+            <option value="INACTIVE" ${normalizeRole(u.status) === "INACTIVE" ? "selected" : ""}>ปิดใช้งาน</option>
+          </select>
+        </div>
+      `,
+      width: 750,
+      showCancelButton: true,
+      confirmButtonText: "บันทึกการแก้ไข",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const name = document.getElementById("user_name").value.trim();
+        const email = document.getElementById("user_email").value.trim();
+        const department = document.getElementById("user_department").value.trim();
+        const phone = document.getElementById("user_phone").value.trim();
+        const role = document.getElementById("user_role").value;
+        const status = document.getElementById("user_status").value;
+
+        if (!name || !email) {
+          Swal.showValidationMessage("กรุณากรอกชื่อผู้ใช้งานและ Email");
+          return false;
+        }
+
+        return {
+          user_id: u.user_id,
+          name,
+          email,
+          department,
+          phone,
+          role,
+          status,
+        };
+      },
     });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await updateUser(result.value);
+      await showSuccess("แก้ไขผู้ใช้งานสำเร็จ");
+      await refreshUsers();
+    } catch (err) {
+      showError(err.message || "แก้ไขผู้ใช้งานไม่สำเร็จ");
+    }
   }
 async function handleOpenCreateUser() {
   const result = await Swal.fire({

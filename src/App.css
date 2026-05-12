@@ -1230,13 +1230,17 @@ label {
 }
 
 .danger-button {
-  
-  font-size: px;
+  background: #dc2626;
+  padding: 10px 16px;
   min-width: auto;
   width: auto;
-  height: auto;
+  min-height: 44px;
   border-radius: 10px;
-  
+  font-size: 24px;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
 }
 /* .booking-action-button {
   padding: 6px 12px !important;
@@ -1649,4 +1653,177 @@ label {
   padding: 8px 14px !important;
   font-size: 20px !important;
   min-height: auto !important;
+}
+.booking-overlap-warning{
+  display:none;
+  margin:6px 0 8px;
+  padding:8px 10px;
+  border:1px solid #f0d98c;
+  border-radius:6px;
+  background:#f86262;
+  color:#ffffff;
+  font-size: 20px;
+  line-height:1.4;
+  font-weight: bold;
+}
+
+.driver-jobs-page {
+  display: grid;
+  gap: 18px;
+}
+
+.driver-job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.driver-job-card {
+  background: #ffffff;
+  border: 1px solid #dbe6f3;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.driver-job-card.current {
+  border-color: #9bc6ff;
+  background: #f7fbff;
+}
+
+.driver-job-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.driver-job-head-copy {
+  min-width: 0;
+}
+
+.driver-job-card-head h3 {
+  margin: 0;
+  color: #073b8e;
+  font-size: 28px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-job-card-head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-job-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.driver-job-grid > div,
+.driver-job-note {
+  display: grid;
+  gap: 2px;
+}
+
+.driver-job-grid label,
+.driver-job-note label {
+  font-size: 18px;
+  color: #64748b;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.driver-job-grid b,
+.driver-job-note b {
+  color: #10233f;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-job-note {
+  grid-column: 1 / -1;
+}
+
+.driver-job-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.driver-job-actions button {
+  min-width: 0;
+  padding: 8px 12px;
+  min-height: 44px;
+  font-size: 20px;
+}
+
+.driver-job-detail-button {
+  background: #eaf2ff;
+  color: #073b8e;
+}
+
+.driver-job-detail-button:hover {
+  background: #d7e7ff;
+}
+
+.driver-empty {
+  background: #f8fbff;
+  border: 1px dashed #b8d2f5;
+  color: #64748b;
+  padding: 16px;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.driver-detail-modal {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.driver-detail-modal div {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eef3f8;
+}
+
+.driver-detail-modal span {
+  color: #64748b;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.driver-detail-modal b {
+  color: #10233f;
+  font-size: 24px;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+@media (max-width: 700px) {
+  .driver-job-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-job-card-head {
+    flex-direction: column;
+  }
+
+  .driver-job-actions button {
+    width: 100%;
+  }
 }

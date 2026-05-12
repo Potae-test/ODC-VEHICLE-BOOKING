@@ -163,6 +163,19 @@ export async function getBookingCancellationHistory() {
   });
 }
 
+export async function deleteBookingCancellationHistory(cancellation_id) {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings/cancellations/delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ cancellation_id }),
+  });
+
+  invalidateApiCache(["booking-cancellations"]);
+  return json.data;
+}
+
 export async function createBooking(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings`, {
     method: "POST",

@@ -49,6 +49,7 @@ function doPost(e) {
     if (action === "deleteUser") return deleteUser(body.data);
     if (action === "updateDriver") return updateDriver(body.data);
     if (action === "deleteDriver") return deleteDriver(body.data);
+    if (action === "deleteBookingCancellationHistory") return deleteBookingCancellationHistory(body.data);
   
     return jsonOutput({
       success: false,
@@ -626,6 +627,71 @@ function getBookingCancellations() {
     success: true,
     total: data.length,
     data: data
+  });
+}
+
+function deleteBookingCancellationHistory(data) {
+  const sheet = ensureCancellationHistorySheet();
+  const { headers, rows } = readSheetTable(sheet);
+
+  const cancellationIdCol = headers.indexOf("cancellation_id");
+
+  if (!data.cancellation_id) {
+    return jsonOutput({
+      success: false,
+      message: "cancellation_id is required"
+    });
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][cancellationIdCol]) === String(data.cancellation_id)) {
+      sheet.deleteRow(i + 2);
+
+      return jsonOutput({
+        success: true,
+        message: "Delete cancellation history success"
+      });
+    }
+  }
+
+  return jsonOutput({
+    success: false,
+    message: "Cancellation history not found"
+  });
+}
+
+// Attach this function to a monthly time-driven trigger in Apps Script.
+// It removes cancellation history rows older than one month while keeping the header row intact.
+function clearBookingCancellationHistoryMonthly() {
+  const sheet = ensureCancellationHistorySheet();
+  const { headers, rows } = readSheetTable(sheet);
+
+  const cancelledAtCol = headers.indexOf("cancelled_at");
+  const updatedAtCol = headers.indexOf("updated_at");
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 1);
+
+  let deletedCount = 0;
+
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    const rawDate = cancelledAtCol !== -1 ? row[cancelledAtCol] : row[updatedAtCol];
+    const rowDate = new Date(rawDate);
+
+    if (!rawDate || Number.isNaN(rowDate.getTime())) {
+      continue;
+    }
+
+    if (rowDate < cutoff) {
+      sheet.deleteRow(i + 2);
+      deletedCount += 1;
+    }
+  }
+
+  return jsonOutput({
+    success: true,
+    message: "Cancellation history cleanup completed",
+    deleted: deletedCount
   });
 }
 function loginUser(data) {

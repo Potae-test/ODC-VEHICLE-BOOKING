@@ -153,6 +153,20 @@ export default {
       const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookingCancellations`);
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/bookings/cancellations/delete" && request.method === "POST") {
+      const body = await request.json();
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "deleteBookingCancellationHistory",
+          data: body,
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/login" && request.method === "POST") {
       const body = await request.json();
 

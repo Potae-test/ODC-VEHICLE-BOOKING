@@ -345,9 +345,10 @@ export default function Booking() {
         <label>วันเวลาเริ่ม</label>
         <div
           id="booking_overlap_warning"
-          style="display:none;margin:6px 0 8px;padding:8px 10px;border:1px solid #f0d98c;border-radius:6px;background:#fff8db;color:#8a6d00;font-size:13px;line-height:1.4;"
+          class="booking-overlap-warning"
+  
         >
-          แจ้งเตือน: คุณมีรายการจองอื่นในช่วงวันเวลาใกล้เคียงกัน
+          แจ้งเตือน: คุณมีรายการจองอื่นในช่วงวันเวลาใกล้เคียงกัน !!
         </div>
         <input
           id="start_datetime"

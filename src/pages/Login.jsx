@@ -20,18 +20,17 @@ export default function Login({ onLogin }) {
       const user = await login(email, password);
 
       localStorage.setItem("odc_user", JSON.stringify(user));
-
       onLogin(user);
 
-      // Redirect ตามสิทธิ์
       if (user.role === "ADMIN") {
         window.location.href = "/admin";
       } else if (user.role === "STAFF") {
         window.location.href = "/staff";
+      } else if (user.role === "DRIVER") {
+        window.location.href = "/driver-jobs";
       } else {
         window.location.href = "/booking";
       }
-
     } catch (err) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
     } finally {
@@ -42,8 +41,8 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={handleLogin}>
-<h1>ระบบงานจองรถ</h1>
-<p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
+        <h1>ระบบงานจองรถ</h1>
+        <p>ศูนย์รับบริการจองรถและติดตามงานขับรถ</p>
 
         <label>Email</label>
         <input
@@ -61,7 +60,7 @@ export default function Login({ onLogin }) {
             placeholder="กรอกรหัสผ่าน"
           />
         </div>
-          <button disabled={loading}>
+        <button disabled={loading}>
           {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>
 

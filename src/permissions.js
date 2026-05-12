@@ -7,6 +7,7 @@ export const PERMISSION_ITEMS = [
   { id: "calendar", label: "ปฏิทิน", pages: ["calendar"] },
   { id: "booking-approval", label: "อนุมัติรายการจอง", pages: ["staff"] },
   { id: "driver-summary", label: "สรุปงานคนขับ", pages: ["driver-summary"] },
+  { id: "driver-jobs", label: "งานคนขับ", pages: ["driver-jobs"] },
   { id: "user-management", label: "จัดการผู้ใช้งาน", pages: ["admin"] },
   { id: "driver-management", label: "จัดการคนขับ", pages: ["admin"] },
   { id: "vehicle-management", label: "จัดการรถ", pages: ["cars"] },
@@ -21,11 +22,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "calendar",
     "booking-approval",
     "driver-summary",
+    "driver-jobs",
     "vehicle-management",
     "booking-cancellation-history",
   ],
   USER: ["booking-list", "calendar", "vehicle-management"],
-  DRIVER: ["driver-summary"],
+  DRIVER: ["driver-summary", "driver-jobs"],
 };
 
 export const ACTION_PERMISSION_GROUPS = [
@@ -77,6 +79,15 @@ export const ACTION_PERMISSION_GROUPS = [
     permissions: [{ id: "driver_summary_view", label: "ดูสรุปงานคนขับ" }],
   },
   {
+    id: "driver_jobs",
+    label: "งานคนขับ",
+    permissions: [
+      { id: "driver_jobs_view", label: "ดูงานคนขับ" },
+      { id: "driver_jobs_start", label: "รับงาน / ออกรถ" },
+      { id: "driver_jobs_complete", label: "จบงาน / คืนรถ" },
+    ],
+  },
+  {
     id: "settings",
     label: "ตั้งค่า",
     permissions: [{ id: "settings_manage", label: "จัดการตั้งค่า" }],
@@ -97,9 +108,19 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "drivers_view",
     "vehicles_view",
     "driver_summary_view",
+    "driver_jobs_view",
+    "driver_jobs_start",
+    "driver_jobs_complete",
   ],
   USER: ["bookings_view", "bookings_create", "vehicles_view"],
-  DRIVER: ["bookings_view", "bookings_edit", "driver_summary_view"],
+  DRIVER: [
+    "bookings_view",
+    "bookings_edit",
+    "driver_summary_view",
+    "driver_jobs_view",
+    "driver_jobs_start",
+    "driver_jobs_complete",
+  ],
 };
 
 const PAGE_ACTION_REQUIREMENTS = {
@@ -109,6 +130,7 @@ const PAGE_ACTION_REQUIREMENTS = {
   staff: ["bookings_view", "bookings_approve"],
   calendar: ["bookings_view"],
   "driver-summary": ["driver_summary_view"],
+  "driver-jobs": ["driver_jobs_view"],
   admin: ["settings_manage", "users_view", "drivers_view", "vehicles_view"],
 };
 
@@ -245,8 +267,9 @@ export function getFirstAllowedPage(role, config = loadPermissionConfig()) {
   const preferredOrder = [
     "cars",
     "booking",
-    "booking-cancellation-history",
     "staff",
+    "booking-cancellation-history",
+    "driver-jobs",
     "calendar",
     "driver-summary",
     "admin",

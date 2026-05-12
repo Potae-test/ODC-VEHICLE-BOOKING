@@ -13,11 +13,13 @@ const BookingCancellationHistory = lazy(() => import("./pages/BookingCancellatio
 const Staff = lazy(() => import("./pages/Staff"));
 const CalendarPage = lazy(() => import("./pages/Calendar"));
 const DriverSummary = lazy(() => import("./pages/DriverSummary"));
+const DriverJobs = lazy(() => import("./pages/DriverJobs"));
 const Admin = lazy(() => import("./pages/Admin"));
 
 function getDefaultPageByRole(role) {
   if (role === "ADMIN") return "admin";
   if (role === "STAFF") return "staff";
+  if (role === "DRIVER") return "driver-jobs";
   return "booking";
 }
 
@@ -94,7 +96,7 @@ export default function App() {
           <div className="brand-logo">🚐</div>
           <div>
             <h1>ระบบงานจองรถ</h1>
-            <p>ศูนย์รับบริการประชาชน เครือข่ายภาครัฐไทย</p>
+            <p>ศูนย์รับบริการจองรถและติดตามงานขับรถ</p>
           </div>
         </div>
 
@@ -126,7 +128,7 @@ export default function App() {
 
           {canAccessPage(user.role, "booking-cancellation-history", permissionConfig) && (
             <button
-              className={page === "booking-cancellation-history" ? "active" : ""}
+              className={page === "booking-cancellation-history" ? "active" : ""} 
               onClick={() => goPage("booking-cancellation-history")}
             >
               📚 ประวัติการยกเลิก
@@ -151,6 +153,12 @@ export default function App() {
             </button>
           )}
 
+          {canAccessPage(user.role, "driver-jobs", permissionConfig) && (
+            <button className={page === "driver-jobs" ? "active" : ""} onClick={() => goPage("driver-jobs")}>
+              🚚 งานคนขับ
+            </button>
+          )}
+
           {canAccessPage(user.role, "admin", permissionConfig) && (
             <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
               🛠 Admin
@@ -166,13 +174,14 @@ export default function App() {
 
         <main className="main-content">
           <Suspense fallback={<p>กำลังโหลดหน้า...</p>}>
-            {!hasPageAccess && <div className="form-card">ไม่มีสิทธิ์เข้าถึง</div>}
+            {!hasPageAccess && <div className="form-card">คุณไม่มีสิทธิ์เข้าถึง</div>}
             {hasPageAccess && page === "cars" && <Cars />}
             {hasPageAccess && page === "booking" && <Booking />}
             {hasPageAccess && page === "booking-cancellation-history" && <BookingCancellationHistory />}
             {hasPageAccess && page === "staff" && <Staff />}
             {hasPageAccess && page === "calendar" && <CalendarPage />}
             {hasPageAccess && page === "driver-summary" && <DriverSummary />}
+            {hasPageAccess && page === "driver-jobs" && <DriverJobs />}
             {hasPageAccess && page === "admin" && <Admin />}
           </Suspense>
         </main>
