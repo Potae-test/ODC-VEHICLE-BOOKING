@@ -214,10 +214,7 @@ export default function DriverJobs() {
       return active.filter((booking) => matchesCurrentDriver(booking, currentIdentity));
     }
 
-    return active.filter((booking) => {
-      const identity = getBookingIdentity(booking);
-      return Boolean(identity.driver_id || identity.driver_name);
-    });
+    return active;
   }, [bookings, currentIdentity, currentRole]);
 
   const currentJobs = useMemo(

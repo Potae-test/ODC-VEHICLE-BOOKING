@@ -1,4 +1,4 @@
-import { formatThaiDateTime } from "../utils/date";
+﻿import { formatThaiDateTime } from "../utils/date";
 import { useEffect, useMemo, useState } from "react";
 import {
   createVehicle,
@@ -86,6 +86,19 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function renderDriverOptions(drivers, selectedDriverId = "") {
+  return drivers
+    .map((driver) => {
+      const driverId = String(driver.driver_id || "").trim();
+      const name = String(driver.name || "").trim();
+
+      if (!driverId && !name) return "";
+
+      return `<option value="${escapeHtml(driverId)}" ${driverId === selectedDriverId ? "selected" : ""}>${escapeHtml(driverId)} - ${escapeHtml(name)}</option>`;
+    })
+    .join("");
 }
 
 const BOOKING_PER_PAGE = 5;
@@ -295,6 +308,7 @@ export default function Admin() {
     }
   }
   async function editUser(u) {
+    const selectedDriverId = String(u.driver_id || "").trim();
     const result = await Swal.fire({
       title: "แก้ไขผู้ใช้งาน",
       html: `
@@ -319,6 +333,14 @@ export default function Admin() {
             <option value="ADMIN" ${normalizeRole(u.role) === "ADMIN" ? "selected" : ""}>ADMIN</option>
           </select>
 
+          <div id="user_driver_wrap" style="display:${normalizeRole(u.role) === "DRIVER" ? "block" : "none"}">
+            <label>รหัสคนขับ</label>
+            <select id="user_driver_id" class="swal2-select">
+              <option value="">-- เลือกรหัสคนขับ --</option>
+              ${renderDriverOptions(drivers, selectedDriverId)}
+            </select>
+          </div>
+
           <label>สถานะ</label>
           <select id="user_status" class="swal2-select">
             <option value="ACTIVE" ${normalizeRole(u.status) === "ACTIVE" ? "selected" : ""}>ใช้งาน</option>
@@ -332,16 +354,38 @@ export default function Admin() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      didOpen: () => {
+        const roleSelect = document.getElementById("user_role");
+        const driverWrap = document.getElementById("user_driver_wrap");
+        const driverSelect = document.getElementById("user_driver_id");
+
+        const syncDriverField = () => {
+          const isDriver = roleSelect.value === "DRIVER";
+          driverWrap.style.display = isDriver ? "block" : "none";
+          if (!isDriver && driverSelect) {
+            driverSelect.value = "";
+          }
+        };
+
+        roleSelect.addEventListener("change", syncDriverField);
+        syncDriverField();
+      },
       preConfirm: () => {
         const name = document.getElementById("user_name").value.trim();
         const email = document.getElementById("user_email").value.trim();
         const department = document.getElementById("user_department").value.trim();
         const phone = document.getElementById("user_phone").value.trim();
         const role = document.getElementById("user_role").value;
+        const driver_id = document.getElementById("user_driver_id").value;
         const status = document.getElementById("user_status").value;
 
         if (!name || !email) {
           Swal.showValidationMessage("กรุณากรอกชื่อผู้ใช้งานและ Email");
+          return false;
+        }
+
+        if (role === "DRIVER" && !driver_id) {
+          Swal.showValidationMessage("กรุณาเลือกรหัสคนขับ");
           return false;
         }
 
@@ -352,6 +396,7 @@ export default function Admin() {
           department,
           phone,
           role,
+          driver_id: role === "DRIVER" ? driver_id : "",
           status,
         };
       },
@@ -391,8 +436,17 @@ async function handleOpenCreateUser() {
         <select id="user_role" class="swal2-select">
           <option value="USER">USER</option>
           <option value="STAFF">STAFF</option>
+          <option value="DRIVER">DRIVER</option>
           <option value="ADMIN">ADMIN</option>
         </select>
+
+        <div id="user_driver_wrap" style="display:none">
+          <label>รหัสคนขับ</label>
+          <select id="user_driver_id" class="swal2-select">
+            <option value="">-- เลือกรหัสคนขับ --</option>
+            ${renderDriverOptions(drivers)}
+          </select>
+        </div>
 
         <label>สถานะ</label>
         <select id="user_status" class="swal2-select">
@@ -407,6 +461,22 @@ async function handleOpenCreateUser() {
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    didOpen: () => {
+      const roleSelect = document.getElementById("user_role");
+      const driverWrap = document.getElementById("user_driver_wrap");
+      const driverSelect = document.getElementById("user_driver_id");
+
+      const syncDriverField = () => {
+        const isDriver = roleSelect.value === "DRIVER";
+        driverWrap.style.display = isDriver ? "block" : "none";
+        if (!isDriver && driverSelect) {
+          driverSelect.value = "";
+        }
+      };
+
+      roleSelect.addEventListener("change", syncDriverField);
+      syncDriverField();
+    },
     preConfirm: () => {
       const name = document.getElementById("user_name").value.trim();
       const email = document.getElementById("user_email").value.trim();
@@ -414,10 +484,16 @@ async function handleOpenCreateUser() {
       const department = document.getElementById("user_department").value.trim();
       const phone = document.getElementById("user_phone").value.trim();
       const role = document.getElementById("user_role").value;
+      const driver_id = document.getElementById("user_driver_id").value;
       const status = document.getElementById("user_status").value;
 
       if (!name || !email || !password) {
         Swal.showValidationMessage("กรุณากรอกชื่อ Email และ Password");
+        return false;
+      }
+
+      if (role === "DRIVER" && !driver_id) {
+        Swal.showValidationMessage("กรุณาเลือกรหัสคนขับ");
         return false;
       }
 
@@ -428,6 +504,7 @@ async function handleOpenCreateUser() {
         department,
         phone,
         role,
+        driver_id: role === "DRIVER" ? driver_id : "",
         status,
       };
     },
@@ -1218,6 +1295,8 @@ async function handleDeleteVehicle(vehicle) {
                 <th>ชื่อ</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>driver_id</th>
+                <th>ชื่อคนขับ</th>
                 <th>สถานะ</th>
                 <th>จัดการ</th>
               </tr>
@@ -1233,6 +1312,12 @@ async function handleDeleteVehicle(vehicle) {
                 <td>{u.name}</td>
                 <td>{u.email}</td>
                 <td>{u.role}</td>
+                <td>{String(u.driver_id || "").trim() ? (u.driver_id || "-") : "-"}</td>
+                <td>
+                  {String(u.driver_id || "").trim()
+                    ? (u.driver_name || drivers.find((d) => String(d.driver_id || "").trim() === String(u.driver_id || "").trim())?.name || "-")
+                    : "-"}
+                </td>
                 <td>{u.status}</td>
                 <td className="action-buttons">
                   {canEditUsers && (

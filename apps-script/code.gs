@@ -248,6 +248,7 @@ function updateBooking(data) {
     "destination",
     "purpose",
     "vehicle_type_request",
+    "driver_id",
   ];
   const updatedAtCol = headers.indexOf("updated_at");
 
@@ -257,7 +258,7 @@ function updateBooking(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][bookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       editableFields.forEach((field) => {
         const col = headers.indexOf(field);
@@ -316,7 +317,7 @@ function approveBooking(data) {
 
   for (let i = 1; i < values.length; i++) {
     if (values[i][bookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       const currentBooking = {
         booking_id: data.booking_id,
@@ -380,7 +381,7 @@ function startTrip(data) {
 
   for (let i = 1; i < values.length; i++) {
     if (values[i][bookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
       const now = new Date();
 
       bookingSheet.getRange(row, statusCol + 1).setValue("IN_USE");
@@ -443,7 +444,7 @@ function completeTrip(data) {
 
   for (let i = 1; i < bookingValues.length; i++) {
     if (bookingValues[i][bookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
       bookingSheet.getRange(row, statusCol + 1).setValue("COMPLETED");
       bookingSheet.getRange(row, updatedAtCol + 1).setValue(new Date());
       break;
@@ -452,7 +453,7 @@ function completeTrip(data) {
 
   for (let i = logValues.length - 1; i >= 1; i--) {
     if (logValues[i][logBookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
       const now = new Date();
 
       logSheet.getRange(row, inTimeCol + 1).setValue(data.in_time || now);
@@ -507,7 +508,7 @@ function cancelBooking(data) {
 
   for (let i = 1; i < values.length; i++) {
     if (values[i][bookingIdCol] === data.booking_id) {
-      const row = i + 1;
+      const row = i + 2;
       const now = new Date();
       const reason = String(data.reason || "").trim();
       const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
@@ -621,7 +622,10 @@ function getBookingCancellations() {
     });
   }
 
-  const data = rowsToObjects(headers, rows);
+  const data = rowsToObjects(headers, rows).map((obj) => ({
+    ...obj,
+    driver_id: obj.driver_id || ""
+  }));
 
   return jsonOutput({
     success: true,
@@ -698,6 +702,9 @@ function loginUser(data) {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName("Users");
+  const driverSheet = SpreadsheetApp
+    .getActiveSpreadsheet()
+    .getSheetByName("Drivers");
 
   const { headers, rows } = readSheetTable(sheet);
 
@@ -732,6 +739,20 @@ function loginUser(data) {
   headers.forEach((header, index) => {
     obj[header] = user[index];
   });
+
+  obj.driver_id = obj.driver_id || "";
+  obj.driver_name = obj.driver_name || "";
+
+  if (obj.driver_id) {
+    const { headers: driverHeaders, rows: driverRows } = readSheetTable(driverSheet);
+    const driverIdCol = driverHeaders.indexOf("driver_id");
+    const driverNameCol = driverHeaders.indexOf("name");
+
+    const matchedDriver = driverRows.find((row) => row[driverIdCol] === obj.driver_id);
+    if (matchedDriver && driverNameCol !== -1) {
+      obj.driver_name = matchedDriver[driverNameCol] || "";
+    }
+  }
 
   return jsonOutput({
     success: true,
@@ -861,7 +882,7 @@ function updateDriverStatus(data) {
 
   for (let i = 1; i < values.length; i++) {
     if (values[i][driverIdCol] === data.driver_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       sheet.getRange(row, statusCol + 1).setValue(data.status);
       sheet.getRange(row, remarkCol + 1).setValue(data.remark || "");
@@ -881,14 +902,24 @@ function updateDriverStatus(data) {
 }
 function getUsers() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  const driverSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Drivers");
   const { headers, rows } = readSheetTable(sheet);
+  const { headers: driverHeaders, rows: driverRows } = readSheetTable(driverSheet);
 
   if (rows.length === 0) {
     return jsonOutput({ success: true, total: 0, data: [] });
   }
 
+  const driverIdCol = driverHeaders.indexOf("driver_id");
+  const driverNameCol = driverHeaders.indexOf("name");
+
   const data = rowsToObjects(headers, rows).map((obj) => ({
     ...obj,
+    driver_id: obj.driver_id || "",
+    driver_name:
+      obj.driver_id && driverIdCol !== -1 && driverNameCol !== -1
+        ? (driverRows.find((row) => row[driverIdCol] === obj.driver_id)?.[driverNameCol] || "")
+        : (obj.driver_name || ""),
     password: "********",
   }));
 
@@ -897,21 +928,27 @@ function getUsers() {
 
 function createUser(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  const { headers } = readSheetTable(sheet);
+  ensureColumn(sheet, headers, "driver_id");
   const now = new Date();
   const userId = "U" + Utilities.formatString("%03d", sheet.getLastRow());
 
-  sheet.appendRow([
-    userId,
-    data.name || "",
-    data.email || "",
-    data.password || "1234",
-    data.department || "",
-    data.phone || "",
-    data.role || "USER",
-    data.status || "ACTIVE",
-    now,
-    now
-  ]);
+  const row = headers.map((header) => {
+    if (header === "user_id") return userId;
+    if (header === "name") return data.name || "";
+    if (header === "email") return data.email || "";
+    if (header === "password") return data.password || "1234";
+    if (header === "department") return data.department || "";
+    if (header === "phone") return data.phone || "";
+    if (header === "role") return data.role || "USER";
+    if (header === "status") return data.status || "ACTIVE";
+    if (header === "driver_id") return data.driver_id || "";
+    if (header === "created_at") return now;
+    if (header === "updated_at") return now;
+    return "";
+  });
+
+  sheet.appendRow(row);
 
   return jsonOutput({
     success: true,
@@ -931,17 +968,19 @@ function updateUser(data) {
   const phoneCol = headers.indexOf("phone");
   const roleCol = headers.indexOf("role");
   const statusCol = headers.indexOf("status");
+  const driverIdCol = ensureColumn(sheet, headers, "driver_id");
   const updatedAtCol = headers.indexOf("updated_at");
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       sheet.getRange(row, nameCol + 1).setValue(data.name || "");
       sheet.getRange(row, emailCol + 1).setValue(data.email || "");
       sheet.getRange(row, departmentCol + 1).setValue(data.department || "");
       sheet.getRange(row, phoneCol + 1).setValue(data.phone || "");
       sheet.getRange(row, roleCol + 1).setValue(data.role || "USER");
+      sheet.getRange(row, driverIdCol + 1).setValue(data.role === "DRIVER" ? (data.driver_id || "") : "");
       sheet.getRange(row, statusCol + 1).setValue(data.status || "ACTIVE");
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
 
@@ -962,7 +1001,7 @@ function resetUserPassword(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       sheet.getRange(row, passwordCol + 1).setValue(data.password || "1234");
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
@@ -981,7 +1020,7 @@ function updateVehicle(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][vehicleIdCol] === data.vehicle_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       headers.forEach((header, index) => {
         if (data[header] !== undefined && header !== "vehicle_id") {
@@ -1014,7 +1053,7 @@ function deleteVehicle(data) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][vehicleIdCol] === data.vehicle_id) {
 
-      sheet.deleteRow(i + 1);
+      sheet.deleteRow(i + 2);
 
       return jsonOutput({
         success: true,
@@ -1038,7 +1077,7 @@ function disableUser(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
-      sheet.getRange(i + 1, statusCol + 1).setValue("INACTIVE");
+      sheet.getRange(i + 2, statusCol + 1).setValue("INACTIVE");
 
       return jsonOutput({
         success: true,
@@ -1061,7 +1100,7 @@ function deleteUser(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
-      sheet.deleteRow(i + 1);
+      sheet.deleteRow(i + 2);
 
       return jsonOutput({
         success: true,
@@ -1082,7 +1121,7 @@ function updateDriver(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][driverIdCol] === data.driver_id) {
-      const row = i + 1;
+      const row = i + 2;
 
       headers.forEach((header, index) => {
         if (data[header] !== undefined && header !== "driver_id") {
@@ -1111,7 +1150,7 @@ function deleteDriver(data) {
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][driverIdCol] === data.driver_id) {
-      sheet.deleteRow(i + 1);
+      sheet.deleteRow(i + 2);
 
       return jsonOutput({
         success: true,

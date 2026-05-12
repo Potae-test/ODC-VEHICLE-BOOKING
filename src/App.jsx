@@ -33,8 +33,17 @@ export default function App() {
 
     if (saved) {
       const savedUser = JSON.parse(saved);
-      setUser(savedUser);
-      setPage(getDefaultPageByRole(savedUser.role));
+      const normalizedUser = {
+        ...savedUser,
+        driver_id: savedUser?.driver_id || "",
+      };
+
+      if (normalizedUser.driver_id !== savedUser?.driver_id) {
+        localStorage.setItem("odc_user", JSON.stringify(normalizedUser));
+      }
+
+      setUser(normalizedUser);
+      setPage(getDefaultPageByRole(normalizedUser.role));
     }
   }, []);
 

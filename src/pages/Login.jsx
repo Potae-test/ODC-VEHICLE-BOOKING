@@ -18,15 +18,19 @@ export default function Login({ onLogin }) {
       setLoading(true);
 
       const user = await login(email, password);
+      const sessionUser = {
+        ...user,
+        driver_id: user?.driver_id || "",
+      };
 
-      localStorage.setItem("odc_user", JSON.stringify(user));
-      onLogin(user);
+      localStorage.setItem("odc_user", JSON.stringify(sessionUser));
+      onLogin(sessionUser);
 
-      if (user.role === "ADMIN") {
+      if (sessionUser.role === "ADMIN") {
         window.location.href = "/admin";
-      } else if (user.role === "STAFF") {
+      } else if (sessionUser.role === "STAFF") {
         window.location.href = "/staff";
-      } else if (user.role === "DRIVER") {
+      } else if (sessionUser.role === "DRIVER") {
         window.location.href = "/driver-jobs";
       } else {
         window.location.href = "/booking";
