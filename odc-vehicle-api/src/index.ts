@@ -135,6 +135,20 @@ export default {
 
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/bookings/driver-cancel-job" && request.method === "POST") {
+      const body = await request.json();
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "driverCancelJob",
+          data: body,
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/bookings/cancel" && request.method === "POST") {
       const body = await request.json();
 

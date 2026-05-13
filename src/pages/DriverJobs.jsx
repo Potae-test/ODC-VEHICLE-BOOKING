@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
-import { completeTrip, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
+import { completeTrip, driverCancelJob, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
-import { showError, showInput, showSuccess } from "../utils/alert";
+import { showError, showSuccess } from "../utils/alert";
 
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
@@ -28,19 +28,45 @@ function isToday(value) {
   return getDateKey(value) === today;
 }
 
-function isFuture(value) {
-  const key = getDateKey(value);
-  if (!key) return false;
-  const today = new Date().toISOString().slice(0, 10);
-  return key > today;
-}
-
 function sortByStart(items) {
   return [...items].sort((a, b) => {
     const timeA = new Date(a.start_datetime || a.created_at || 0).getTime();
     const timeB = new Date(b.start_datetime || b.created_at || 0).getTime();
     return timeA - timeB;
   });
+}
+
+function sortByTodayPriority(items) {
+  return [...items].sort((a, b) => {
+    const createdA = new Date(a.created_at || 0).getTime();
+    const createdB = new Date(b.created_at || 0).getTime();
+    if (createdA !== createdB) return createdA - createdB;
+
+    const bookingNoA = String(a.booking_no || "").trim();
+    const bookingNoB = String(b.booking_no || "").trim();
+    if (bookingNoA !== bookingNoB) return bookingNoA.localeCompare(bookingNoB, "th", { numeric: true });
+
+    const startA = new Date(a.start_datetime || 0).getTime();
+    const startB = new Date(b.start_datetime || 0).getTime();
+    if (startA !== startB) return startA - startB;
+
+    return 0;
+  });
+}
+
+function matchesWaitingSearch(booking, searchText) {
+  const query = String(searchText || "").trim().toLocaleLowerCase("th");
+  if (!query) return true;
+
+  const fields = [
+    booking.requester_name,
+    booking.start_datetime,
+    formatThaiDateTime(booking.start_datetime),
+    booking.destination,
+    booking.purpose,
+  ];
+
+  return fields.some((field) => String(field || "").toLocaleLowerCase("th").includes(query));
 }
 
 function compactText(value) {
@@ -83,13 +109,26 @@ function matchesCurrentUser(booking, currentUser) {
   return Boolean(currentUserName) && bookingIdentity.driver_name === currentUserName;
 }
 
+function getStatusLabel(status) {
+  const normalized = normalizeStatus(status);
+
+  if (normalized === "PENDING") return "รออนุมัติ";
+  if (normalized === "APPROVED") return "อนุมัติแล้ว";
+  if (normalized === "IN_USE") return "กำลังใช้งาน";
+  if (normalized === "COMPLETED") return "เสร็จสิ้น";
+  if (normalized === "CANCELLED") return "ยกเลิก";
+  return normalized || "-";
+}
+
 function getStatusMeta(status) {
   const normalized = normalizeStatus(status);
 
-  if (normalized === "IN_USE") return { label: "กำลังใช้งาน", className: "green" };
-  if (normalized === "APPROVED") return { label: "รับงานได้", className: "blue" };
-  if (normalized === "COMPLETED") return { label: "เสร็จสิ้น", className: "gray" };
-  return { label: normalized || "-", className: "gray" };
+  if (normalized === "IN_USE") return { label: getStatusLabel(status), className: "green" };
+  if (normalized === "APPROVED") return { label: getStatusLabel(status), className: "blue" };
+  if (normalized === "COMPLETED") return { label: getStatusLabel(status), className: "gray" };
+  if (normalized === "PENDING") return { label: getStatusLabel(status), className: "amber" };
+  if (normalized === "CANCELLED") return { label: getStatusLabel(status), className: "red" };
+  return { label: getStatusLabel(status), className: "gray" };
 }
 
 function JobCard({
@@ -97,6 +136,7 @@ function JobCard({
   vehicleMap,
   onStart,
   onComplete,
+  onCancelJob,
   onShowDetails,
   canStart,
   canComplete,
@@ -108,8 +148,8 @@ function JobCard({
     <div className={`driver-job-card ${current ? "current" : ""}`}>
       <div className="driver-job-card-head">
         <div className="driver-job-head-copy">
-          <h3 title={booking.booking_no || "-"}>{booking.booking_no || "-"}</h3>
-          <p title={booking.destination || "-"}>{compactText(booking.destination)}</p>
+          {/* <h3 title={booking.booking_no || "-"}>{booking.booking_no || "-"}</h3> */}
+          <h3 title={booking.destination || "-"}>{compactText(booking.destination)}</h3>
         </div>
         <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
       </div>
@@ -129,7 +169,7 @@ function JobCard({
         </div>
         <div>
           <label>สถานะ</label>
-          <b title={compactText(booking.status)}>{compactText(booking.status)}</b>
+          <b title={getStatusLabel(booking.status)}>{getStatusLabel(booking.status)}</b>
         </div>
       </div>
 
@@ -137,6 +177,12 @@ function JobCard({
         <button type="button" className="driver-job-detail-button" onClick={() => onShowDetails(booking)}>
           ดูรายละเอียด
         </button>
+
+        {normalizeStatus(booking.status) === "APPROVED" && onCancelJob && (
+          <button type="button" className="warning-button" onClick={() => onCancelJob(booking)}>
+            ยกเลิกงาน
+          </button>
+        )}
 
         {canStart && normalizeStatus(booking.status) === "APPROVED" && (
           <button type="button" onClick={() => onStart(booking)}>
@@ -159,6 +205,7 @@ export default function DriverJobs() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [waitingSearch, setWaitingSearch] = useState("");
 
   const currentUser = useMemo(() => getCurrentUser(), []);
   const currentRole = normalizeRole(currentUser?.role);
@@ -220,7 +267,7 @@ export default function DriverJobs() {
 
   const todayJobs = useMemo(
     () =>
-      sortByStart(
+      sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
           return isToday(booking.start_datetime) && status === "APPROVED";
@@ -229,26 +276,34 @@ export default function DriverJobs() {
     [assignedBookings]
   );
 
-  const upcomingJobs = useMemo(
-    () =>
-      sortByStart(
-        assignedBookings.filter((booking) => {
-          const status = normalizeStatus(booking.status);
-          return isFuture(booking.start_datetime) && status === "APPROVED";
-        })
-      ),
+  const waitingJobs = useMemo(
+    () => sortByTodayPriority(assignedBookings.filter((booking) => normalizeStatus(booking.status) === "APPROVED")),
     [assignedBookings]
   );
 
+  const filteredWaitingJobs = useMemo(
+    () => waitingJobs.filter((booking) => matchesWaitingSearch(booking, waitingSearch)),
+    [waitingJobs, waitingSearch]
+  );
+
   async function handleStart(booking) {
-    const outMileage = await showInput("ออกรถ", "เลขไมล์ตอนออกรถ", "เช่น 125000");
-    if (!outMileage) return;
+    const result = await Swal.fire({
+      title: "รับงาน / ออกรถ",
+      text: "ยืนยันการรับงานและออกรถใช่หรือไม่",
+      showCancelButton: true,
+      confirmButtonText: "ตกลง",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
       const response = await startTrip({
         booking_id: booking.booking_id,
         out_time: new Date().toISOString(),
-        out_mileage: String(outMileage).trim(),
+        out_mileage: "",
         assigned_user_id: currentUser?.user_id || "",
         assigned_user_name: currentUser?.name || "",
       });
@@ -270,31 +325,12 @@ export default function DriverJobs() {
   async function handleComplete(booking) {
     const result = await Swal.fire({
       title: "จบงาน / คืนรถ",
-      html: `
-        <div class="swal-form">
-          <label>เลขไมล์ตอนเข้ารถ</label>
-          <input id="in_mileage" class="swal2-input" placeholder="เช่น 125500">
-          <label>หมายเหตุ</label>
-          <textarea id="remark" class="swal2-textarea" rows="4" placeholder="ระบุหมายเหตุ"></textarea>
-        </div>
-      `,
-      width: 700,
       showCancelButton: true,
-      confirmButtonText: "ยืนยัน",
+      confirmButtonText: "ตกลง",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
-      preConfirm: () => {
-        const inMileage = document.getElementById("in_mileage").value.trim();
-        const remark = document.getElementById("remark").value.trim();
-
-        if (!inMileage) {
-          Swal.showValidationMessage("กรุณากรอกเลขไมล์ตอนเข้ารถ");
-          return false;
-        }
-
-        return { in_mileage: inMileage, remark };
-      },
+      text: "ยืนยันการจบงานและคืนรถใช่หรือไม่",
     });
 
     if (!result.isConfirmed) return;
@@ -303,8 +339,8 @@ export default function DriverJobs() {
       await completeTrip({
         booking_id: booking.booking_id,
         in_time: new Date().toISOString(),
-        in_mileage: result.value.in_mileage,
-        remark: result.value.remark,
+        in_mileage: "",
+        remark: "",
         assigned_user_id: currentUser?.user_id || "",
         assigned_user_name: currentUser?.name || "",
       });
@@ -313,6 +349,36 @@ export default function DriverJobs() {
       await loadData();
     } catch (err) {
       showError(err.message || "จบงานไม่สำเร็จ");
+    }
+  }
+
+  async function handleCancelJob(booking) {
+    const result = await Swal.fire({
+      title: "ยกเลิกงาน",
+      text: "ยืนยันการยกเลิกงานนี้ใช่หรือไม่",
+      showCancelButton: true,
+      confirmButtonText: "ตกลง",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: "#64748b",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const response = await driverCancelJob({
+        booking_id: booking.booking_id,
+      });
+
+      if (!response?.success) {
+        showError(response?.message || "ยกเลิกงานไม่สำเร็จ");
+        return;
+      }
+
+      await showSuccess("ยกเลิกงานสำเร็จ");
+      await loadData({ freshBookings: true });
+    } catch (err) {
+      showError(err.message || "ยกเลิกงานไม่สำเร็จ");
     }
   }
 
@@ -334,7 +400,7 @@ export default function DriverJobs() {
           <div><span>ปลายทาง</span><b>${compactText(booking.destination)}</b></div>
           <div><span>เหตุผล</span><b>${compactText(booking.purpose)}</b></div>
           <div><span>รถ / ป้ายทะเบียน</span><b>${compactText(vehicleLabel)}</b></div>
-          <div><span>สถานะ</span><b>${compactText(booking.status)}</b></div>
+          <div><span>สถานะ</span><b>${compactText(getStatusLabel(booking.status))}</b></div>
           <div><span>หมายเหตุเจ้าหน้าที่</span><b>${compactText(booking.staff_note)}</b></div>
         </div>
       `,
@@ -380,6 +446,7 @@ export default function DriverJobs() {
                     vehicleMap={vehicleMap}
                     onStart={handleStart}
                     onComplete={handleComplete}
+                    onCancelJob={handleCancelJob}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
@@ -407,6 +474,7 @@ export default function DriverJobs() {
                     vehicleMap={vehicleMap}
                     onStart={handleStart}
                     onComplete={handleComplete}
+                    onCancelJob={handleCancelJob}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
@@ -418,21 +486,32 @@ export default function DriverJobs() {
 
           <div className="form-card">
             <div className="section-header">
-              <h3>งานถัดไป</h3>
-              <span className="section-counter">{upcomingJobs.length} งาน</span>
+              <h3>งานที่รออยู่ทั้งหมด</h3>
+              <span className="section-counter">{filteredWaitingJobs.length} / {waitingJobs.length} งาน</span>
             </div>
 
-            {upcomingJobs.length === 0 ? (
-              <div className="driver-empty">ไม่มีงานถัดไป</div>
+            <div className="driver-job-search">
+              <input
+                type="search"
+                value={waitingSearch}
+                onChange={(event) => setWaitingSearch(event.target.value)}
+                placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
+                aria-label="ค้นหางานที่รออยู่ทั้งหมด"
+              />
+            </div>
+
+            {filteredWaitingJobs.length === 0 ? (
+              <div className="driver-empty">ไม่มีงานที่รออยู่ตามเงื่อนไขนี้</div>
             ) : (
               <div className="driver-job-list">
-                {upcomingJobs.map((booking) => (
+                {filteredWaitingJobs.map((booking) => (
                   <JobCard
                     key={booking.booking_id}
                     booking={booking}
                     vehicleMap={vehicleMap}
                     onStart={handleStart}
                     onComplete={handleComplete}
+                    onCancelJob={handleCancelJob}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
@@ -441,6 +520,7 @@ export default function DriverJobs() {
               </div>
             )}
           </div>
+
         </>
       )}
     </div>

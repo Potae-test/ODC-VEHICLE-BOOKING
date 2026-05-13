@@ -172,6 +172,19 @@ function getOverlapBookings(bookings, currentBookingId, startDatetime, endDateti
   });
 }
 
+function getBookingVehicleLabel(booking, vehicleMap) {
+  const vehicleId = String(booking.vehicle_id || "").trim();
+  if (!vehicleId) return "-";
+
+  const vehicle = vehicleMap.get(vehicleId);
+  const plate = vehicle?.license_plate || vehicle?.plate_no || "";
+  return plate ? `${vehicleId} / ${plate}` : vehicleId;
+}
+
+function getBookingDriverLabel(booking) {
+  return booking.assigned_user_name || booking.driver_name || "-";
+}
+
 function paginate(items, page) {
   const start = (page - 1) * ROWS_PER_PAGE;
   return items.slice(start, start + ROWS_PER_PAGE);
@@ -270,6 +283,14 @@ export default function Booking() {
     () => [...new Set(vehicles.map((vehicle) => vehicle.vehicle_type).filter(Boolean))],
     [vehicles]
   );
+
+  const vehicleMap = useMemo(() => {
+    const map = new Map();
+    vehicles.forEach((vehicle) => {
+      map.set(String(vehicle.vehicle_id || "").trim(), vehicle);
+    });
+    return map;
+  }, [vehicles]);
 
   const filteredBookings = useMemo(() => {
     const requester = filters.requester.trim().toLowerCase();
@@ -740,14 +761,17 @@ export default function Booking() {
                       <th>เริ่ม</th>
                       <th>สิ้นสุด</th>
                       <th>ปลายทาง</th>
+                      <th>รถ</th>
+                      <th>คนขับ</th>
                       <th>สถานะ</th>
+                      <th>หมายเหตุ</th>
                       <th>จัดการ</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pageItems.length === 0 ? (
                       <tr>
-                        <td colSpan="7">ไม่พบรายการจอง</td>
+                        <td colSpan="10">ไม่พบรายการจอง</td>
                       </tr>
                     ) : (
                       pageItems.map((booking) => {
@@ -771,6 +795,8 @@ export default function Booking() {
                             <td>{formatThaiDateTime(booking.start_datetime)}</td>
                             <td>{formatThaiDateTime(booking.end_datetime)}</td>
                             <td>{booking.destination || "-"}</td>
+                            <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
+                            <td>{getBookingDriverLabel(booking)}</td>
                             <td>
                               <span
                                 className={`status ${statusMeta.className}`}
@@ -778,6 +804,9 @@ export default function Booking() {
                               >
                                 {statusMeta.label}
                               </span>
+                            </td>
+                            <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 14 }}>
+                              {booking.staff_note || "-"}
                             </td>
                             <td className="action-buttons">
                               {canShowProcess && (

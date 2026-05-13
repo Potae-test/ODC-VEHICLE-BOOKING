@@ -112,7 +112,7 @@ export default function CalendarPage() {
     [bookings]
   );
 
-  const calendarEvents = useMemo(
+  const filteredEvents = useMemo(
     () =>
       activeBookings.map((booking) => ({
         id: booking.booking_id,
@@ -204,11 +204,11 @@ export default function CalendarPage() {
 
         {!loading && error && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
 
-        {!loading && !error && calendarEvents.length === 0 && (
-          <div style={{ padding: "24px 0" }}>ไม่มีรายการจองที่ต้องแสดงบนปฏิทิน</div>
+        {!loading && !error && filteredEvents.length === 0 && (
+          <div style={{ marginBottom: 12, color: "#475569" }}>ไม่มีรายการจองที่ต้องแสดงในช่วงนี้</div>
         )}
 
-        {!loading && !error && calendarEvents.length > 0 && (
+        {!loading && !error && (
           <div
             className="calendar-shell"
             style={{
@@ -221,7 +221,7 @@ export default function CalendarPage() {
             <Calendar
               localizer={localizer}
               culture="th"
-              events={calendarEvents}
+              events={filteredEvents}
               startAccessor="start"
               endAccessor="end"
               style={{ height: 760, fontSize: 16 }}

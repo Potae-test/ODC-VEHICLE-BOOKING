@@ -160,6 +160,14 @@ function latestBooking(bookings) {
     .sort((a, b) => parseBookingDate(b.start_datetime) - parseBookingDate(a.start_datetime))[0];
 }
 
+function sortLatestFirst(bookings) {
+  return [...bookings].sort((a, b) => {
+    const dateA = parseBookingDate(a.start_datetime)?.getTime() || 0;
+    const dateB = parseBookingDate(b.start_datetime)?.getTime() || 0;
+    return dateB - dateA;
+  });
+}
+
 function countByCategory(bookings, category) {
   return bookings.filter((booking) => getStatusCategory(booking.status) === category).length;
 }
@@ -271,30 +279,27 @@ export default function DriverSummary() {
         const allDriverBookings = currentDriverBookings.filter(
           (booking) => getBookingDriverKey(booking) === driver.key
         );
-        const driverBookings = allDriverBookings.filter(isCountedStatus);
-        const selectedRangeAllBookings = allDriverBookings.filter((booking) =>
-          isInRange(booking, selectedRange)
-        );
-        const selectedRangeBookings = driverBookings.filter((booking) =>
-          isInRange(booking, selectedRange)
-        );
-        const latest = latestBooking(selectedRangeAllBookings) || latestBooking(allDriverBookings);
+        const summaryBookings = allDriverBookings.filter(isSummaryStatus);
+        const selectedRangeBookings = summaryBookings.filter((booking) => isInRange(booking, selectedRange));
+        const allDetailBookings = sortLatestFirst(summaryBookings);
+        const latest = latestBooking(summaryBookings) || latestBooking(allDriverBookings);
 
         return {
           key: driver.key,
           user_id: driver.user_id,
           name: driver.name,
-          todayCount: countByRange(driverBookings, todayRange),
-          weekCount: countByRange(driverBookings, weekRange),
-          monthCount: countByRange(driverBookings, monthRange),
+          todayCount: countByRange(summaryBookings, todayRange),
+          weekCount: countByRange(summaryBookings, weekRange),
+          monthCount: countByRange(summaryBookings, monthRange),
           selectedCount: selectedRangeBookings.length,
           latest,
-          selectedRangeBookings: selectedRangeAllBookings,
-          cardTotal: selectedRangeAllBookings.length,
-          completedCount: countByCategory(selectedRangeAllBookings, "completed"),
-          approvedCount: countByCategory(selectedRangeAllBookings, "approved"),
-          inUseCount: countByCategory(selectedRangeAllBookings, "in_use"),
-          cancelledCount: countByCategory(selectedRangeAllBookings, "cancelled"),
+          allDetailBookings,
+          selectedRangeBookings,
+          cardTotal: summaryBookings.length,
+          completedCount: countByCategory(summaryBookings, "completed"),
+          approvedCount: countByCategory(summaryBookings, "approved"),
+          inUseCount: countByCategory(summaryBookings, "in_use"),
+          cancelledCount: countByCategory(summaryBookings, "cancelled"),
         };
       })
       .filter((row) => selectedDriver === "ALL" || row.key === selectedDriver)
@@ -550,9 +555,7 @@ export default function DriverSummary() {
             <div className="driver-summary-modal-header">
               <div>
                 <h3>รายละเอียดงาน: {detailRow.name}</h3>
-                <p>
-                  {selectedRange.label} รวม {detailRow.selectedRangeBookings.length} งาน
-                </p>
+                <p>รวมทั้งหมด {detailRow.allDetailBookings.length} งาน</p>
               </div>
               <button type="button" className="small-button" onClick={() => setDetailDriver(null)}>
                 ปิด
@@ -572,7 +575,7 @@ export default function DriverSummary() {
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRow.selectedRangeBookings.map((booking) => (
+                  {detailRow.allDetailBookings.map((booking) => (
                     <tr key={booking.booking_id}>
                       <td>{booking.booking_no || "-"}</td>
                       <td>{formatThaiDateTime(booking.start_datetime)}</td>
@@ -587,9 +590,9 @@ export default function DriverSummary() {
                     </tr>
                   ))}
 
-                  {detailRow.selectedRangeBookings.length === 0 && (
+                  {detailRow.allDetailBookings.length === 0 && (
                     <tr>
-                      <td colSpan="6">ไม่มีงานของคนขับคนนี้ในช่วงที่เลือก</td>
+                      <td colSpan="6">ไม่มีงานของคนขับคนนี้</td>
                     </tr>
                   )}
                 </tbody>

@@ -36,6 +36,7 @@ function doPost(e) {
     if (action === "approveBooking") return approveBooking(body.data);
     if (action === "startTrip") return startTrip(body.data);
     if (action === "completeTrip") return completeTrip(body.data);
+    if (action === "driverCancelJob") return driverCancelJob(body.data);
     if (action === "cancelBooking") return cancelBooking(body.data);
     if (action === "loginUser") return loginUser(body.data);
     if (action === "createDriver") return createDriver(body.data);
@@ -80,7 +81,11 @@ function getVehicles() {
     });
   }
 
-  const data = rowsToObjects(headers, rows);
+  const data = rowsToObjects(headers, rows).map((vehicle) => ({
+    ...vehicle,
+    vehicle_type: vehicle.vehicle_type || "",
+    plate_no: vehicle.plate_no || "",
+  }));
 
   return jsonOutput({
     success: true,
@@ -143,7 +148,7 @@ function readSheetTable(sheet) {
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
 
-  if (lastRow < 2 || lastColumn === 0) {
+  if (lastRow === 0 || lastColumn === 0) {
     return {
       headers: [],
       rows: [],
@@ -154,7 +159,7 @@ function readSheetTable(sheet) {
 
   return {
     headers: values[0] || [],
-    rows: values.slice(1),
+    rows: lastRow > 1 ? values.slice(1) : [],
   };
 }
 
@@ -196,53 +201,77 @@ function ensureBookingsSheet() {
     sheet = ss.insertSheet("Bookings");
   }
 
-  const firstRow = sheet.getLastRow() >= 1
-    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0]
-    : [];
-  const firstCell = String(firstRow[0] || "").trim();
-  const hasHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
-
-  if (hasHeaderRow) {
-    return sheet;
-  }
-
   if (sheet.getMaxColumns() < headers.length) {
     sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
   }
 
-  if (sheet.getLastRow() === 0) {
+  const lastRow = sheet.getLastRow();
+  const firstRow = lastRow >= 1
+    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0]
+    : [];
+  const hasHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
+
+  if (lastRow === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     return sheet;
   }
 
-  if (firstCell !== "booking_id") {
-    sheet.insertRowBefore(1);
+  if (!hasHeaderRow) {
+    throw new Error("Bookings sheet header row is invalid");
   }
 
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   return sheet;
 }
 
-function findBookingRowIndex(values, headers, data) {
+function findRowByBookingId(sheet, bookingId) {
+  const targetBookingId = String(bookingId || "").trim();
+  if (!targetBookingId) {
+    return -1;
+  }
+
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
   const bookingIdCol = headers.indexOf("booking_id");
-  const bookingNoCol = headers.indexOf("booking_no");
-  const targetBookingId = String(data.booking_id || "").trim();
-  const targetBookingNo = String(data.booking_no || "").trim();
+
+  if (bookingIdCol === -1) {
+    return -1;
+  }
 
   for (let i = 1; i < values.length; i++) {
     const rowBookingId = String(bookingIdCol !== -1 ? values[i][bookingIdCol] : "").trim();
-    const rowBookingNo = String(bookingNoCol !== -1 ? values[i][bookingNoCol] : "").trim();
 
     if (targetBookingId && rowBookingId === targetBookingId) {
-      return i + 1;
-    }
-
-    if (targetBookingNo && rowBookingNo === targetBookingNo) {
-      return i + 1;
+      const row = i + 1;
+      if (row <= 1) {
+        return -1;
+      }
+      return row;
     }
   }
 
   return -1;
+}
+
+function logBookingAction(actionName, bookingId, row) {
+  Logger.log(JSON.stringify({
+    action: actionName,
+    booking_id: bookingId || "",
+    matched_row: row || -1,
+  }));
+}
+
+function getNextBookingSequence(sheet, bookingIdCol) {
+  const values = sheet.getDataRange().getValues();
+  let maxNumber = 0;
+
+  for (let i = 1; i < values.length; i++) {
+    const match = String(values[i][bookingIdCol] || "").trim().match(/^BK(\d+)$/);
+    if (match) {
+      maxNumber = Math.max(maxNumber, Number(match[1]));
+    }
+  }
+
+  return maxNumber + 1;
 }
 
 function buildUserLookup() {
@@ -349,73 +378,93 @@ function getBookings() {
 }
 
 function createBooking(data) {
-  const sheet = ensureBookingsSheet();
+  try {
+    data = data || {};
+    Logger.log("createBooking received data: " + JSON.stringify(data || {}));
 
-  const now = new Date();
-  const { headers } = readSheetTable(sheet);
+    const sheet = ensureBookingsSheet();
+    Logger.log("createBooking target sheet name: " + sheet.getName());
 
-  const bookingIdCol = ensureColumn(sheet, headers, "booking_id");
-  const bookingNoCol = ensureColumn(sheet, headers, "booking_no");
-  const requesterNameCol = ensureColumn(sheet, headers, "requester_name");
-  const departmentCol = ensureColumn(sheet, headers, "department");
-  const phoneCol = ensureColumn(sheet, headers, "phone");
-  const startCol = ensureColumn(sheet, headers, "start_datetime");
-  const endCol = ensureColumn(sheet, headers, "end_datetime");
-  const destinationCol = ensureColumn(sheet, headers, "destination");
-  const purposeCol = ensureColumn(sheet, headers, "purpose");
-  const vehicleTypeRequestCol = ensureColumn(sheet, headers, "vehicle_type_request");
-  const vehicleIdCol = ensureColumn(sheet, headers, "vehicle_id");
-  const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
-  const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
-  const statusCol = ensureColumn(sheet, headers, "status");
-  const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
-  const createdAtCol = ensureColumn(sheet, headers, "created_at");
-  const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
+    const now = new Date();
+    const { headers } = readSheetTable(sheet);
 
-  const rowNo = sheet.getLastRow();
-  const bookingId = "BK" + Utilities.formatString("%04d", rowNo);
-  const bookingNo = "ODC-CAR-" + Utilities.formatString("%04d", rowNo);
+    const bookingIdCol = ensureColumn(sheet, headers, "booking_id");
+    const bookingNoCol = ensureColumn(sheet, headers, "booking_no");
+    const requesterNameCol = ensureColumn(sheet, headers, "requester_name");
+    const departmentCol = ensureColumn(sheet, headers, "department");
+    const phoneCol = ensureColumn(sheet, headers, "phone");
+    const startCol = ensureColumn(sheet, headers, "start_datetime");
+    const endCol = ensureColumn(sheet, headers, "end_datetime");
+    const destinationCol = ensureColumn(sheet, headers, "destination");
+    const purposeCol = ensureColumn(sheet, headers, "purpose");
+    const vehicleTypeRequestCol = ensureColumn(sheet, headers, "vehicle_type_request");
+    const vehicleIdCol = ensureColumn(sheet, headers, "vehicle_id");
+    const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
+    const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
+    const statusCol = ensureColumn(sheet, headers, "status");
+    const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
+    const createdAtCol = ensureColumn(sheet, headers, "created_at");
+    const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
 
-  sheet.appendRow(Array(headers.length).fill(""));
-  const row = sheet.getLastRow();
+    const bookingNumber = getNextBookingSequence(sheet, bookingIdCol);
+    const bookingId = "BK" + Utilities.formatString("%04d", bookingNumber);
+    const bookingNo = "ODC-CAR-" + Utilities.formatString("%04d", bookingNumber);
+    Logger.log("createBooking generated booking_id: " + bookingId);
+    Logger.log("createBooking generated booking_no: " + bookingNo);
 
-  sheet.getRange(row, bookingIdCol + 1).setValue(bookingId);
-  sheet.getRange(row, bookingNoCol + 1).setValue(bookingNo);
-  sheet.getRange(row, requesterNameCol + 1).setValue(data.requester_name || "");
-  sheet.getRange(row, departmentCol + 1).setValue(data.department || "");
-  sheet.getRange(row, phoneCol + 1).setValue(data.phone || "");
-  sheet.getRange(row, startCol + 1).setValue(data.start_datetime || "");
-  sheet.getRange(row, endCol + 1).setValue(data.end_datetime || "");
-  sheet.getRange(row, destinationCol + 1).setValue(data.destination || "");
-  sheet.getRange(row, purposeCol + 1).setValue(data.purpose || "");
-  sheet.getRange(row, vehicleTypeRequestCol + 1).setValue(data.vehicle_type_request || "");
-  sheet.getRange(row, vehicleIdCol + 1).setValue(data.vehicle_id || "");
-  sheet.getRange(row, assignedUserIdCol + 1).setValue(data.assigned_user_id || "");
-  sheet.getRange(row, assignedUserNameCol + 1).setValue(data.assigned_user_name || "");
-  sheet.getRange(row, statusCol + 1).setValue("PENDING");
-  sheet.getRange(row, staffNoteCol + 1).setValue("");
-  sheet.getRange(row, createdAtCol + 1).setValue(now);
-  sheet.getRange(row, updatedAtCol + 1).setValue(now);
+    const bookingRow = Array(headers.length).fill("");
+    bookingRow[bookingIdCol] = bookingId;
+    bookingRow[bookingNoCol] = bookingNo;
+    bookingRow[requesterNameCol] = data.requester_name || "";
+    bookingRow[departmentCol] = data.department || "";
+    bookingRow[phoneCol] = data.phone || "";
+    bookingRow[startCol] = data.start_datetime || "";
+    bookingRow[endCol] = data.end_datetime || "";
+    bookingRow[destinationCol] = data.destination || "";
+    bookingRow[purposeCol] = data.purpose || "";
+    bookingRow[vehicleTypeRequestCol] = data.vehicle_type_request || "";
+    bookingRow[vehicleIdCol] = data.vehicle_id || "";
+    bookingRow[assignedUserIdCol] = data.assigned_user_id || "";
+    bookingRow[assignedUserNameCol] = data.assigned_user_name || "";
+    bookingRow[statusCol] = "PENDING";
+    bookingRow[staffNoteCol] = "";
+    bookingRow[createdAtCol] = now;
+    bookingRow[updatedAtCol] = now;
 
-  return jsonOutput({
-    success: true,
-    message: "Create booking success",
-    data: {
-      booking_id: bookingId,
-      booking_no: bookingNo,
-      status: "PENDING",
-      assigned_user_id: data.assigned_user_id || "",
-      assigned_user_name: data.assigned_user_name || "",
-      ...data
+    sheet.appendRow(bookingRow);
+    const row = sheet.getLastRow();
+    Logger.log("createBooking final appended row: " + row);
+
+    if (row <= 1) {
+      logBookingAction("createBooking", bookingId, row);
+      throw new Error("Bookings header missing or wrong sheet");
     }
-  });
+
+    logBookingAction("createBooking", bookingId, row);
+
+    return jsonOutput({
+      success: true,
+      message: "Create booking success",
+      data: {
+        ...data,
+        booking_id: bookingId,
+        booking_no: bookingNo,
+        status: "PENDING",
+        assigned_user_id: data.assigned_user_id || "",
+        assigned_user_name: data.assigned_user_name || ""
+      }
+    });
+  } catch (err) {
+    Logger.log("createBooking error: " + String(err && err.stack ? err.stack : err));
+    return jsonOutput({ success: false, message: String(err.message || err) });
+  }
 }
 
 function updateBooking(data) {
   const sheet = ensureBookingsSheet();
-  const { headers, rows } = readSheetTable(sheet);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
 
-  const bookingIdCol = headers.indexOf("booking_id");
   const editableFields = [
     "requester_name",
     "department",
@@ -434,32 +483,30 @@ function updateBooking(data) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i][bookingIdCol] === data.booking_id) {
-      const row = i + 2;
-
-      editableFields.forEach((field) => {
-        const col = headers.indexOf(field);
-        if (col !== -1 && data[field] !== undefined) {
-          sheet.getRange(row, col + 1).setValue(data[field]);
-        }
-      });
-
-      if (updatedAtCol !== -1) {
-        sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
-      }
-
-      return jsonOutput({
-        success: true,
-        message: "Update booking success",
-        data: {
-          booking_id: data.booking_id
-        }
-      });
-    }
+  const row = findRowByBookingId(sheet, data.booking_id);
+  logBookingAction("updateBooking", data.booking_id, row);
+  if (row <= 1) {
+    return jsonOutput({ success: false, message: "Booking not found" });
   }
 
-  return jsonOutput({ success: false, message: "Booking not found" });
+  editableFields.forEach((field) => {
+    const col = headers.indexOf(field);
+    if (col !== -1 && data[field] !== undefined) {
+      sheet.getRange(row, col + 1).setValue(data[field]);
+    }
+  });
+
+  if (updatedAtCol !== -1) {
+    sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+  }
+
+  return jsonOutput({
+    success: true,
+    message: "Update booking success",
+    data: {
+      booking_id: data.booking_id
+    }
+  });
 }
 function approveBooking(data) {
   const sheet = ensureBookingsSheet();
@@ -472,8 +519,6 @@ function approveBooking(data) {
   const vehicleIdCol = headers.indexOf("vehicle_id");
   const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
   const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
-  const driverIdCol = headers.indexOf("driver_id");
-  const driverNameCol = headers.indexOf("driver_name");
   const statusCol = headers.indexOf("status");
   const staffNoteCol = headers.indexOf("staff_note");
   const updatedAtCol = headers.indexOf("updated_at");
@@ -494,8 +539,9 @@ function approveBooking(data) {
     });
   }
 
-  const row = findBookingRowIndex(values, headers, data);
-  if (row === -1) {
+  const row = findRowByBookingId(sheet, data.booking_id);
+  logBookingAction("approveBooking", data.booking_id, row);
+  if (row <= 1) {
     return jsonOutput({
       success: false,
       message: "Booking not found"
@@ -524,12 +570,6 @@ function approveBooking(data) {
   sheet.getRange(row, vehicleIdCol + 1).setValue(data.vehicle_id || "");
   sheet.getRange(row, assignedUserIdCol + 1).setValue(data.assigned_user_id || data.driver_id || "");
   sheet.getRange(row, assignedUserNameCol + 1).setValue(data.assigned_user_name || data.driver_name || "");
-  if (driverIdCol !== -1) {
-    sheet.getRange(row, driverIdCol + 1).setValue(data.driver_id || data.assigned_user_id || "");
-  }
-  if (driverNameCol !== -1) {
-    sheet.getRange(row, driverNameCol + 1).setValue(data.driver_name || data.assigned_user_name || "");
-  }
   sheet.getRange(row, statusCol + 1).setValue("APPROVED");
   sheet.getRange(row, staffNoteCol + 1).setValue(data.staff_note || "");
   sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
@@ -539,12 +579,10 @@ function approveBooking(data) {
     message: "Approve booking success",
     data: {
       booking_id: values[currentRow][bookingIdCol],
-      booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : (data.booking_no || ""),
+      booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
       vehicle_id: data.vehicle_id || "",
       assigned_user_id: data.assigned_user_id || data.driver_id || "",
       assigned_user_name: data.assigned_user_name || data.driver_name || "",
-      driver_id: data.driver_id || data.assigned_user_id || "",
-      driver_name: data.driver_name || data.assigned_user_name || "",
       status: "APPROVED"
     }
   });
@@ -556,73 +594,69 @@ function startTrip(data) {
   const values = bookingSheet.getDataRange().getValues();
   const headers = values[0];
 
-  const bookingIdCol = headers.indexOf("booking_id");
   const statusCol = headers.indexOf("status");
   const vehicleIdCol = headers.indexOf("vehicle_id");
-  const assignedUserIdCol = ensureColumn(bookingSheet, headers, "assigned_user_id");
-  const assignedUserNameCol = ensureColumn(bookingSheet, headers, "assigned_user_name");
   const updatedAtCol = headers.indexOf("updated_at");
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  const userLookup = buildUserLookup();
-
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][bookingIdCol] === data.booking_id) {
-      const row = i + 2;
-      const now = new Date();
-      const currentBooking = applyAssignedUserFallback(rowsToObjects(headers, [values[i]])[0] || {}, userLookup);
-
-      bookingSheet.getRange(row, statusCol + 1).setValue("IN_USE");
-      bookingSheet.getRange(row, updatedAtCol + 1).setValue(now);
-
-      const logId = "LOG" + Utilities.formatString("%04d", logSheet.getLastRow());
-      const logHeaders = logSheet.getDataRange().getValues()[0] || [];
-      const logIdCol = ensureColumn(logSheet, logHeaders, "log_id");
-      const logBookingIdCol = ensureColumn(logSheet, logHeaders, "booking_id");
-      const logVehicleIdCol = ensureColumn(logSheet, logHeaders, "vehicle_id");
-      const logAssignedUserIdCol = ensureColumn(logSheet, logHeaders, "assigned_user_id");
-      const logAssignedUserNameCol = ensureColumn(logSheet, logHeaders, "assigned_user_name");
-      const logOutTimeCol = ensureColumn(logSheet, logHeaders, "out_time");
-      const logOutMileageCol = ensureColumn(logSheet, logHeaders, "out_mileage");
-      const logInTimeCol = ensureColumn(logSheet, logHeaders, "in_time");
-      const logInMileageCol = ensureColumn(logSheet, logHeaders, "in_mileage");
-      const logRemarkCol = ensureColumn(logSheet, logHeaders, "remark");
-      const logCreatedAtCol = ensureColumn(logSheet, logHeaders, "created_at");
-      const logUpdatedAtCol = ensureColumn(logSheet, logHeaders, "updated_at");
-      const assignedUserId = currentBooking.assigned_user_id || data.assigned_user_id || "";
-      const assignedUserName = currentBooking.assigned_user_name || data.assigned_user_name || "";
-
-      logSheet.appendRow(Array(logHeaders.length).fill(""));
-      const logRow = logSheet.getLastRow();
-      logSheet.getRange(logRow, logIdCol + 1).setValue(logId);
-      logSheet.getRange(logRow, logBookingIdCol + 1).setValue(data.booking_id);
-      logSheet.getRange(logRow, logVehicleIdCol + 1).setValue(values[i][vehicleIdCol] || "");
-      logSheet.getRange(logRow, logAssignedUserIdCol + 1).setValue(assignedUserId);
-      logSheet.getRange(logRow, logAssignedUserNameCol + 1).setValue(assignedUserName);
-      logSheet.getRange(logRow, logOutTimeCol + 1).setValue(data.out_time || now);
-      logSheet.getRange(logRow, logOutMileageCol + 1).setValue(data.out_mileage || "");
-      logSheet.getRange(logRow, logInTimeCol + 1).setValue("");
-      logSheet.getRange(logRow, logInMileageCol + 1).setValue("");
-      logSheet.getRange(logRow, logRemarkCol + 1).setValue(data.remark || "");
-      logSheet.getRange(logRow, logCreatedAtCol + 1).setValue(now);
-      logSheet.getRange(logRow, logUpdatedAtCol + 1).setValue(now);
-
-      return jsonOutput({
-        success: true,
-        message: "Start trip success",
-        data: {
-          booking_id: data.booking_id,
-          status: "IN_USE",
-          log_id: logId
-        }
-      });
-    }
+  const row = findRowByBookingId(bookingSheet, data.booking_id);
+  logBookingAction("startTrip", data.booking_id, row);
+  if (row <= 1) {
+    return jsonOutput({ success: false, message: "Booking not found" });
   }
 
-  return jsonOutput({ success: false, message: "Booking not found" });
+  const userLookup = buildUserLookup();
+  const currentRow = row - 1;
+  const now = new Date();
+  const currentBooking = applyAssignedUserFallback(rowsToObjects(headers, [values[currentRow]])[0] || {}, userLookup);
+
+  bookingSheet.getRange(row, statusCol + 1).setValue("IN_USE");
+  bookingSheet.getRange(row, updatedAtCol + 1).setValue(now);
+
+  const logId = "LOG" + Utilities.formatString("%04d", logSheet.getLastRow());
+  const logHeaders = logSheet.getDataRange().getValues()[0] || [];
+  const logIdCol = ensureColumn(logSheet, logHeaders, "log_id");
+  const logBookingIdCol = ensureColumn(logSheet, logHeaders, "booking_id");
+  const logVehicleIdCol = ensureColumn(logSheet, logHeaders, "vehicle_id");
+  const logAssignedUserIdCol = ensureColumn(logSheet, logHeaders, "assigned_user_id");
+  const logAssignedUserNameCol = ensureColumn(logSheet, logHeaders, "assigned_user_name");
+  const logOutTimeCol = ensureColumn(logSheet, logHeaders, "out_time");
+  const logOutMileageCol = ensureColumn(logSheet, logHeaders, "out_mileage");
+  const logInTimeCol = ensureColumn(logSheet, logHeaders, "in_time");
+  const logInMileageCol = ensureColumn(logSheet, logHeaders, "in_mileage");
+  const logRemarkCol = ensureColumn(logSheet, logHeaders, "remark");
+  const logCreatedAtCol = ensureColumn(logSheet, logHeaders, "created_at");
+  const logUpdatedAtCol = ensureColumn(logSheet, logHeaders, "updated_at");
+  const assignedUserId = currentBooking.assigned_user_id || data.assigned_user_id || "";
+  const assignedUserName = currentBooking.assigned_user_name || data.assigned_user_name || "";
+
+  logSheet.appendRow(Array(logHeaders.length).fill(""));
+  const logRow = logSheet.getLastRow();
+  logSheet.getRange(logRow, logIdCol + 1).setValue(logId);
+  logSheet.getRange(logRow, logBookingIdCol + 1).setValue(data.booking_id);
+  logSheet.getRange(logRow, logVehicleIdCol + 1).setValue(values[currentRow][vehicleIdCol] || "");
+  logSheet.getRange(logRow, logAssignedUserIdCol + 1).setValue(assignedUserId);
+  logSheet.getRange(logRow, logAssignedUserNameCol + 1).setValue(assignedUserName);
+  logSheet.getRange(logRow, logOutTimeCol + 1).setValue(data.out_time || now);
+  logSheet.getRange(logRow, logOutMileageCol + 1).setValue(data.out_mileage || "");
+  logSheet.getRange(logRow, logInTimeCol + 1).setValue("");
+  logSheet.getRange(logRow, logInMileageCol + 1).setValue("");
+  logSheet.getRange(logRow, logRemarkCol + 1).setValue(data.remark || "");
+  logSheet.getRange(logRow, logCreatedAtCol + 1).setValue(now);
+  logSheet.getRange(logRow, logUpdatedAtCol + 1).setValue(now);
+
+  return jsonOutput({
+    success: true,
+    message: "Start trip success",
+    data: {
+      booking_id: data.booking_id,
+      status: "IN_USE",
+      log_id: logId
+    }
+  });
 }
 
 function completeTrip(data) {
@@ -632,7 +666,6 @@ function completeTrip(data) {
   const bookingValues = bookingSheet.getDataRange().getValues();
   const bookingHeaders = bookingValues[0];
 
-  const bookingIdCol = bookingHeaders.indexOf("booking_id");
   const statusCol = bookingHeaders.indexOf("status");
   const updatedAtCol = bookingHeaders.indexOf("updated_at");
 
@@ -649,18 +682,18 @@ function completeTrip(data) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  for (let i = 1; i < bookingValues.length; i++) {
-    if (bookingValues[i][bookingIdCol] === data.booking_id) {
-      const row = i + 2;
-      bookingSheet.getRange(row, statusCol + 1).setValue("COMPLETED");
-      bookingSheet.getRange(row, updatedAtCol + 1).setValue(new Date());
-      break;
-    }
+  const bookingRow = findRowByBookingId(bookingSheet, data.booking_id);
+  logBookingAction("completeTrip", data.booking_id, bookingRow);
+  if (bookingRow <= 1) {
+    return jsonOutput({ success: false, message: "Booking not found" });
   }
+
+  bookingSheet.getRange(bookingRow, statusCol + 1).setValue("COMPLETED");
+  bookingSheet.getRange(bookingRow, updatedAtCol + 1).setValue(new Date());
 
   for (let i = logValues.length - 1; i >= 1; i--) {
     if (logValues[i][logBookingIdCol] === data.booking_id) {
-      const row = i + 2;
+      const row = i + 1;
       const now = new Date();
 
       logSheet.getRange(row, inTimeCol + 1).setValue(data.in_time || now);
@@ -681,6 +714,53 @@ function completeTrip(data) {
 
   return jsonOutput({ success: false, message: "Vehicle log not found" });
 }
+
+function driverCancelJob(data) {
+  const sheet = ensureBookingsSheet();
+
+  const headers = sheet.getDataRange().getValues()[0];
+
+  const statusCol = headers.indexOf("status");
+  const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
+  const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
+  const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
+  const updatedAtCol = headers.indexOf("updated_at");
+
+  if (!data.booking_id) {
+    return jsonOutput({
+      success: false,
+      message: "booking_id is required"
+    });
+  }
+
+  const row = findRowByBookingId(sheet, data.booking_id);
+  logBookingAction("driverCancelJob", data.booking_id, row);
+  if (row <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Booking not found"
+    });
+  }
+
+  const now = new Date();
+
+  sheet.getRange(row, assignedUserIdCol + 1).setValue("");
+  sheet.getRange(row, assignedUserNameCol + 1).setValue("");
+  sheet.getRange(row, staffNoteCol + 1).setValue("คนขับยกเลิกงานนี้แล้ว");
+  sheet.getRange(row, statusCol + 1).setValue("APPROVED");
+  sheet.getRange(row, updatedAtCol + 1).setValue(now);
+
+  return jsonOutput({
+    success: true,
+    message: "Driver cancel job success",
+    data: {
+      booking_id: data.booking_id,
+      status: "APPROVED",
+      staff_note: "คนขับยกเลิกงานนี้แล้ว"
+    }
+  });
+}
+
 function cancelBooking(data) {
   const sheet = ensureBookingsSheet();
 
@@ -711,61 +791,60 @@ function cancelBooking(data) {
     });
   }
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][bookingIdCol] === data.booking_id) {
-      const row = i + 2;
-      const now = new Date();
-      const reason = String(data.reason || "").trim();
-      const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
-      const booking = values[i];
-
-      sheet.getRange(row, statusCol + 1).setValue("CANCELLED");
-      sheet.getRange(row, staffNoteCol + 1).setValue(reason);
-      sheet.getRange(row, updatedAtCol + 1).setValue(now);
-
-      const historySheet = ensureCancellationHistorySheet();
-      const historyHeaders = historySheet.getDataRange().getValues()[0] || [];
-      const historyId = "BCH" + Utilities.formatString("%04d", historySheet.getLastRow());
-      const historyRow = Array(historyHeaders.length).fill("");
-
-      setHistoryValue(historyHeaders, historyRow, "cancellation_id", historyId);
-      setHistoryValue(historyHeaders, historyRow, "booking_id", booking[bookingIdCol]);
-      setHistoryValue(historyHeaders, historyRow, "booking_no", booking[bookingNoCol]);
-      setHistoryValue(historyHeaders, historyRow, "requester_name", booking[requesterNameCol]);
-      setHistoryValue(historyHeaders, historyRow, "department", booking[departmentCol]);
-      setHistoryValue(historyHeaders, historyRow, "phone", booking[phoneCol]);
-      setHistoryValue(historyHeaders, historyRow, "start_datetime", booking[startCol]);
-      setHistoryValue(historyHeaders, historyRow, "end_datetime", booking[endCol]);
-      setHistoryValue(historyHeaders, historyRow, "destination", booking[destinationCol]);
-      setHistoryValue(historyHeaders, historyRow, "purpose", booking[purposeCol]);
-      setHistoryValue(historyHeaders, historyRow, "vehicle_type_request", booking[vehicleTypeRequestCol]);
-      setHistoryValue(historyHeaders, historyRow, "vehicle_id", booking[vehicleIdCol]);
-      setHistoryValue(historyHeaders, historyRow, "assigned_user_id", booking[assignedUserIdCol]);
-      setHistoryValue(historyHeaders, historyRow, "assigned_user_name", booking[assignedUserNameCol]);
-      setHistoryValue(historyHeaders, historyRow, "reason", reason);
-      setHistoryValue(historyHeaders, historyRow, "cancelled_by", cancelledBy);
-      setHistoryValue(historyHeaders, historyRow, "cancelled_at", now);
-      setHistoryValue(historyHeaders, historyRow, "status", "CANCELLED");
-      setHistoryValue(historyHeaders, historyRow, "updated_at", now);
-
-      historySheet.appendRow(historyRow);
-
-      return jsonOutput({
-        success: true,
-        message: "Cancel booking success",
-        data: {
-          booking_id: data.booking_id,
-          status: "CANCELLED",
-          reason,
-          cancelled_by: cancelledBy,
-        }
-      });
-    }
+  const row = findRowByBookingId(sheet, data.booking_id);
+  logBookingAction("cancelBooking", data.booking_id, row);
+  if (row <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Booking not found"
+    });
   }
 
+  const now = new Date();
+  const reason = String(data.reason || "").trim();
+  const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
+  const booking = values[row - 1];
+
+  sheet.getRange(row, statusCol + 1).setValue("CANCELLED");
+  sheet.getRange(row, staffNoteCol + 1).setValue(reason);
+  sheet.getRange(row, updatedAtCol + 1).setValue(now);
+
+  const historySheet = ensureCancellationHistorySheet();
+  const historyHeaders = historySheet.getDataRange().getValues()[0] || [];
+  const historyId = "BCH" + Utilities.formatString("%04d", historySheet.getLastRow());
+  const historyRow = Array(historyHeaders.length).fill("");
+
+  setHistoryValue(historyHeaders, historyRow, "cancellation_id", historyId);
+  setHistoryValue(historyHeaders, historyRow, "booking_id", booking[bookingIdCol]);
+  setHistoryValue(historyHeaders, historyRow, "booking_no", booking[bookingNoCol]);
+  setHistoryValue(historyHeaders, historyRow, "requester_name", booking[requesterNameCol]);
+  setHistoryValue(historyHeaders, historyRow, "department", booking[departmentCol]);
+  setHistoryValue(historyHeaders, historyRow, "phone", booking[phoneCol]);
+  setHistoryValue(historyHeaders, historyRow, "start_datetime", booking[startCol]);
+  setHistoryValue(historyHeaders, historyRow, "end_datetime", booking[endCol]);
+  setHistoryValue(historyHeaders, historyRow, "destination", booking[destinationCol]);
+  setHistoryValue(historyHeaders, historyRow, "purpose", booking[purposeCol]);
+  setHistoryValue(historyHeaders, historyRow, "vehicle_type_request", booking[vehicleTypeRequestCol]);
+  setHistoryValue(historyHeaders, historyRow, "vehicle_id", booking[vehicleIdCol]);
+  setHistoryValue(historyHeaders, historyRow, "assigned_user_id", booking[assignedUserIdCol]);
+  setHistoryValue(historyHeaders, historyRow, "assigned_user_name", booking[assignedUserNameCol]);
+  setHistoryValue(historyHeaders, historyRow, "reason", reason);
+  setHistoryValue(historyHeaders, historyRow, "cancelled_by", cancelledBy);
+  setHistoryValue(historyHeaders, historyRow, "cancelled_at", now);
+  setHistoryValue(historyHeaders, historyRow, "status", "CANCELLED");
+  setHistoryValue(historyHeaders, historyRow, "updated_at", now);
+
+  historySheet.appendRow(historyRow);
+
   return jsonOutput({
-    success: false,
-    message: "Booking not found"
+    success: true,
+    message: "Cancel booking success",
+    data: {
+      booking_id: data.booking_id,
+      status: "CANCELLED",
+      reason,
+      cancelled_by: cancelledBy,
+    }
   });
 }
 

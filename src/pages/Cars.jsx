@@ -176,7 +176,7 @@ export default function Cars() {
     <div>
       <div className="page-header">
         <div>
-          <h2>เพิ่มรถใหม่</h2>
+          <h2>จัดการรถ</h2>
           <p>ข้อมูลจาก Google Sheet ผ่าน Cloudflare Worker API</p>
         </div>
 

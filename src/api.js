@@ -194,13 +194,20 @@ export async function deleteBookingCancellationHistory(cancellation_id) {
 }
 
 export async function createBooking(data) {
-  const json = await fetchJson(`${API_BASE_URL}/api/bookings`, {
+  const res = await fetch(`${API_BASE_URL}/api/bookings`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
+  const json = await res.json();
+
+  console.log("createBooking response", json);
+
+  if (!json.success) {
+    throw new Error(json.message);
+  }
 
   invalidateApiCache(["bookings"]);
   return json.data;
@@ -246,6 +253,17 @@ export async function startTrip(data) {
 
 export async function completeTrip(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/complete-trip`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["bookings"]);
+  return json.data;
+}
+
+export async function driverCancelJob(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings/driver-cancel-job`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

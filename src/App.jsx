@@ -144,7 +144,7 @@ export default function App() {
         <aside className="sidebar">
           {canAccessPage(user.role, "cars", permissionConfig) && (
             <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
-              🚐 เพิ่มรถใหม่
+              🚐 จัดการรถ
             </button>
           )}
 
