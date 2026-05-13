@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
-import { completeTrip, getBookings, getDrivers, getVehicles, startTrip } from "../api";
+import { completeTrip, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showError, showInput, showSuccess } from "../utils/alert";
@@ -56,23 +56,31 @@ function formatVehicleLabel(booking, vehicleMap) {
 
 function getBookingIdentity(booking) {
   return {
-    driver_id: String(booking.driver_id || "").trim(),
+    assigned_user_id: String(booking.assigned_user_id || "").trim(),
+    assigned_user_name: String(booking.assigned_user_name || "").trim(),
     driver_name: String(booking.driver_name || "").trim(),
   };
 }
 
-function matchesCurrentDriver(booking, currentIdentity) {
+function matchesCurrentUser(booking, currentUser) {
   const bookingIdentity = getBookingIdentity(booking);
+  const currentRole = normalizeRole(currentUser?.role);
+  const currentUserId = String(currentUser?.user_id || "").trim();
+  const currentUserName = String(currentUser?.name || "").trim();
 
-  if (currentIdentity.driver_id && bookingIdentity.driver_id) {
-    return bookingIdentity.driver_id === currentIdentity.driver_id;
+  if (currentRole === "ADMIN" || currentRole === "STAFF") {
+    return true;
   }
 
-  if (currentIdentity.driver_name && bookingIdentity.driver_name) {
-    return bookingIdentity.driver_name === currentIdentity.driver_name;
+  if (bookingIdentity.assigned_user_id) {
+    return Boolean(currentUserId) && bookingIdentity.assigned_user_id === currentUserId;
   }
 
-  return false;
+  if (bookingIdentity.assigned_user_name) {
+    return Boolean(currentUserName) && bookingIdentity.assigned_user_name === currentUserName;
+  }
+
+  return Boolean(currentUserName) && bookingIdentity.driver_name === currentUserName;
 }
 
 function getStatusMeta(status) {
@@ -149,30 +157,35 @@ function JobCard({
 export default function DriverJobs() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const currentUser = useMemo(() => getCurrentUser(), []);
   const currentRole = normalizeRole(currentUser?.role);
-  const canViewPage = hasPermission(null, "driver_jobs_view");
+  const canViewPage =
+    currentRole === "ADMIN" ||
+    currentRole === "STAFF" ||
+    currentRole === "DRIVER" ||
+    hasPermission(currentRole, "driver_jobs_view");
   const canStartTrip = hasPermission(null, "driver_jobs_start");
   const canCompleteTrip = hasPermission(null, "driver_jobs_complete");
 
-  async function loadData() {
+  async function loadData(options = {}) {
     try {
       setLoading(true);
       setError("");
 
-      const [bookingData, vehicleData, driverData] = await Promise.all([
-        getBookings(),
-        getVehicles(),
-        getDrivers(),
-      ]);
+      const bookingFetcher = options.freshBookings ? getBookingsFresh : getBookings;
+      const [bookingData, vehicleData] = await Promise.all([bookingFetcher(), getVehicles()]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
-      setDrivers(Array.isArray(driverData) ? driverData : []);
+      if (options.logBookingId) {
+        const updatedBooking = (Array.isArray(bookingData) ? bookingData : []).find(
+          (item) => String(item.booking_id || "").trim() === String(options.logBookingId || "").trim()
+        );
+        console.log("DriverJobs refreshed booking row", updatedBooking || null);
+      }
     } catch (err) {
       const message = err.message || "โหลดงานคนขับไม่สำเร็จ";
       setError(message);
@@ -194,28 +207,11 @@ export default function DriverJobs() {
     return map;
   }, [vehicles]);
 
-  const currentIdentity = useMemo(() => {
-    const currentName = String(currentUser?.name || "").trim();
-    const currentDriverId = String(currentUser?.driver_id || "").trim();
-    const matchedDriver =
-      drivers.find((driver) => currentDriverId && String(driver.driver_id || "").trim() === currentDriverId) ||
-      drivers.find((driver) => String(driver.name || "").trim() === currentName);
-
-    return {
-      driver_id: currentDriverId || String(matchedDriver?.driver_id || "").trim(),
-      driver_name: currentName || String(matchedDriver?.name || "").trim(),
-    };
-  }, [currentUser, drivers]);
-
   const assignedBookings = useMemo(() => {
     const active = bookings.filter((booking) => normalizeStatus(booking.status) !== "CANCELLED");
 
-    if (currentRole === "DRIVER") {
-      return active.filter((booking) => matchesCurrentDriver(booking, currentIdentity));
-    }
-
-    return active;
-  }, [bookings, currentIdentity, currentRole]);
+    return active.filter((booking) => matchesCurrentUser(booking, currentUser));
+  }, [bookings, currentUser]);
 
   const currentJobs = useMemo(
     () => sortByStart(assignedBookings.filter((booking) => normalizeStatus(booking.status) === "IN_USE")),
@@ -249,16 +245,23 @@ export default function DriverJobs() {
     if (!outMileage) return;
 
     try {
-      await startTrip({
+      const response = await startTrip({
         booking_id: booking.booking_id,
         out_time: new Date().toISOString(),
         out_mileage: String(outMileage).trim(),
-        driver_id: currentIdentity.driver_id,
-        driver_name: currentIdentity.driver_name,
+        assigned_user_id: currentUser?.user_id || "",
+        assigned_user_name: currentUser?.name || "",
       });
 
+      console.log("DriverJobs startTrip response", response);
+
+      if (!response?.success) {
+        showError(response?.message || "เริ่มงานไม่สำเร็จ");
+        return;
+      }
+
       await showSuccess("เริ่มงานและบันทึกการออกรถสำเร็จ");
-      await loadData();
+      await loadData({ freshBookings: true, logBookingId: booking.booking_id });
     } catch (err) {
       showError(err.message || "เริ่มงานไม่สำเร็จ");
     }
@@ -302,8 +305,8 @@ export default function DriverJobs() {
         in_time: new Date().toISOString(),
         in_mileage: result.value.in_mileage,
         remark: result.value.remark,
-        driver_id: currentIdentity.driver_id,
-        driver_name: currentIdentity.driver_name,
+        assigned_user_id: currentUser?.user_id || "",
+        assigned_user_name: currentUser?.name || "",
       });
 
       await showSuccess("จบงานและบันทึกการคืนรถสำเร็จ");

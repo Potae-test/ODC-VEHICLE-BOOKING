@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { login } from "../api";
 
+function getRedirectPath(role) {
+  const normalizedRole = String(role || "").trim().toUpperCase();
+
+  if (normalizedRole === "ADMIN") return "/admin";
+  if (normalizedRole === "STAFF") return "/booking";
+  if (normalizedRole === "DRIVER") return "/driver-jobs";
+  if (normalizedRole === "USER") return "/booking";
+  return "/booking";
+}
+
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("admin@odc.local");
   const [password, setPassword] = useState("");
@@ -18,23 +28,10 @@ export default function Login({ onLogin }) {
       setLoading(true);
 
       const user = await login(email, password);
-      const sessionUser = {
-        ...user,
-        driver_id: user?.driver_id || "",
-      };
+      localStorage.setItem("odc_user", JSON.stringify(user));
+      onLogin(user);
 
-      localStorage.setItem("odc_user", JSON.stringify(sessionUser));
-      onLogin(sessionUser);
-
-      if (sessionUser.role === "ADMIN") {
-        window.location.href = "/admin";
-      } else if (sessionUser.role === "STAFF") {
-        window.location.href = "/staff";
-      } else if (sessionUser.role === "DRIVER") {
-        window.location.href = "/driver-jobs";
-      } else {
-        window.location.href = "/booking";
-      }
+      window.location.href = getRedirectPath(user.role);
     } catch (err) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
     } finally {
@@ -72,7 +69,9 @@ export default function Login({ onLogin }) {
           <b>ทดสอบ:</b><br />
           admin@odc.local<br />
           staff@odc.local<br />
-          user@odc.local
+          user@odc.local<br />
+        driver1@odc.local<br />
+         driver2@odc.local 
         </div>
       </form>
     </div>

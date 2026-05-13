@@ -4,6 +4,7 @@ import {
   canAccessPage,
   getFirstAllowedPage,
   loadPermissionConfig,
+  normalizeRole,
 } from "./permissions";
 import "./App.css";
 
@@ -23,6 +24,15 @@ function getDefaultPageByRole(role) {
   return "booking";
 }
 
+function getPageFromPath(pathname) {
+  const path = String(pathname || "").replace(/\/+$/, "") || "/";
+  if (path === "/admin" || path === "/dashboard") return "admin";
+  if (path === "/staff") return "staff";
+  if (path === "/driver-jobs") return "driver-jobs";
+  if (path === "/booking") return "booking";
+  return "";
+}
+
 export default function App() {
   const [page, setPage] = useState("cars");
   const [user, setUser] = useState(null);
@@ -33,19 +43,28 @@ export default function App() {
 
     if (saved) {
       const savedUser = JSON.parse(saved);
-      const normalizedUser = {
-        ...savedUser,
-        driver_id: savedUser?.driver_id || "",
-      };
-
-      if (normalizedUser.driver_id !== savedUser?.driver_id) {
-        localStorage.setItem("odc_user", JSON.stringify(normalizedUser));
-      }
-
-      setUser(normalizedUser);
-      setPage(getDefaultPageByRole(normalizedUser.role));
+      setUser(savedUser);
+      const pathPage = getPageFromPath(window.location.pathname);
+      setPage(pathPage || getDefaultPageByRole(savedUser.role));
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const currentRole = normalizeRole(user.role);
+    const pathPage = getPageFromPath(window.location.pathname);
+
+    if (pathPage === "admin" && currentRole !== "ADMIN") {
+      window.history.replaceState({}, "", "/staff");
+      setPage("staff");
+      return;
+    }
+
+    if (pathPage === "admin" && currentRole === "ADMIN") {
+      setPage("admin");
+    }
+  }, [user]);
 
   useEffect(() => {
     function refreshPermissions() {

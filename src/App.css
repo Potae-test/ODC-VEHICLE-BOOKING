@@ -1227,8 +1227,12 @@ label {
 .warning-button {
   background: #f59e0b;
   margin-left: 8px;
+ 
 }
-
+.warning-button:hover {
+  background-color: #e69203;
+  color: white;
+}
 .danger-button {
   background: #dc2626;
   padding: 10px 16px;

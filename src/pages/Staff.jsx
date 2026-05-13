@@ -5,8 +5,8 @@ import {
   cancelBooking,
   completeTrip,
   getBookings,
-  getDrivers,
   getVehicles,
+  getUsers,
   startTrip,
 } from "../api";
 import {
@@ -65,12 +65,16 @@ export default function Staff() {
     const [bookingData, vehicleData, driverData] = await Promise.all([
       getBookings(),
       getVehicles(),
-      getDrivers(),
+      getUsers(),
     ]);
 
     setBookings(bookingData);
     setVehicles(vehicleData);
-    setDrivers(driverData);
+    setDrivers(
+      Array.isArray(driverData)
+        ? driverData.filter((user) => String(user.role || "").trim().toUpperCase() === "DRIVER")
+        : []
+    );
   }
 
   async function refreshBookings() {
@@ -121,12 +125,12 @@ export default function Staff() {
   }
 
     function isDriverAvailable(driver, currentBooking, allBookings) {
-      return !allBookings.some((b) => {
-        const isSameBooking = b.booking_id === currentBooking.booking_id;
-        const isSameDriver = b.driver_id
-          ? b.driver_id === driver.driver_id
-          : b.driver_name === driver.name;
-        const activeStatus = b.status === "APPROVED" || b.status === "IN_USE";
+    return !allBookings.some((b) => {
+      const isSameBooking = b.booking_id === currentBooking.booking_id;
+      const isSameDriver = b.assigned_user_id
+        ? b.assigned_user_id === driver.user_id
+        : b.assigned_user_name === driver.name;
+      const activeStatus = b.status === "APPROVED" || b.status === "IN_USE";
 
         if (isSameBooking || !isSameDriver || !activeStatus) {
           return false;
@@ -148,8 +152,8 @@ export default function Staff() {
       return;
     }
 
-    if (!data.driver_name) {
-      showError("กรุณาเลือกคนขับ");
+    if (!data.assigned_user_name) {
+      showError("กรุณาเลือกผู้ใช้");
       return;
     }
 
@@ -160,17 +164,18 @@ export default function Staff() {
       return;
     }
 
-    if (!isDriverAvailable({ driver_id: data.driver_id, name: data.driver_name }, booking, bookings)) {
-      showError("คนขับท่านนี้ไม่ว่าง กรุณาเลือกคนขับท่านอื่น");
+    if (!isDriverAvailable({ user_id: data.assigned_user_id, name: data.assigned_user_name }, booking, bookings)) {
+      showError("ผู้ใช้ท่านนี้ไม่ว่าง กรุณาเลือกผู้ใช้อื่น");
       return;
     }
 
     try {
       await approveBooking({
         booking_id: booking.booking_id,
+        booking_no: booking.booking_no || "",
         vehicle_id: data.vehicle_id,
-        driver_id: data.driver_id || "",
-        driver_name: data.driver_name,
+        assigned_user_id: data.assigned_user_id || "",
+        assigned_user_name: data.assigned_user_name,
         staff_note: data.staff_note || "",
       });
 
@@ -379,22 +384,22 @@ export default function Staff() {
                 </div>
 
                 <div>
-                  <label>เลือกคนขับ</label>
+                  <label>เลือกผู้ใช้</label>
                   <select
-                    value={selected[b.booking_id]?.driver_id || ""}
+                    value={selected[b.booking_id]?.assigned_user_id || ""}
                     onChange={(e) => {
-                      const driver = drivers.find((d) => d.driver_id === e.target.value);
+                      const driver = drivers.find((d) => d.user_id === e.target.value);
                       setSelected({
                         ...selected,
                         [b.booking_id]: {
                           ...selected[b.booking_id],
-                          driver_id: driver?.driver_id || "",
-                          driver_name: driver?.name || "",
+                          assigned_user_id: driver?.user_id || "",
+                          assigned_user_name: driver?.name || "",
                         },
                       });
                     }}
                   >
-                    <option value="">-- เลือกคนขับ --</option>
+                    <option value="">-- เลือกผู้ใช้ --</option>
 
                     {drivers
                       .filter((d) => d.status === "ACTIVE")
@@ -403,8 +408,8 @@ export default function Staff() {
 
                         return (
                           <option
-                            key={d.driver_id}
-                            value={d.driver_id}
+                            key={d.user_id}
+                            value={d.user_id}
                             disabled={!available}
                           >
                             {d.name} ({d.phone})
@@ -496,8 +501,8 @@ export default function Staff() {
                 </div>
 
                 <div className="staff-info-item">
-                  <b>คนขับ</b>
-                  {b.driver_name || "-"}
+                  <b>ผู้ใช้ที่มอบหมาย</b>
+                  {b.assigned_user_name || "-"}
                 </div>
 
                 <div className="staff-info-item">

@@ -149,11 +149,28 @@ export async function deleteVehicle(vehicle_id) {
 // BOOKINGS
 // ---------------------
 
-export async function getBookings() {
+export async function getBookings(options = {}) {
+  if (options.fresh) {
+    const json = await fetchJson(`${API_BASE_URL}/api/bookings?ts=${Date.now()}`);
+    return (json.data || []).map((booking) => ({
+      ...booking,
+      assigned_user_id: booking.assigned_user_id ?? booking.driver_id ?? "",
+      assigned_user_name: booking.assigned_user_name ?? booking.driver_name ?? "",
+    }));
+  }
+
   return getCachedCollection("bookings", async () => {
     const json = await fetchJson(`${API_BASE_URL}/api/bookings`);
-    return json.data || [];
+    return (json.data || []).map((booking) => ({
+      ...booking,
+      assigned_user_id: booking.assigned_user_id ?? booking.driver_id ?? "",
+      assigned_user_name: booking.assigned_user_name ?? booking.driver_name ?? "",
+    }));
   });
+}
+
+export async function getBookingsFresh() {
+  return getBookings({ fresh: true });
 }
 
 export async function getBookingCancellationHistory() {
@@ -190,12 +207,23 @@ export async function createBooking(data) {
 }
 
 export async function approveBooking(data) {
+  const payload = {
+    booking_id: data.booking_id,
+    booking_no: data.booking_no,
+    vehicle_id: data.vehicle_id,
+    assigned_user_id: data.assigned_user_id ?? data.driver_id ?? "",
+    assigned_user_name: data.assigned_user_name ?? data.driver_name ?? "",
+    staff_note: data.staff_note ?? "",
+    driver_id: data.driver_id ?? "",
+    driver_name: data.driver_name ?? "",
+  };
+
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/approve`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
 
   invalidateApiCache(["bookings"]);
@@ -203,14 +231,17 @@ export async function approveBooking(data) {
 }
 
 export async function startTrip(data) {
-  const json = await fetchJson(`${API_BASE_URL}/api/bookings/start-trip`, {
+  invalidateApiCache(["bookings"]);
+
+  const res = await fetch(`${API_BASE_URL}/api/bookings/start-trip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
+  const json = await res.json();
   invalidateApiCache(["bookings"]);
-  return json.data;
+  return json;
 }
 
 export async function completeTrip(data) {

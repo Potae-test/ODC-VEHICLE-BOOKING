@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { getBookings, getDrivers } from "../api";
+import { getBookings, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
-import { hasPermission } from "../permissions";
+import { hasPermission, normalizeRole } from "../permissions";
 
 const COUNTED_STATUSES = new Set(["APPROVED", "IN_USE", "COMPLETED"]);
 const TABLE_PAGE_SIZE = 5;
@@ -129,12 +129,12 @@ function driverKeyFromName(name) {
 function isCountedStatus(booking) {
   return (
     COUNTED_STATUSES.has(normalizeStatus(booking.status)) &&
-    normalizeDriverName(booking.driver_name)
+    normalizeDriverName(booking.assigned_user_name)
   );
 }
 
 function isSummaryStatus(booking) {
-  return Boolean(getStatusCategory(booking.status)) && normalizeDriverName(booking.driver_name);
+  return Boolean(getStatusCategory(booking.status)) && normalizeDriverName(booking.assigned_user_name);
 }
 
 function isInRange(booking, range) {
@@ -186,8 +186,12 @@ export default function DriverSummary() {
       setBookings(Array.isArray(bookingData) ? bookingData : []);
 
       try {
-        const driverData = await getDrivers();
-        setDrivers(Array.isArray(driverData) ? driverData : []);
+        const userData = await getUsers();
+        setDrivers(
+          Array.isArray(userData)
+            ? userData.filter((user) => normalizeRole(user.role) === "DRIVER")
+            : []
+        );
       } catch {
         setDrivers([]);
       }
@@ -219,13 +223,13 @@ export default function DriverSummary() {
 
     drivers.forEach((driver) => {
       const name = normalizeDriverName(driver.name);
-      const driverId = normalizeDriverId(driver.driver_id);
+      const driverId = normalizeDriverId(driver.user_id);
       if (!name) return;
 
       const key = driverId ? driverKeyFromId(driverId) : driverKeyFromName(name);
       options.set(key, {
         key,
-        driver_id: driverId,
+        user_id: driverId,
         name,
       });
     });
@@ -245,19 +249,19 @@ export default function DriverSummary() {
         driverByName.set(driver.name, driver.key);
       }
 
-      if (driver.driver_id) {
-        driverById.set(driver.driver_id, driver.key);
+      if (driver.user_id) {
+        driverById.set(driver.user_id, driver.key);
       }
     });
 
     const currentDriverBookings = bookings.filter((booking) => {
-      const name = normalizeDriverName(booking.driver_name);
+      const name = normalizeDriverName(booking.assigned_user_name);
       return isSummaryStatus(booking) && currentDriverNames.has(name);
     });
 
     function getBookingDriverKey(booking) {
-      const driverId = normalizeDriverId(booking.driver_id);
-      const name = normalizeDriverName(booking.driver_name);
+      const driverId = normalizeDriverId(booking.assigned_user_id);
+      const name = normalizeDriverName(booking.assigned_user_name);
       if (driverId && driverById.has(driverId)) return driverById.get(driverId);
       return driverByName.get(name);
     }
@@ -278,7 +282,7 @@ export default function DriverSummary() {
 
         return {
           key: driver.key,
-          driver_id: driver.driver_id,
+          user_id: driver.user_id,
           name: driver.name,
           todayCount: countByRange(driverBookings, todayRange),
           weekCount: countByRange(driverBookings, weekRange),

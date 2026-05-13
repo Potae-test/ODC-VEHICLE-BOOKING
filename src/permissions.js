@@ -2,7 +2,7 @@ export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
 
 export const PERMISSION_ITEMS = [
-  { id: "dashboard", label: "Dashboard", pages: ["admin"] },
+  { id: "admin_dashboard", label: "Admin Dashboard", pages: ["admin"] },
   { id: "booking-list", label: "รายการจองทั้งหมด", pages: ["booking"] },
   { id: "calendar", label: "ปฏิทิน", pages: ["calendar"] },
   { id: "booking-approval", label: "อนุมัติรายการจอง", pages: ["staff"] },
@@ -244,15 +244,22 @@ export function getAllowedPages(role, config = loadPermissionConfig()) {
   }
 
   const permissionIds = new Set(config[normalizedRole] || []);
-  return new Set(
+  const allowedPages = new Set(
     PERMISSION_ITEMS
       .filter((item) => permissionIds.has(item.id))
       .flatMap((item) => item.pages)
   );
+
+  if (normalizedRole === "STAFF" || normalizedRole === "DRIVER") {
+    allowedPages.add("driver-jobs");
+  }
+
+  return allowedPages;
 }
 
 export function canAccessPage(role, page, config = loadPermissionConfig()) {
   const normalizedRole = normalizeRole(role);
+  if (page === "admin" && normalizedRole !== "ADMIN") return false;
   if (!getAllowedPages(normalizedRole, config).has(page)) return false;
   if (normalizedRole === "ADMIN") return true;
 

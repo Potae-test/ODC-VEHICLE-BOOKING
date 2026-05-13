@@ -58,7 +58,7 @@ function getVehicleLabel(booking) {
 }
 
 function getDriverLabel(booking) {
-  return booking.driver_name || "-";
+  return booking.assigned_user_name || "-";
 }
 
 function CalendarEvent({ event }) {

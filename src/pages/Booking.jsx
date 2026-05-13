@@ -5,8 +5,8 @@ import {
   cancelBooking,
   createBooking,
   getBookings,
-  getDrivers,
   getVehicles,
+  getUsers,
   updateBooking,
 } from "../api";
 import { formatThaiDateTime } from "../utils/date";
@@ -128,9 +128,9 @@ function isVehicleAvailable(vehicle, currentBooking, allBookings) {
 function isDriverAvailable(driver, currentBooking, allBookings) {
   return !allBookings.some((booking) => {
     const isSameBooking = booking.booking_id === currentBooking.booking_id;
-    const isSameDriver = booking.driver_id
-      ? booking.driver_id === driver.driver_id
-      : booking.driver_name === driver.name;
+    const isSameDriver = booking.assigned_user_id
+      ? booking.assigned_user_id === driver.user_id
+      : booking.assigned_user_name === driver.name;
     const activeStatus = ["APPROVED", "IN_USE"].includes(normalizeStatus(booking.status));
 
     if (isSameBooking || !isSameDriver || !activeStatus) {
@@ -228,12 +228,16 @@ export default function Booking() {
       const [bookingData, vehicleData, driverData] = await Promise.all([
         getBookings(),
         getVehicles(),
-        getDrivers(),
+        getUsers(),
       ]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
-      setDrivers(Array.isArray(driverData) ? driverData : []);
+      setDrivers(
+        Array.isArray(driverData)
+          ? driverData.filter((user) => normalizeStatus(user.role) === "DRIVER")
+          : []
+      );
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
@@ -354,6 +358,7 @@ export default function Booking() {
           id="start_datetime"
           class="swal2-input"
           type="datetime-local"
+          lang="en-GB"
           value="${toDateTimeLocalValue(booking?.start_datetime || "")}"
         >
 
@@ -362,6 +367,7 @@ export default function Booking() {
           id="end_datetime"
           class="swal2-input"
           type="datetime-local"
+          lang="en-GB"
           value="${toDateTimeLocalValue(booking?.end_datetime || "")}"
         >
 
@@ -457,7 +463,6 @@ export default function Booking() {
           destination,
           purpose,
           vehicle_id: booking?.vehicle_id || "",
-          driver_name: booking?.driver_name || "",
         };
       },
     });
@@ -503,14 +508,14 @@ export default function Booking() {
               .join("")}
           </select>
 
-          <label>เลือกคนขับ</label>
-          <select id="driver_id" class="swal2-select">
-            <option value="">-- เลือกคนขับ --</option>
+          <label>เลือกผู้ใช้</label>
+          <select id="assigned_user_id" class="swal2-select">
+            <option value="">-- เลือกผู้ใช้ --</option>
             ${drivers
               .filter((driver) => normalizeStatus(driver.status) === "ACTIVE")
               .map((driver) => {
                 const available = isDriverAvailable(driver, booking, bookings);
-                return `<option value="${escapeHtml(driver.driver_id)}" ${
+                return `<option value="${escapeHtml(driver.user_id)}" ${
                   available ? "" : "disabled"
                 }>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
                   available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"
@@ -531,16 +536,16 @@ export default function Booking() {
       cancelButtonColor: "#64748b",
       preConfirm: () => {
         const vehicle_id = document.getElementById("vehicle_id").value;
-        const driver_id = document.getElementById("driver_id").value;
+        const assigned_user_id = document.getElementById("assigned_user_id").value;
         const staff_note = document.getElementById("staff_note").value.trim();
 
-        if (!vehicle_id || !driver_id) {
-          Swal.showValidationMessage("กรุณาเลือกรถและคนขับ");
+        if (!vehicle_id || !assigned_user_id) {
+          Swal.showValidationMessage("กรุณาเลือกรถและผู้ใช้");
           return false;
         }
 
         const vehicle = vehicles.find((item) => item.vehicle_id === vehicle_id);
-        const driver = drivers.find((item) => item.driver_id === driver_id);
+        const driver = drivers.find((item) => item.user_id === assigned_user_id);
 
         if (!vehicle || !isVehicleAvailable(vehicle, booking, bookings)) {
           Swal.showValidationMessage("รถคันนี้ไม่ว่างหรือไม่พร้อมใช้งาน");
@@ -554,9 +559,10 @@ export default function Booking() {
 
         return {
           booking_id: booking.booking_id,
+          booking_no: booking.booking_no || "",
           vehicle_id,
-          driver_id,
-          driver_name: driver.name,
+          assigned_user_id,
+          assigned_user_name: driver.name,
           staff_note,
         };
       },
@@ -683,6 +689,7 @@ export default function Booking() {
               <label>วันเวลาเริ่ม</label>
               <input
                 type="datetime-local"
+                lang="en-GB"
                 value={filters.start_datetime}
                 onChange={(e) => setFilter("start_datetime", e.target.value)}
               />
@@ -692,6 +699,7 @@ export default function Booking() {
               <label>วันเวลาสิ้นสุด</label>
               <input
                 type="datetime-local"
+                lang="en-GB"
                 value={filters.end_datetime}
                 onChange={(e) => setFilter("end_datetime", e.target.value)}
               />
@@ -774,7 +782,7 @@ export default function Booking() {
                             <td className="action-buttons">
                               {canShowProcess && (
                                 <button type="button" onClick={() => handleProcessBooking(booking)}>
-                                  ดำเนินการ
+                                  {status === "APPROVED" ? "เปลี่ยนแปลงคนขับ" : "ดำเนินการ"}
                                 </button>
                               )}
                               {canShowEdit && (
