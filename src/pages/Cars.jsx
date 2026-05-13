@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   createVehicle,
   deleteVehicle,
+  getBookings,
   getVehicles,
   updateVehicle,
 } from "../api";
@@ -10,19 +11,27 @@ import { showConfirm, showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
 
 function getStatusText(status) {
-  if (status === "AVAILABLE") return "พร้อมใช้งาน";
-  if (status === "IN_USE") return "กำลังใช้งาน";
-  if (status === "MAINTENANCE") return "ซ่อมบำรุง";
-  if (status === "INACTIVE") return "ปิดใช้งาน";
-  return status || "-";
+  const normalized = normalizeVehicleStatus(status);
+  if (normalized === "AVAILABLE") return "พร้อมใช้งาน";
+  if (normalized === "UNAVAILABLE") return "ไม่พร้อมใช้งาน";
+  if (normalized === "IN_USE") return "กำลังใช้งาน";
+  return normalized || "-";
 }
 
 function getStatusClass(status) {
-  if (status === "AVAILABLE") return "status green";
-  if (status === "IN_USE") return "status blue";
-  if (status === "MAINTENANCE") return "status amber";
-  if (status === "INACTIVE") return "status red";
+  const normalized = normalizeVehicleStatus(status);
+  if (normalized === "AVAILABLE") return "status green";
+  if (normalized === "UNAVAILABLE") return "status red";
+  if (normalized === "IN_USE") return "status blue";
   return "status";
+}
+
+function normalizeVehicleStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (normalized === "MAINTENANCE" || normalized === "INACTIVE") return "UNAVAILABLE";
+  if (normalized === "IN_USE") return "IN_USE";
+  if (normalized === "UNAVAILABLE") return "UNAVAILABLE";
+  return "AVAILABLE";
 }
 
 const initialForm = {
@@ -35,6 +44,7 @@ const initialForm = {
 
 export default function Cars() {
   const [vehicles, setVehicles] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(initialForm);
@@ -46,8 +56,9 @@ export default function Cars() {
   async function loadVehicles() {
     try {
       setLoading(true);
-      const data = await getVehicles();
-      setVehicles(data);
+      const [vehicleData, bookingData] = await Promise.all([getVehicles(), getBookings()]);
+      setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
+      setBookings(Array.isArray(bookingData) ? bookingData : []);
     } catch (err) {
       showError(err.message || "โหลดข้อมูลรถไม่สำเร็จ");
     } finally {
@@ -87,6 +98,11 @@ export default function Cars() {
   }
 
   async function handleEdit(car) {
+    if (normalizeVehicleStatus(car.effective_status || car.status) === "IN_USE") {
+      showError("รถกำลังใช้งาน ไม่สามารถแก้ไขหรือลบได้");
+      return;
+    }
+
     const result = await Swal.fire({
       title: "แก้ไขข้อมูลรถ",
       html: `
@@ -102,10 +118,8 @@ export default function Cars() {
 
           <label>สถานะ</label>
           <select id="status" class="swal2-select">
-            <option value="AVAILABLE" ${car.status === "AVAILABLE" ? "selected" : ""}>พร้อมใช้งาน</option>
-            <option value="IN_USE" ${car.status === "IN_USE" ? "selected" : ""}>กำลังใช้งาน</option>
-            <option value="MAINTENANCE" ${car.status === "MAINTENANCE" ? "selected" : ""}>ซ่อมบำรุง</option>
-            <option value="INACTIVE" ${car.status === "INACTIVE" ? "selected" : ""}>ปิดใช้งาน</option>
+            <option value="AVAILABLE" ${normalizeVehicleStatus(car.status) === "AVAILABLE" ? "selected" : ""}>พร้อมใช้งาน</option>
+            <option value="UNAVAILABLE" ${normalizeVehicleStatus(car.status) === "UNAVAILABLE" ? "selected" : ""}>ไม่พร้อมใช้งาน</option>
           </select>
 
           <label>คนขับประจำ</label>
@@ -153,6 +167,11 @@ export default function Cars() {
   }
 
   async function handleDelete(car) {
+    if (normalizeVehicleStatus(car.effective_status || car.status) === "IN_USE") {
+      showError("รถกำลังใช้งาน ไม่สามารถแก้ไขหรือลบได้");
+      return;
+    }
+
     const confirmed = await showConfirm(
       `ยืนยันลบรถ ${car.vehicle_code} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
     );
@@ -171,6 +190,21 @@ export default function Cars() {
   useEffect(() => {
     loadVehicles();
   }, []);
+
+  const displayVehicles = vehicles.map((vehicle) => {
+    const vehicleId = String(vehicle.vehicle_id || "").trim();
+    const hasActiveInUseBooking = bookings.some(
+      (booking) =>
+        String(booking.vehicle_id || "").trim() === vehicleId &&
+        String(booking.status || "").trim().toUpperCase() === "IN_USE"
+    );
+
+    return {
+      ...vehicle,
+      status: normalizeVehicleStatus(vehicle.status),
+      effective_status: hasActiveInUseBooking ? "IN_USE" : normalizeVehicleStatus(vehicle.status),
+    };
+  });
 
   return (
     <div>
@@ -232,9 +266,7 @@ export default function Cars() {
                 }
               >
                 <option value="AVAILABLE">พร้อมใช้งาน</option>
-                <option value="IN_USE">กำลังใช้งาน</option>
-                <option value="MAINTENANCE">ซ่อมบำรุง</option>
-                <option value="INACTIVE">ปิดใช้งาน</option>
+                <option value="UNAVAILABLE">ไม่พร้อมใช้งาน</option>
               </select>
             </div>
 
@@ -276,10 +308,10 @@ export default function Cars() {
               </thead>
 
               <tbody>
-                {vehicles.map((car) => (
+                {displayVehicles.map((car) => (
                   <tr
                     key={car.vehicle_id}
-                    className={car.status === "INACTIVE" ? "inactive-row" : ""}
+                    className={car.effective_status === "UNAVAILABLE" ? "inactive-row" : ""}
                   >
                     <td>
                       <b>{car.vehicle_code}</b>
@@ -287,12 +319,16 @@ export default function Cars() {
                     <td>{car.vehicle_type}</td>
                     <td>{car.plate_no}</td>
                     <td>
-                      <span className={getStatusClass(car.status)}>
-                        {getStatusText(car.status)}
+                      <span className={getStatusClass(car.effective_status)}>
+                        {getStatusText(car.effective_status)}
                       </span>
                     </td>
                     <td>{car.driver_name || "-"}</td>
                     <td className="action-buttons">
+                      {car.effective_status === "IN_USE" ? (
+                        <span className="muted-text">รถกำลังใช้งาน ไม่สามารถแก้ไขหรือลบได้</span>
+                      ) : (
+                        <>
                       {canEditVehicles && (
                         <button type="button" onClick={() => handleEdit(car)}>
                           แก้ไข
@@ -308,11 +344,13 @@ export default function Cars() {
                           ลบข้อมูล
                         </button>
                       )}
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
 
-                {vehicles.length === 0 && (
+                {displayVehicles.length === 0 && (
                   <tr>
                     <td colSpan="6">ยังไม่มีข้อมูลรถ</td>
                   </tr>

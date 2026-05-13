@@ -85,6 +85,7 @@ function getVehicles() {
     ...vehicle,
     vehicle_type: vehicle.vehicle_type || "",
     plate_no: vehicle.plate_no || "",
+    status: normalizeVehicleStatus(vehicle.status),
   }));
 
   return jsonOutput({
@@ -92,6 +93,14 @@ function getVehicles() {
     total: data.length,
     data: data
   });
+}
+
+function normalizeVehicleStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (normalized === "MAINTENANCE" || normalized === "INACTIVE") return "UNAVAILABLE";
+  if (normalized === "IN_USE") return "IN_USE";
+  if (normalized === "UNAVAILABLE") return "UNAVAILABLE";
+  return "AVAILABLE";
 }
 
 function createVehicle(data) {
@@ -111,7 +120,7 @@ function createVehicle(data) {
     data.vehicle_code || "",
     data.vehicle_type || "",
     data.plate_no || "",
-    data.status || "AVAILABLE",
+    normalizeVehicleStatus(data.status),
     data.driver_name || "-",
     data.next_booking || "-",
   ]);
@@ -121,7 +130,8 @@ function createVehicle(data) {
     message: "Create vehicle success",
     data: {
       vehicle_id: vehicleId,
-      ...data
+      ...data,
+      status: normalizeVehicleStatus(data.status)
     }
   });
 }
@@ -1288,7 +1298,7 @@ function updateVehicle(data) {
 
       headers.forEach((header, index) => {
         if (data[header] !== undefined && header !== "vehicle_id") {
-          sheet.getRange(row, index + 1).setValue(data[header]);
+          sheet.getRange(row, index + 1).setValue(header === "status" ? normalizeVehicleStatus(data[header]) : data[header]);
         }
       });
 

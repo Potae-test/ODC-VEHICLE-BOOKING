@@ -47,6 +47,14 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function normalizeVehicleStatus(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (normalized === "MAINTENANCE" || normalized === "INACTIVE") return "UNAVAILABLE";
+  if (normalized === "IN_USE") return "IN_USE";
+  if (normalized === "UNAVAILABLE") return "UNAVAILABLE";
+  return "AVAILABLE";
+}
+
 function getStatusMeta(status) {
   return STATUS_META[normalizeStatus(status)] || {
     label: status || "-",
@@ -103,7 +111,17 @@ function isTimeOverlap(startA, endA, startB, endB) {
 }
 
 function isVehicleAvailable(vehicle, currentBooking, allBookings) {
-  if (normalizeStatus(vehicle.status) !== "AVAILABLE") {
+  if (normalizeVehicleStatus(vehicle.status) !== "AVAILABLE") {
+    return false;
+  }
+
+  const vehicleInUse = allBookings.some((booking) => {
+    const isSameBooking = booking.booking_id === currentBooking.booking_id;
+    const isSameVehicle = booking.vehicle_id === vehicle.vehicle_id;
+    return !isSameBooking && isSameVehicle && normalizeStatus(booking.status) === "IN_USE";
+  });
+
+  if (vehicleInUse) {
     return false;
   }
 
@@ -519,12 +537,19 @@ export default function Booking() {
             ${vehicles
               .map((vehicle) => {
                 const available = isVehicleAvailable(vehicle, booking, bookings);
+                const vehicleStatus = normalizeVehicleStatus(vehicle.status);
+                const unavailableByStatus = vehicleStatus === "UNAVAILABLE";
                 const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
                   vehicle.license_plate || vehicle.plate_no || "-"
                 }`;
+                const availabilityLabel = unavailableByStatus
+                      ? " ⚠️ ไม่พร้อมใช้งาน"
+                      : available
+                        ? " ✅ ว่าง"
+                        : " ❌ ไม่ว่าง";
                 return `<option value="${escapeHtml(vehicle.vehicle_id)}" ${
                   available ? "" : "disabled"
-                }>${escapeHtml(label)}${available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"}</option>`;
+                }>${escapeHtml(label)}${availabilityLabel}</option>`;
               })
               .join("")}
           </select>
