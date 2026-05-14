@@ -115,7 +115,7 @@ function createVehicle(data) {
     sheet.getLastRow()
   );
 
-  sheet.appendRow([
+  appendSheetRow(sheet, [
     vehicleId,
     data.vehicle_code || "",
     data.vehicle_type || "",
@@ -154,22 +154,49 @@ function ensureColumn(sheet, headers, columnName) {
   return index;
 }
 
-function readSheetTable(sheet) {
+function buildColumnMap(headers) {
+  const columnMap = {};
+  headers.forEach((header, index) => {
+    columnMap[header] = index;
+  });
+  return columnMap;
+}
+
+function appendSheetRow(sheet, values) {
+  const nextRow = sheet.getLastRow() + 1;
+  sheet.getRange(nextRow, 1, 1, values.length).setValues([values]);
+  return nextRow;
+}
+
+function setRowValues(sheet, row, values) {
+  sheet.getRange(row, 1, 1, values.length).setValues([values]);
+}
+
+function readSheetTable(sheetOrName) {
+  const sheet = typeof sheetOrName === "string"
+    ? SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetOrName)
+    : sheetOrName;
+
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
 
   if (lastRow === 0 || lastColumn === 0) {
     return {
+      sheet,
       headers: [],
       rows: [],
+      columnMap: {},
     };
   }
 
   const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
+  const headers = values[0] || [];
 
   return {
-    headers: values[0] || [],
+    sheet,
+    headers,
     rows: lastRow > 1 ? values.slice(1) : [],
+    columnMap: buildColumnMap(headers),
   };
 }
 
@@ -233,25 +260,24 @@ function ensureBookingsSheet() {
   return sheet;
 }
 
-function findRowByBookingId(sheet, bookingId) {
+function findRowByBookingId(sheetOrTable, bookingId) {
   const targetBookingId = String(bookingId || "").trim();
   if (!targetBookingId) {
     return -1;
   }
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0] || [];
-  const bookingIdCol = headers.indexOf("booking_id");
+  const table = sheetOrTable && sheetOrTable.rows ? sheetOrTable : readSheetTable(sheetOrTable);
+  const bookingIdCol = table.columnMap.booking_id;
 
-  if (bookingIdCol === -1) {
+  if (bookingIdCol === undefined) {
     return -1;
   }
 
-  for (let i = 1; i < values.length; i++) {
-    const rowBookingId = String(bookingIdCol !== -1 ? values[i][bookingIdCol] : "").trim();
+  for (let i = 0; i < table.rows.length; i++) {
+    const rowBookingId = String(table.rows[i][bookingIdCol] || "").trim();
 
     if (targetBookingId && rowBookingId === targetBookingId) {
-      const row = i + 1;
+      const row = i + 2;
       if (row <= 1) {
         return -1;
       }
@@ -270,12 +296,11 @@ function logBookingAction(actionName, bookingId, row) {
   }));
 }
 
-function getNextBookingSequence(sheet, bookingIdCol) {
-  const values = sheet.getDataRange().getValues();
+function getNextBookingSequence(table, bookingIdCol) {
   let maxNumber = 0;
 
-  for (let i = 1; i < values.length; i++) {
-    const match = String(values[i][bookingIdCol] || "").trim().match(/^BK(\d+)$/);
+  for (let i = 0; i < table.rows.length; i++) {
+    const match = String(table.rows[i][bookingIdCol] || "").trim().match(/^BK(\d+)$/);
     if (match) {
       maxNumber = Math.max(maxNumber, Number(match[1]));
     }
@@ -396,7 +421,8 @@ function createBooking(data) {
     Logger.log("createBooking target sheet name: " + sheet.getName());
 
     const now = new Date();
-    const { headers } = readSheetTable(sheet);
+    const table = readSheetTable(sheet);
+    const { headers } = table;
 
     const bookingIdCol = ensureColumn(sheet, headers, "booking_id");
     const bookingNoCol = ensureColumn(sheet, headers, "booking_no");
@@ -416,7 +442,7 @@ function createBooking(data) {
     const createdAtCol = ensureColumn(sheet, headers, "created_at");
     const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
 
-    const bookingNumber = getNextBookingSequence(sheet, bookingIdCol);
+    const bookingNumber = getNextBookingSequence(table, bookingIdCol);
     const bookingId = "BK" + Utilities.formatString("%04d", bookingNumber);
     const bookingNo = "ODC-CAR-" + Utilities.formatString("%04d", bookingNumber);
     Logger.log("createBooking generated booking_id: " + bookingId);
@@ -441,8 +467,7 @@ function createBooking(data) {
     bookingRow[createdAtCol] = now;
     bookingRow[updatedAtCol] = now;
 
-    sheet.appendRow(bookingRow);
-    const row = sheet.getLastRow();
+    const row = appendSheetRow(sheet, bookingRow);
     Logger.log("createBooking final appended row: " + row);
 
     if (row <= 1) {
@@ -472,8 +497,9 @@ function createBooking(data) {
 
 function updateBooking(data) {
   const sheet = ensureBookingsSheet();
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0] || [];
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
 
   const editableFields = [
     "requester_name",
@@ -487,28 +513,30 @@ function updateBooking(data) {
     "assigned_user_id",
     "assigned_user_name",
   ];
-  const updatedAtCol = headers.indexOf("updated_at");
+  const updatedAtCol = columnMap.updated_at;
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  const row = findRowByBookingId(sheet, data.booking_id);
+  const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("updateBooking", data.booking_id, row);
   if (row <= 1) {
     return jsonOutput({ success: false, message: "Booking not found" });
   }
 
+  const rowValues = table.rows[row - 2].slice();
   editableFields.forEach((field) => {
-    const col = headers.indexOf(field);
-    if (col !== -1 && data[field] !== undefined) {
-      sheet.getRange(row, col + 1).setValue(data[field]);
+    const col = columnMap[field];
+    if (col !== undefined && data[field] !== undefined) {
+      rowValues[col] = data[field];
     }
   });
 
-  if (updatedAtCol !== -1) {
-    sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+  if (updatedAtCol !== undefined) {
+    rowValues[updatedAtCol] = new Date();
   }
+  setRowValues(sheet, row, rowValues);
 
   return jsonOutput({
     success: true,
@@ -521,19 +549,21 @@ function updateBooking(data) {
 function approveBooking(data) {
   const sheet = ensureBookingsSheet();
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const table = readSheetTable(sheet);
+  const values = [table.headers].concat(table.rows);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
 
-  const bookingIdCol = headers.indexOf("booking_id");
-  const bookingNoCol = headers.indexOf("booking_no");
-  const vehicleIdCol = headers.indexOf("vehicle_id");
+  const bookingIdCol = columnMap.booking_id;
+  const bookingNoCol = columnMap.booking_no;
+  const vehicleIdCol = columnMap.vehicle_id;
   const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
   const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
-  const statusCol = headers.indexOf("status");
-  const staffNoteCol = headers.indexOf("staff_note");
-  const updatedAtCol = headers.indexOf("updated_at");
-  const startCol = headers.indexOf("start_datetime");
-  const endCol = headers.indexOf("end_datetime");
+  const statusCol = columnMap.status;
+  const staffNoteCol = columnMap.staff_note;
+  const updatedAtCol = columnMap.updated_at;
+  const startCol = columnMap.start_datetime;
+  const endCol = columnMap.end_datetime;
 
   if (!data.booking_id) {
     return jsonOutput({
@@ -549,7 +579,7 @@ function approveBooking(data) {
     });
   }
 
-  const row = findRowByBookingId(sheet, data.booking_id);
+  const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("approveBooking", data.booking_id, row);
   if (row <= 1) {
     return jsonOutput({
@@ -567,7 +597,7 @@ function approveBooking(data) {
     end_datetime: values[currentRow][endCol]
   };
 
-  const availability = checkVehicleAvailability(currentBooking);
+  const availability = checkVehicleAvailability(currentBooking, table);
 
   if (!availability.available) {
     return jsonOutput({
@@ -577,12 +607,14 @@ function approveBooking(data) {
     });
   }
 
-  sheet.getRange(row, vehicleIdCol + 1).setValue(data.vehicle_id || "");
-  sheet.getRange(row, assignedUserIdCol + 1).setValue(data.assigned_user_id || data.driver_id || "");
-  sheet.getRange(row, assignedUserNameCol + 1).setValue(data.assigned_user_name || data.driver_name || "");
-  sheet.getRange(row, statusCol + 1).setValue("APPROVED");
-  sheet.getRange(row, staffNoteCol + 1).setValue(data.staff_note || "");
-  sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+  const rowValues = table.rows[row - 2].slice();
+  rowValues[vehicleIdCol] = data.vehicle_id || "";
+  rowValues[assignedUserIdCol] = data.assigned_user_id || data.driver_id || "";
+  rowValues[assignedUserNameCol] = data.assigned_user_name || data.driver_name || "";
+  rowValues[statusCol] = "APPROVED";
+  rowValues[staffNoteCol] = data.staff_note || "";
+  rowValues[updatedAtCol] = new Date();
+  setRowValues(sheet, row, rowValues);
 
   return jsonOutput({
     success: true,
@@ -601,18 +633,20 @@ function startTrip(data) {
   const bookingSheet = ensureBookingsSheet();
   const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
 
-  const values = bookingSheet.getDataRange().getValues();
-  const headers = values[0];
+  const table = readSheetTable(bookingSheet);
+  const values = [table.headers].concat(table.rows);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
 
-  const statusCol = headers.indexOf("status");
-  const vehicleIdCol = headers.indexOf("vehicle_id");
-  const updatedAtCol = headers.indexOf("updated_at");
+  const statusCol = columnMap.status;
+  const vehicleIdCol = columnMap.vehicle_id;
+  const updatedAtCol = columnMap.updated_at;
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  const row = findRowByBookingId(bookingSheet, data.booking_id);
+  const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("startTrip", data.booking_id, row);
   if (row <= 1) {
     return jsonOutput({ success: false, message: "Booking not found" });
@@ -623,11 +657,14 @@ function startTrip(data) {
   const now = new Date();
   const currentBooking = applyAssignedUserFallback(rowsToObjects(headers, [values[currentRow]])[0] || {}, userLookup);
 
-  bookingSheet.getRange(row, statusCol + 1).setValue("IN_USE");
-  bookingSheet.getRange(row, updatedAtCol + 1).setValue(now);
+  const bookingRowValues = table.rows[row - 2].slice();
+  bookingRowValues[statusCol] = "IN_USE";
+  bookingRowValues[updatedAtCol] = now;
+  setRowValues(bookingSheet, row, bookingRowValues);
 
   const logId = "LOG" + Utilities.formatString("%04d", logSheet.getLastRow());
-  const logHeaders = logSheet.getDataRange().getValues()[0] || [];
+  const logTable = readSheetTable(logSheet);
+  const logHeaders = logTable.headers;
   const logIdCol = ensureColumn(logSheet, logHeaders, "log_id");
   const logBookingIdCol = ensureColumn(logSheet, logHeaders, "booking_id");
   const logVehicleIdCol = ensureColumn(logSheet, logHeaders, "vehicle_id");
@@ -643,20 +680,20 @@ function startTrip(data) {
   const assignedUserId = currentBooking.assigned_user_id || data.assigned_user_id || "";
   const assignedUserName = currentBooking.assigned_user_name || data.assigned_user_name || "";
 
-  logSheet.appendRow(Array(logHeaders.length).fill(""));
-  const logRow = logSheet.getLastRow();
-  logSheet.getRange(logRow, logIdCol + 1).setValue(logId);
-  logSheet.getRange(logRow, logBookingIdCol + 1).setValue(data.booking_id);
-  logSheet.getRange(logRow, logVehicleIdCol + 1).setValue(values[currentRow][vehicleIdCol] || "");
-  logSheet.getRange(logRow, logAssignedUserIdCol + 1).setValue(assignedUserId);
-  logSheet.getRange(logRow, logAssignedUserNameCol + 1).setValue(assignedUserName);
-  logSheet.getRange(logRow, logOutTimeCol + 1).setValue(data.out_time || now);
-  logSheet.getRange(logRow, logOutMileageCol + 1).setValue(data.out_mileage || "");
-  logSheet.getRange(logRow, logInTimeCol + 1).setValue("");
-  logSheet.getRange(logRow, logInMileageCol + 1).setValue("");
-  logSheet.getRange(logRow, logRemarkCol + 1).setValue(data.remark || "");
-  logSheet.getRange(logRow, logCreatedAtCol + 1).setValue(now);
-  logSheet.getRange(logRow, logUpdatedAtCol + 1).setValue(now);
+  const logRowValues = Array(logHeaders.length).fill("");
+  logRowValues[logIdCol] = logId;
+  logRowValues[logBookingIdCol] = data.booking_id;
+  logRowValues[logVehicleIdCol] = values[currentRow][vehicleIdCol] || "";
+  logRowValues[logAssignedUserIdCol] = assignedUserId;
+  logRowValues[logAssignedUserNameCol] = assignedUserName;
+  logRowValues[logOutTimeCol] = data.out_time || now;
+  logRowValues[logOutMileageCol] = data.out_mileage || "";
+  logRowValues[logInTimeCol] = "";
+  logRowValues[logInMileageCol] = "";
+  logRowValues[logRemarkCol] = data.remark || "";
+  logRowValues[logCreatedAtCol] = now;
+  logRowValues[logUpdatedAtCol] = now;
+  appendSheetRow(logSheet, logRowValues);
 
   return jsonOutput({
     success: true,
@@ -673,43 +710,50 @@ function completeTrip(data) {
   const bookingSheet = ensureBookingsSheet();
   const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
 
-  const bookingValues = bookingSheet.getDataRange().getValues();
-  const bookingHeaders = bookingValues[0];
+  const bookingTable = readSheetTable(bookingSheet);
+  const bookingHeaders = bookingTable.headers;
+  const bookingColumnMap = bookingTable.columnMap;
 
-  const statusCol = bookingHeaders.indexOf("status");
-  const updatedAtCol = bookingHeaders.indexOf("updated_at");
+  const statusCol = bookingColumnMap.status;
+  const updatedAtCol = bookingColumnMap.updated_at;
 
-  const logValues = logSheet.getDataRange().getValues();
-  const logHeaders = logValues[0];
+  const logTable = readSheetTable(logSheet);
+  const logValues = [logTable.headers].concat(logTable.rows);
+  const logHeaders = logTable.headers;
+  const logColumnMap = logTable.columnMap;
 
-  const logBookingIdCol = logHeaders.indexOf("booking_id");
-  const inTimeCol = logHeaders.indexOf("in_time");
-  const inMileageCol = logHeaders.indexOf("in_mileage");
-  const remarkCol = logHeaders.indexOf("remark");
-  const logUpdatedAtCol = logHeaders.indexOf("updated_at");
+  const logBookingIdCol = logColumnMap.booking_id;
+  const inTimeCol = logColumnMap.in_time;
+  const inMileageCol = logColumnMap.in_mileage;
+  const remarkCol = logColumnMap.remark;
+  const logUpdatedAtCol = logColumnMap.updated_at;
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
   }
 
-  const bookingRow = findRowByBookingId(bookingSheet, data.booking_id);
+  const bookingRow = findRowByBookingId(bookingTable, data.booking_id);
   logBookingAction("completeTrip", data.booking_id, bookingRow);
   if (bookingRow <= 1) {
     return jsonOutput({ success: false, message: "Booking not found" });
   }
 
-  bookingSheet.getRange(bookingRow, statusCol + 1).setValue("COMPLETED");
-  bookingSheet.getRange(bookingRow, updatedAtCol + 1).setValue(new Date());
+  const bookingRowValues = bookingTable.rows[bookingRow - 2].slice();
+  bookingRowValues[statusCol] = "COMPLETED";
+  bookingRowValues[updatedAtCol] = new Date();
+  setRowValues(bookingSheet, bookingRow, bookingRowValues);
 
   for (let i = logValues.length - 1; i >= 1; i--) {
     if (logValues[i][logBookingIdCol] === data.booking_id) {
       const row = i + 1;
       const now = new Date();
 
-      logSheet.getRange(row, inTimeCol + 1).setValue(data.in_time || now);
-      logSheet.getRange(row, inMileageCol + 1).setValue(data.in_mileage || "");
-      logSheet.getRange(row, remarkCol + 1).setValue(data.remark || logValues[i][remarkCol] || "");
-      logSheet.getRange(row, logUpdatedAtCol + 1).setValue(now);
+      const logRowValues = logValues[i].slice();
+      logRowValues[inTimeCol] = data.in_time || now;
+      logRowValues[inMileageCol] = data.in_mileage || "";
+      logRowValues[remarkCol] = data.remark || logValues[i][remarkCol] || "";
+      logRowValues[logUpdatedAtCol] = now;
+      setRowValues(logSheet, row, logRowValues);
 
       return jsonOutput({
         success: true,
@@ -728,13 +772,15 @@ function completeTrip(data) {
 function driverCancelJob(data) {
   const sheet = ensureBookingsSheet();
 
-  const headers = sheet.getDataRange().getValues()[0];
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
 
-  const statusCol = headers.indexOf("status");
+  const statusCol = columnMap.status;
   const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
   const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
   const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
-  const updatedAtCol = headers.indexOf("updated_at");
+  const updatedAtCol = columnMap.updated_at;
 
   if (!data.booking_id) {
     return jsonOutput({
@@ -743,7 +789,7 @@ function driverCancelJob(data) {
     });
   }
 
-  const row = findRowByBookingId(sheet, data.booking_id);
+  const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("driverCancelJob", data.booking_id, row);
   if (row <= 1) {
     return jsonOutput({
@@ -774,25 +820,27 @@ function driverCancelJob(data) {
 function cancelBooking(data) {
   const sheet = ensureBookingsSheet();
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const table = readSheetTable(sheet);
+  const values = [table.headers].concat(table.rows);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
 
-  const bookingIdCol = headers.indexOf("booking_id");
-  const bookingNoCol = headers.indexOf("booking_no");
-  const requesterNameCol = headers.indexOf("requester_name");
-  const departmentCol = headers.indexOf("department");
-  const phoneCol = headers.indexOf("phone");
-  const startCol = headers.indexOf("start_datetime");
-  const endCol = headers.indexOf("end_datetime");
-  const destinationCol = headers.indexOf("destination");
-  const purposeCol = headers.indexOf("purpose");
-  const vehicleTypeRequestCol = headers.indexOf("vehicle_type_request");
-  const vehicleIdCol = headers.indexOf("vehicle_id");
+  const bookingIdCol = columnMap.booking_id;
+  const bookingNoCol = columnMap.booking_no;
+  const requesterNameCol = columnMap.requester_name;
+  const departmentCol = columnMap.department;
+  const phoneCol = columnMap.phone;
+  const startCol = columnMap.start_datetime;
+  const endCol = columnMap.end_datetime;
+  const destinationCol = columnMap.destination;
+  const purposeCol = columnMap.purpose;
+  const vehicleTypeRequestCol = columnMap.vehicle_type_request;
+  const vehicleIdCol = columnMap.vehicle_id;
   const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
   const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
-  const statusCol = headers.indexOf("status");
-  const staffNoteCol = headers.indexOf("staff_note");
-  const updatedAtCol = headers.indexOf("updated_at");
+  const statusCol = columnMap.status;
+  const staffNoteCol = columnMap.staff_note;
+  const updatedAtCol = columnMap.updated_at;
 
   if (!data.booking_id) {
     return jsonOutput({
@@ -801,7 +849,7 @@ function cancelBooking(data) {
     });
   }
 
-  const row = findRowByBookingId(sheet, data.booking_id);
+  const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("cancelBooking", data.booking_id, row);
   if (row <= 1) {
     return jsonOutput({
@@ -815,12 +863,14 @@ function cancelBooking(data) {
   const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
   const booking = values[row - 1];
 
-  sheet.getRange(row, statusCol + 1).setValue("CANCELLED");
-  sheet.getRange(row, staffNoteCol + 1).setValue(reason);
-  sheet.getRange(row, updatedAtCol + 1).setValue(now);
+  const rowValues = table.rows[row - 2].slice();
+  rowValues[statusCol] = "CANCELLED";
+  rowValues[staffNoteCol] = reason;
+  rowValues[updatedAtCol] = now;
+  setRowValues(sheet, row, rowValues);
 
   const historySheet = ensureCancellationHistorySheet();
-  const historyHeaders = historySheet.getDataRange().getValues()[0] || [];
+  const historyHeaders = readSheetTable(historySheet).headers;
   const historyId = "BCH" + Utilities.formatString("%04d", historySheet.getLastRow());
   const historyRow = Array(historyHeaders.length).fill("");
 
@@ -844,7 +894,7 @@ function cancelBooking(data) {
   setHistoryValue(historyHeaders, historyRow, "status", "CANCELLED");
   setHistoryValue(historyHeaders, historyRow, "updated_at", now);
 
-  historySheet.appendRow(historyRow);
+  appendSheetRow(historySheet, historyRow);
 
   return jsonOutput({
     success: true,
@@ -886,7 +936,7 @@ function ensureCancellationHistorySheet() {
 
   if (!sheet) {
     sheet = ss.insertSheet("BookingCancellations");
-    sheet.appendRow(headers);
+    appendSheetRow(sheet, headers);
     return sheet;
   }
 
@@ -895,7 +945,7 @@ function ensureCancellationHistorySheet() {
   ensureColumn(sheet, table.headers, "assigned_user_name");
 
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(headers);
+    appendSheetRow(sheet, headers);
   }
 
   return sheet;
@@ -1054,28 +1104,34 @@ function isTimeOverlap(startA, endA, startB, endB) {
   return aStart < bEnd && bStart < aEnd;
 }
 
-function checkVehicleAvailability(data) {
-  const sheet = SpreadsheetApp
-    .getActiveSpreadsheet()
-    .getSheetByName("Bookings");
+function checkVehicleAvailability(data, table) {
+  const bookingTable = table || readSheetTable("Bookings");
+  const rows = bookingTable.rows;
+  const columnMap = bookingTable.columnMap;
 
-  const { headers, rows } = readSheetTable(sheet);
-
-  const bookingIdCol = headers.indexOf("booking_id");
-  const vehicleIdCol = headers.indexOf("vehicle_id");
-  const startCol = headers.indexOf("start_datetime");
-  const endCol = headers.indexOf("end_datetime");
-  const statusCol = headers.indexOf("status");
-  const bookingNoCol = headers.indexOf("booking_no");
+  const bookingIdCol = columnMap.booking_id;
+  const vehicleIdCol = columnMap.vehicle_id;
+  const startCol = columnMap.start_datetime;
+  const endCol = columnMap.end_datetime;
+  const statusCol = columnMap.status;
+  const bookingNoCol = columnMap.booking_no;
+  const relevantRows = [];
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    const status = String(row[statusCol] || "").trim().toUpperCase();
+    const isSameVehicle = String(row[vehicleIdCol] || "").trim() === String(data.vehicle_id || "").trim();
 
-    const isSameBooking = row[bookingIdCol] === data.booking_id;
-    const isSameVehicle = row[vehicleIdCol] === data.vehicle_id;
-    const activeStatus = ["APPROVED", "IN_USE"].includes(row[statusCol]);
+    if (isSameVehicle && (status === "APPROVED" || status === "IN_USE")) {
+      relevantRows.push(row);
+    }
+  }
 
-    if (!isSameBooking && isSameVehicle && activeStatus) {
+  for (let i = 0; i < relevantRows.length; i++) {
+    const row = relevantRows[i];
+    const isSameBooking = String(row[bookingIdCol]) === String(data.booking_id);
+
+    if (!isSameBooking) {
       const overlap = isTimeOverlap(
         data.start_datetime,
         data.end_datetime,
@@ -1130,7 +1186,7 @@ function createDriver(data) {
 
   const driverId = "DR" + Utilities.formatString("%03d", rowNo);
 
-  sheet.appendRow([
+  appendSheetRow(sheet, [
     driverId,
     data.name || "",
     data.phone || "",
@@ -1157,21 +1213,23 @@ function updateDriverStatus(data) {
     .getActiveSpreadsheet()
     .getSheetByName("Drivers");
 
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+  const table = readSheetTable(sheet);
+  const columnMap = table.columnMap;
 
-  const driverIdCol = headers.indexOf("driver_id");
-  const statusCol = headers.indexOf("status");
-  const remarkCol = headers.indexOf("remark");
-  const updatedAtCol = headers.indexOf("updated_at");
+  const driverIdCol = columnMap.driver_id;
+  const statusCol = columnMap.status;
+  const remarkCol = columnMap.remark;
+  const updatedAtCol = columnMap.updated_at;
 
-  for (let i = 1; i < values.length; i++) {
-    if (values[i][driverIdCol] === data.driver_id) {
+  for (let i = 0; i < table.rows.length; i++) {
+    if (table.rows[i][driverIdCol] === data.driver_id) {
       const row = i + 2;
+      const rowValues = table.rows[i].slice();
+      rowValues[statusCol] = data.status;
+      rowValues[remarkCol] = data.remark || "";
+      rowValues[updatedAtCol] = new Date();
 
-      sheet.getRange(row, statusCol + 1).setValue(data.status);
-      sheet.getRange(row, remarkCol + 1).setValue(data.remark || "");
-      sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+      setRowValues(sheet, row, rowValues);
 
       return jsonOutput({
         success: true,
@@ -1224,7 +1282,7 @@ function createUser(data) {
     return "";
   });
 
-  sheet.appendRow(row);
+  appendSheetRow(sheet, row);
 
   return jsonOutput({
     success: true,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { getBookings, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
@@ -90,6 +90,16 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function getStatusLabel(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "PENDING") return "รออนุมัติ";
+  if (normalized === "APPROVED") return "อนุมัติแล้ว";
+  if (normalized === "IN_USE") return "กำลังใช้งาน";
+  if (normalized === "COMPLETED") return "เสร็จสิ้น";
+  if (normalized === "CANCELLED") return "ยกเลิก";
+  return normalized || "-";
+}
+
 function getStatusCategory(status) {
   const raw = String(status || "").trim();
   const normalized = raw.toUpperCase();
@@ -172,10 +182,37 @@ function countByCategory(bookings, category) {
   return bookings.filter((booking) => getStatusCategory(booking.status) === category).length;
 }
 
+const DriverSummaryTableRow = memo(function DriverSummaryTableRow({ row, onDetail }) {
+  return (
+    <tr>
+      <td>
+        <b>{row.name}</b>
+      </td>
+      <td>{row.todayCount}</td>
+      <td>{row.weekCount}</td>
+      <td>{row.monthCount}</td>
+      <td>
+        <b>{row.selectedCount}</b>
+      </td>
+      <td>
+        {row.latest
+          ? `${row.latest.booking_no || "-"} / ${formatThaiDateTime(row.latest.start_datetime)}`
+          : "-"}
+      </td>
+      <td>
+        <button type="button" className="small-button" onClick={() => onDetail(row.key)}>
+          รายละเอียด
+        </button>
+      </td>
+    </tr>
+  );
+});
+
 export default function DriverSummary() {
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [rangeMode, setRangeMode] = useState("today");
   const [customStart, setCustomStart] = useState(toDateInputValue(startOfMonth(new Date())));
@@ -185,34 +222,36 @@ export default function DriverSummary() {
   const [tablePage, setTablePage] = useState(1);
   const canViewDriverSummary = hasPermission(null, "driver_summary_view");
 
-  async function loadData() {
+  const loadData = useCallback(async (options = {}) => {
     try {
-      setLoading(true);
+      if (options.refreshOnly) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
-      const bookingData = await getBookings();
+      const [bookingData, userData] = await Promise.all([
+        getBookings(options.refreshOnly ? { fresh: true } : {}),
+        getUsers().catch(() => []),
+      ]);
       setBookings(Array.isArray(bookingData) ? bookingData : []);
-
-      try {
-        const userData = await getUsers();
-        setDrivers(
-          Array.isArray(userData)
-            ? userData.filter((user) => normalizeRole(user.role) === "DRIVER")
-            : []
-        );
-      } catch {
-        setDrivers([]);
-      }
+      setDrivers(
+        Array.isArray(userData)
+          ? userData.filter((user) => normalizeRole(user.role) === "DRIVER")
+          : []
+      );
     } catch (err) {
       setError(err.message || "โหลดข้อมูลสรุปงานคนขับไม่สำเร็จ");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     setTablePage(1);
@@ -262,11 +301,6 @@ export default function DriverSummary() {
       }
     });
 
-    const currentDriverBookings = bookings.filter((booking) => {
-      const name = normalizeDriverName(booking.assigned_user_name);
-      return isSummaryStatus(booking) && currentDriverNames.has(name);
-    });
-
     function getBookingDriverKey(booking) {
       const driverId = normalizeDriverId(booking.assigned_user_id);
       const name = normalizeDriverName(booking.assigned_user_name);
@@ -274,11 +308,21 @@ export default function DriverSummary() {
       return driverByName.get(name);
     }
 
+    const bookingsByDriverKey = new Map();
+
+    bookings.forEach((booking) => {
+      const name = normalizeDriverName(booking.assigned_user_name);
+      if (!isSummaryStatus(booking) || !currentDriverNames.has(name)) return;
+
+      const key = getBookingDriverKey(booking);
+      if (!key) return;
+      if (!bookingsByDriverKey.has(key)) bookingsByDriverKey.set(key, []);
+      bookingsByDriverKey.get(key).push(booking);
+    });
+
     return driverOptions
       .map((driver) => {
-        const allDriverBookings = currentDriverBookings.filter(
-          (booking) => getBookingDriverKey(booking) === driver.key
-        );
+        const allDriverBookings = bookingsByDriverKey.get(driver.key) || [];
         const summaryBookings = allDriverBookings.filter(isSummaryStatus);
         const selectedRangeBookings = summaryBookings.filter((booking) => isInRange(booking, selectedRange));
         const allDetailBookings = sortLatestFirst(summaryBookings);
@@ -306,15 +350,21 @@ export default function DriverSummary() {
       .sort((a, b) => b.selectedCount - a.selectedCount || a.name.localeCompare(b.name, "th"));
   }, [bookings, driverOptions, monthRange, selectedDriver, selectedRange, todayRange, weekRange]);
 
-  const detailRow = detailDriver
-    ? driverRows.find((row) => row.key === detailDriver)
-    : null;
+  const detailRow = useMemo(
+    () => (detailDriver ? driverRows.find((row) => row.key === detailDriver) : null),
+    [detailDriver, driverRows]
+  );
 
   const totalTablePages = Math.max(1, Math.ceil(driverRows.length / TABLE_PAGE_SIZE));
-  const paginatedDriverRows = driverRows.slice(
-    (tablePage - 1) * TABLE_PAGE_SIZE,
-    tablePage * TABLE_PAGE_SIZE
+  const paginatedDriverRows = useMemo(
+    () =>
+      driverRows.slice(
+        (tablePage - 1) * TABLE_PAGE_SIZE,
+        tablePage * TABLE_PAGE_SIZE
+      ),
+    [driverRows, tablePage]
   );
+  const handleOpenDetail = useCallback((driverKey) => setDetailDriver(driverKey), []);
 
   if (!canViewDriverSummary) {
     return <div className="form-card">ไม่มีสิทธิ์เข้าถึงสรุปงานคนขับ</div>;
@@ -328,7 +378,7 @@ export default function DriverSummary() {
           <p>นับจำนวนงานจากรายการจองที่อนุมัติแล้ว กำลังใช้งาน หรือเสร็จสิ้น</p>
         </div>
 
-        <button onClick={loadData}>รีเฟรชข้อมูล</button>
+        <button disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>รีเฟรชข้อมูล</button>
       </div>
 
       {!loading && !error && (
@@ -479,6 +529,8 @@ export default function DriverSummary() {
               </thead>
               <tbody>
                 {paginatedDriverRows.map((row) => (
+                  <DriverSummaryTableRow key={row.key} row={row} onDetail={handleOpenDetail} />
+                )) || paginatedDriverRows.map((row) => (
                   <tr key={row.key}>
                     <td>
                       <b>{row.name}</b>
@@ -566,12 +618,12 @@ export default function DriverSummary() {
               <table>
                 <thead>
                   <tr>
-                    <th>booking_no</th>
-                    <th>start_datetime</th>
-                    <th>destination</th>
-                    <th>purpose</th>
-                    <th>status</th>
-                    <th>vehicle_id</th>
+                    <th>เลขที่จอง</th>
+                    <th>วันที่เริ่มต้น</th>
+                    <th>ปลายทาง</th>
+                    <th>วัตถุประสงค์</th>
+                    <th>สถานะ</th>
+                    <th>รหัสยานพาหนะ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -583,7 +635,7 @@ export default function DriverSummary() {
                       <td>{booking.purpose || "-"}</td>
                       <td>
                         <span className={getStatusClass(booking.status)}>
-                          {normalizeStatus(booking.status)}
+                          {getStatusLabel(booking.status)}
                         </span>
                       </td>
                       <td>{booking.vehicle_id || "-"}</td>

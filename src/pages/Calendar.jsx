@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import Swal from "sweetalert2";
@@ -61,7 +61,7 @@ function getDriverLabel(booking) {
   return booking.assigned_user_name || "-";
 }
 
-function CalendarEvent({ event }) {
+const CalendarEvent = memo(function CalendarEvent({ event }) {
   const meta = getCalendarStatusMeta(event.resource.status);
 
   return (
@@ -70,19 +70,24 @@ function CalendarEvent({ event }) {
       <div className={`calendar-event-status ${meta.className}`}>{meta.label}</div>
     </div>
   );
-}
+});
 
 export default function CalendarPage() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  async function loadBookings() {
+  const loadBookings = useCallback(async (options = {}) => {
     try {
-      setLoading(true);
+      if (options.refreshOnly) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
-      const data = await getBookings();
+      const data = await getBookings(options.refreshOnly ? { fresh: true } : {});
       setBookings(Array.isArray(data) ? data : []);
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
@@ -90,12 +95,13 @@ export default function CalendarPage() {
       setBookings([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadBookings();
-  }, []);
+  }, [loadBookings]);
 
   const activeBookings = useMemo(
     () =>
@@ -124,7 +130,7 @@ export default function CalendarPage() {
     [activeBookings]
   );
 
-  const eventStyleGetter = (event) => {
+  const eventStyleGetter = useCallback((event) => {
     const meta = getCalendarStatusMeta(event.resource.status);
 
     return {
@@ -138,9 +144,9 @@ export default function CalendarPage() {
         lineHeight: "1.25",
       },
     };
-  };
+  }, []);
 
-  async function handleSelectEvent(event) {
+  const handleSelectEvent = useCallback(async (event) => {
     const booking = event.resource;
     const meta = getCalendarStatusMeta(booking.status);
 
@@ -164,7 +170,7 @@ export default function CalendarPage() {
       width: 560,
       buttonsStyling: true,
     });
-  }
+  }, []);
 
   return (
     <div>
@@ -174,7 +180,7 @@ export default function CalendarPage() {
           <p>แสดงเฉพาะรายการจองที่กำลังใช้งานและรายการที่ติดจองอยู่</p>
         </div>
 
-        <button type="button" onClick={loadBookings}>
+        <button type="button" disabled={refreshing || loading} onClick={() => loadBookings({ refreshOnly: true })}>
           รีเฟรชข้อมูล
         </button>
       </div>

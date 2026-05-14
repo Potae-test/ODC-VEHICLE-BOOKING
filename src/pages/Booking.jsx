@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import {
   approveBooking,
@@ -110,27 +110,76 @@ function isTimeOverlap(startA, endA, startB, endB) {
   return aStart < bEnd && bStart < aEnd;
 }
 
-function isVehicleAvailable(vehicle, currentBooking, allBookings) {
+function groupActiveBookings(bookings) {
+  const byVehicleId = new Map();
+  const byAssignedUserId = new Map();
+  const byAssignedUserName = new Map();
+  const inUseVehicleIds = new Set();
+  const overlapCandidates = [];
+
+  bookings.forEach((booking) => {
+    const status = normalizeStatus(booking.status);
+
+    if (status === "COMPLETED" || status === "CANCELLED") {
+      return;
+    }
+
+    if (status !== "IN_USE") {
+      overlapCandidates.push(booking);
+    }
+
+    if (status !== "APPROVED" && status !== "IN_USE") {
+      return;
+    }
+
+    const vehicleId = String(booking.vehicle_id || "").trim();
+    if (vehicleId) {
+      if (!byVehicleId.has(vehicleId)) byVehicleId.set(vehicleId, []);
+      byVehicleId.get(vehicleId).push(booking);
+      if (status === "IN_USE") inUseVehicleIds.add(vehicleId);
+    }
+
+    const assignedUserId = String(booking.assigned_user_id || "").trim();
+    const assignedUserName = String(booking.assigned_user_name || booking.driver_name || "").trim();
+
+    if (assignedUserId) {
+      if (!byAssignedUserId.has(assignedUserId)) byAssignedUserId.set(assignedUserId, []);
+      byAssignedUserId.get(assignedUserId).push(booking);
+    } else if (assignedUserName) {
+      if (!byAssignedUserName.has(assignedUserName)) byAssignedUserName.set(assignedUserName, []);
+      byAssignedUserName.get(assignedUserName).push(booking);
+    }
+  });
+
+  return {
+    byVehicleId,
+    byAssignedUserId,
+    byAssignedUserName,
+    inUseVehicleIds,
+    overlapCandidates,
+  };
+}
+
+function isVehicleAvailable(vehicle, currentBooking, bookingGroups) {
   if (normalizeVehicleStatus(vehicle.status) !== "AVAILABLE") {
     return false;
   }
 
-  const vehicleInUse = allBookings.some((booking) => {
-    const isSameBooking = booking.booking_id === currentBooking.booking_id;
-    const isSameVehicle = booking.vehicle_id === vehicle.vehicle_id;
-    return !isSameBooking && isSameVehicle && normalizeStatus(booking.status) === "IN_USE";
-  });
+  const vehicleId = String(vehicle.vehicle_id || "").trim();
+  const relevantBookings = bookingGroups.byVehicleId.get(vehicleId) || [];
+  const vehicleInUse = bookingGroups.inUseVehicleIds.has(vehicleId);
 
-  if (vehicleInUse) {
+  if (
+    vehicleInUse &&
+    relevantBookings.some((booking) => String(booking.booking_id) !== String(currentBooking.booking_id))
+  ) {
     return false;
   }
 
-  return !allBookings.some((booking) => {
+  return !relevantBookings.some((booking) => {
     const isSameBooking = booking.booking_id === currentBooking.booking_id;
-    const isSameVehicle = booking.vehicle_id === vehicle.vehicle_id;
-    const activeStatus = ["APPROVED", "IN_USE"].includes(normalizeStatus(booking.status));
 
-    if (isSameBooking || !isSameVehicle || !activeStatus) {
+    if (isSameBooking) {
       return false;
     }
 
@@ -143,15 +192,18 @@ function isVehicleAvailable(vehicle, currentBooking, allBookings) {
   });
 }
 
-function isDriverAvailable(driver, currentBooking, allBookings) {
-  return !allBookings.some((booking) => {
-    const isSameBooking = booking.booking_id === currentBooking.booking_id;
-    const isSameDriver = booking.assigned_user_id
-      ? booking.assigned_user_id === driver.user_id
-      : booking.assigned_user_name === driver.name;
-    const activeStatus = ["APPROVED", "IN_USE"].includes(normalizeStatus(booking.status));
+function isDriverAvailable(driver, currentBooking, bookingGroups) {
+  const driverId = String(driver.user_id || "").trim();
+  const driverName = String(driver.name || "").trim();
+  const relevantBookings = [
+    ...(driverId ? bookingGroups.byAssignedUserId.get(driverId) || [] : []),
+    ...(driverName ? bookingGroups.byAssignedUserName.get(driverName) || [] : []),
+  ];
 
-    if (isSameBooking || !isSameDriver || !activeStatus) {
+  return !relevantBookings.some((booking) => {
+    const isSameBooking = booking.booking_id === currentBooking.booking_id;
+
+    if (isSameBooking) {
       return false;
     }
 
@@ -175,10 +227,6 @@ function getOverlapBookings(bookings, currentBookingId, startDatetime, endDateti
 
   return bookings.filter((booking) => {
     if (currentBookingId && String(booking.booking_id) === String(currentBookingId)) {
-      return false;
-    }
-
-    if (["IN_USE", "COMPLETED", "CANCELLED"].includes(normalizeStatus(booking.status))) {
       return false;
     }
 
@@ -212,6 +260,17 @@ function totalPages(items) {
   return Math.max(1, Math.ceil(items.length / ROWS_PER_PAGE));
 }
 
+function useDebouncedValue(value, delay = 250) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 function Pagination({ page, total, onChange }) {
   return (
     <div className="pagination">
@@ -229,13 +288,86 @@ function Pagination({ page, total, onChange }) {
   );
 }
 
+const BookingTableRow = memo(function BookingTableRow({
+  booking,
+  vehicleMap,
+  canProcessBookings,
+  canCancelBookings,
+  canEditBookings,
+  processing,
+  onProcess,
+  onEdit,
+  onCancel,
+}) {
+  const status = normalizeStatus(booking.status);
+  const statusMeta = getStatusMeta(status);
+  const disabled = Boolean(processing);
+  const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status);
+  const canShowEdit = canEditBookings && isEditableBookingStatus(status);
+  const canShowCancel =
+    canCancelBookings && !["COMPLETED", "CANCELLED", "APPROVED", "IN_USE"].includes(status);
+
+  return (
+    <tr>
+      <td>{booking.booking_no || "-"}</td>
+      <td>{booking.requester_name || "-"}</td>
+      <td>{formatThaiDateTime(booking.start_datetime)}</td>
+      <td>{formatThaiDateTime(booking.end_datetime)}</td>
+      <td>{booking.destination || "-"}</td>
+      <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
+      <td>{getBookingDriverLabel(booking)}</td>
+      <td>
+        <span className={`status ${statusMeta.className}`} title={statusMeta.help}>
+          {statusMeta.label}
+        </span>
+      </td>
+      <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 14 }}>
+        {booking.staff_note || "-"}
+      </td>
+      <td className="action-buttons">
+        {canShowProcess && (
+          <button type="button" disabled={disabled} onClick={() => onProcess(booking)}>
+            {processing === "process"
+              ? "Processing..."
+              : status === "APPROVED"
+                ? "เปลี่ยนแปลงคนขับ"
+                : "ดำเนินการ"}
+          </button>
+        )}
+        {canShowEdit && (
+          <button
+            type="button"
+            className="warning-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onEdit(booking)}
+          >
+            {processing === "edit" ? "Saving..." : "แก้ไข"}
+          </button>
+        )}
+        {canShowCancel && (
+          <button
+            type="button"
+            className="danger-button"
+            disabled={disabled}
+            onClick={() => onCancel(booking)}
+          >
+            {processing === "cancel" ? "Cancelling..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+});
+
 export default function Booking() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [processingAction, setProcessingAction] = useState(null);
   const [filters, setFilters] = useState({
     requester: "",
     start_datetime: "",
@@ -243,6 +375,7 @@ export default function Booking() {
     destination: "",
     status: "",
   });
+  const debouncedFilters = useDebouncedValue(filters);
 
   const canCreateBookings = hasPermission(null, "bookings_create");
   const canViewBookings = hasPermission(null, "bookings_view");
@@ -251,7 +384,28 @@ export default function Booking() {
   const canEditBookings = hasPermission(null, "bookings_edit");
   const currentUser = getCurrentUser();
 
-  async function loadData() {
+  const mergeBooking = useCallback((nextBooking) => {
+    if (!nextBooking?.booking_id) return;
+
+    setBookings((current) => {
+      const index = current.findIndex(
+        (booking) => String(booking.booking_id) === String(nextBooking.booking_id)
+      );
+
+      if (index === -1) {
+        return [nextBooking, ...current];
+      }
+
+      const next = [...current];
+      next[index] = {
+        ...next[index],
+        ...nextBooking,
+      };
+      return next;
+    });
+  }, []);
+
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -276,26 +430,29 @@ export default function Booking() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function refreshBookings() {
+  const refreshBookings = useCallback(async () => {
     try {
-      const bookingData = await getBookings();
+      setRefreshing(true);
+      const bookingData = await getBookings({ fresh: true });
       setBookings(Array.isArray(bookingData) ? bookingData : []);
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
       showError(message);
+    } finally {
+      setRefreshing(false);
     }
-  }
-
-  useEffect(() => {
-    loadData();
   }, []);
 
   useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
     setPage(1);
-  }, [filters]);
+  }, [debouncedFilters]);
 
   const vehicleTypes = useMemo(
     () => [...new Set(vehicles.map((vehicle) => vehicle.vehicle_type).filter(Boolean))],
@@ -310,14 +467,23 @@ export default function Booking() {
     return map;
   }, [vehicles]);
 
-  const filteredBookings = useMemo(() => {
-    const requester = filters.requester.trim().toLowerCase();
-    const destination = filters.destination.trim().toLowerCase();
-    const status = normalizeStatus(filters.status);
-    const startFilter = filters.start_datetime ? new Date(filters.start_datetime).getTime() : null;
-    const endFilter = filters.end_datetime ? new Date(filters.end_datetime).getTime() : null;
+  const bookingGroups = useMemo(() => groupActiveBookings(bookings), [bookings]);
 
-    return sortLatestFirst(bookings).filter((booking) => {
+  const activeDrivers = useMemo(
+    () => drivers.filter((driver) => normalizeStatus(driver.status) === "ACTIVE"),
+    [drivers]
+  );
+
+  const sortedBookings = useMemo(() => sortLatestFirst(bookings), [bookings]);
+
+  const filteredBookings = useMemo(() => {
+    const requester = debouncedFilters.requester.trim().toLowerCase();
+    const destination = debouncedFilters.destination.trim().toLowerCase();
+    const status = normalizeStatus(debouncedFilters.status);
+    const startFilter = debouncedFilters.start_datetime ? new Date(debouncedFilters.start_datetime).getTime() : null;
+    const endFilter = debouncedFilters.end_datetime ? new Date(debouncedFilters.end_datetime).getTime() : null;
+
+    return sortedBookings.filter((booking) => {
       const bookingStatus = normalizeStatus(booking.status);
 
         if (bookingStatus === "CANCELLED") {
@@ -337,10 +503,10 @@ export default function Booking() {
   
       return true;
     });
-  }, [bookings, filters]);
+  }, [debouncedFilters, sortedBookings]);
 
-  const bookingPages = totalPages(filteredBookings);
-  const pageItems = paginate(filteredBookings, page);
+  const bookingPages = useMemo(() => totalPages(filteredBookings), [filteredBookings]);
+  const pageItems = useMemo(() => paginate(filteredBookings, page), [filteredBookings, page]);
 
   useEffect(() => {
     if (page > bookingPages) {
@@ -348,7 +514,7 @@ export default function Booking() {
     }
   }, [page, bookingPages]);
 
-  function getBookingModalHtml(booking) {
+  const getBookingModalHtml = useCallback((booking) => {
     const vehicleTypeOptions = [
       '<option value="">-- เลือกประเภทรถ --</option>',
       ...vehicleTypes.map(
@@ -432,9 +598,9 @@ export default function Booking() {
         >
       </div>
     `;
-  }
+  }, [vehicleTypes]);
 
-  async function openBookingModal(booking = null) {
+  const openBookingModal = useCallback(async (booking = null) => {
     const result = await Swal.fire({
       title: booking ? "แก้ไขรายการจอง" : "Book Vehicle",
       html: getBookingModalHtml(booking),
@@ -456,7 +622,7 @@ export default function Booking() {
 
         const updateWarning = () => {
           const overlaps = getOverlapBookings(
-            bookings,
+            bookingGroups.overlapCandidates,
             booking?.booking_id || "",
             startInput.value,
             endInput.value
@@ -510,23 +676,28 @@ export default function Booking() {
 
     try {
       if (booking) {
-        await updateBooking(result.value);
+        const updated = await updateBooking(result.value);
+        mergeBooking({ ...result.value, ...(updated || {}) });
         await showSuccess("แก้ไขรายการสำเร็จ");
       } else {
-        await createBooking(result.value);
+        const created = await createBooking(result.value);
+        mergeBooking({ ...result.value, ...(created || {}) });
         await showSuccess("ส่งคำขอจองรถสำเร็จ");
       }
-      await refreshBookings();
     } catch (err) {
       showError(err.message || (booking ? "แก้ไขรายการไม่สำเร็จ" : "จองรถไม่สำเร็จ"));
     }
-  }
+  }, [bookingGroups.overlapCandidates, getBookingModalHtml, mergeBooking]);
 
-  async function handleCreateBooking() {
+  const handleCreateBooking = useCallback(async () => {
+    if (processingAction) return;
+    setProcessingAction({ bookingId: "new", type: "create" });
     await openBookingModal();
-  }
+    setProcessingAction(null);
+  }, [openBookingModal, processingAction]);
 
-  async function handleProcessBooking(booking) {
+  const handleProcessBooking = useCallback(async (booking) => {
+    if (processingAction) return;
     const result = await Swal.fire({
       title: "ดำเนินการจอง",
       html: `
@@ -536,7 +707,7 @@ export default function Booking() {
             <option value="">-- เลือกรถ --</option>
             ${vehicles
               .map((vehicle) => {
-                const available = isVehicleAvailable(vehicle, booking, bookings);
+                const available = isVehicleAvailable(vehicle, booking, bookingGroups);
                 const vehicleStatus = normalizeVehicleStatus(vehicle.status);
                 const unavailableByStatus = vehicleStatus === "UNAVAILABLE";
                 const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
@@ -557,10 +728,9 @@ export default function Booking() {
           <label>เลือกผู้ใช้</label>
           <select id="assigned_user_id" class="swal2-select">
             <option value="">-- เลือกผู้ใช้ --</option>
-            ${drivers
-              .filter((driver) => normalizeStatus(driver.status) === "ACTIVE")
+            ${activeDrivers
               .map((driver) => {
-                const available = isDriverAvailable(driver, booking, bookings);
+                const available = isDriverAvailable(driver, booking, bookingGroups);
                 return `<option value="${escapeHtml(driver.user_id)}" ${
                   available ? "" : "disabled"
                 }>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
@@ -593,12 +763,12 @@ export default function Booking() {
         const vehicle = vehicles.find((item) => item.vehicle_id === vehicle_id);
         const driver = drivers.find((item) => item.user_id === assigned_user_id);
 
-        if (!vehicle || !isVehicleAvailable(vehicle, booking, bookings)) {
+        if (!vehicle || !isVehicleAvailable(vehicle, booking, bookingGroups)) {
           Swal.showValidationMessage("รถคันนี้ไม่ว่างหรือไม่พร้อมใช้งาน");
           return false;
         }
 
-        if (!driver || !isDriverAvailable(driver, booking, bookings)) {
+        if (!driver || !isDriverAvailable(driver, booking, bookingGroups)) {
           Swal.showValidationMessage("คนขับท่านนี้ไม่ว่าง");
           return false;
         }
@@ -617,19 +787,26 @@ export default function Booking() {
     if (!result.isConfirmed) return;
 
     try {
-      await approveBooking(result.value);
+      setProcessingAction({ bookingId: booking.booking_id, type: "process" });
+      const approved = await approveBooking(result.value);
+      mergeBooking({ ...result.value, ...(approved || {}), status: "APPROVED" });
       await showSuccess("อนุมัติรายการสำเร็จ");
-      await refreshBookings();
     } catch (err) {
       showError(err.message || "อนุมัติรายการไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
     }
-  }
+  }, [activeDrivers, bookingGroups, drivers, mergeBooking, processingAction, vehicles]);
 
-  async function handleEditBooking(booking) {
+  const handleEditBooking = useCallback(async (booking) => {
+    if (processingAction) return;
+    setProcessingAction({ bookingId: booking.booking_id, type: "edit" });
     await openBookingModal(booking);
-  }
+    setProcessingAction(null);
+  }, [openBookingModal, processingAction]);
 
-  async function handleCancelBooking(booking) {
+  const handleCancelBooking = useCallback(async (booking) => {
+    if (processingAction) return;
     const result = await Swal.fire({
       title: normalizeStatus(booking.status) === "PENDING" ? "Cancel Booking" : "Delete Booking",
       html: `
@@ -659,27 +836,35 @@ export default function Booking() {
     if (!result.isConfirmed) return;
 
     try {
-      await cancelBooking({
+      setProcessingAction({ bookingId: booking.booking_id, type: "cancel" });
+      const cancelled = await cancelBooking({
         booking_id: booking.booking_id,
         reason: result.value,
         cancelled_by: currentUser?.name || currentUser?.email || "",
       });
+      mergeBooking({
+        ...(cancelled || {}),
+        booking_id: booking.booking_id,
+        status: "CANCELLED",
+        staff_note: result.value,
+      });
 
       await showSuccess("ยกเลิกรายการสำเร็จ");
-      await refreshBookings();
     } catch (err) {
       showError(err.message || "ยกเลิกรายการไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
     }
-  }
+  }, [currentUser?.email, currentUser?.name, mergeBooking, processingAction]);
 
-  function setFilter(field, value) {
+  const setFilter = useCallback((field, value) => {
     setFilters((current) => ({
       ...current,
       [field]: value,
     }));
-  }
+  }, []);
 
-  function clearFilters() {
+  const clearFilters = useCallback(() => {
     setFilters({
       requester: "",
       start_datetime: "",
@@ -687,7 +872,7 @@ export default function Booking() {
       destination: "",
       status: "",
     });
-  }
+  }, []);
 
   return (
     <div>
@@ -698,8 +883,13 @@ export default function Booking() {
         </div>
 
         {canCreateBookings && (
-          <button type="button" onClick={handleCreateBooking}>
+          <button type="button" disabled={Boolean(processingAction)} onClick={handleCreateBooking}>
               ➕ เพิ่มรายการจองใหม่
+          </button>
+        )}
+        {canViewBookings && (
+          <button type="button" disabled={refreshing || loading} onClick={refreshBookings}>
+            {refreshing ? "Refreshing..." : "Refresh"}
           </button>
         )}
       </div>
@@ -716,6 +906,7 @@ export default function Booking() {
               <button
                 type="button"
                 className="warning-button booking-filter-clear-button"
+                disabled={refreshing}
                 onClick={clearFilters}
               >
                 ล้างตัวกรอง
@@ -799,7 +990,25 @@ export default function Booking() {
                         <td colSpan="10">ไม่พบรายการจอง</td>
                       </tr>
                     ) : (
-                      pageItems.map((booking) => {
+                      pageItems.map((booking) => (
+                        <BookingTableRow
+                          key={booking.booking_id}
+                          booking={booking}
+                          vehicleMap={vehicleMap}
+                          canProcessBookings={canProcessBookings}
+                          canCancelBookings={canCancelBookings}
+                          canEditBookings={canEditBookings}
+                          processing={
+                            processingAction?.bookingId === booking.booking_id
+                              ? processingAction.type
+                              : ""
+                          }
+                          onProcess={handleProcessBooking}
+                          onEdit={handleEditBooking}
+                          onCancel={handleCancelBooking}
+                        />
+                      ))
+                      /* legacy inline row kept unreachable for minimal diff */ || pageItems.map((booking) => {
                         const statusMeta = getStatusMeta(booking.status);
                         const status = normalizeStatus(booking.status);
                         const canShowProcess =

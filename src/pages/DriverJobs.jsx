@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import { completeTrip, driverCancelJob, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
 import { formatThaiDateTime } from "../utils/date";
@@ -23,9 +23,8 @@ function getDateKey(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function isToday(value) {
-  const today = new Date().toISOString().slice(0, 10);
-  return getDateKey(value) === today;
+function isToday(value, todayKey) {
+  return getDateKey(value) === todayKey;
 }
 
 function sortByStart(items) {
@@ -109,6 +108,59 @@ function matchesCurrentUser(booking, currentUser) {
   return Boolean(currentUserName) && bookingIdentity.driver_name === currentUserName;
 }
 
+function groupBookingsByAssignee(bookings) {
+  const byAssignedUserId = new Map();
+  const byAssignedUserName = new Map();
+  const all = [];
+
+  bookings.forEach((booking) => {
+    if (normalizeStatus(booking.status) === "CANCELLED") return;
+
+    all.push(booking);
+
+    const identity = getBookingIdentity(booking);
+    if (identity.assigned_user_id) {
+      if (!byAssignedUserId.has(identity.assigned_user_id)) {
+        byAssignedUserId.set(identity.assigned_user_id, []);
+      }
+      byAssignedUserId.get(identity.assigned_user_id).push(booking);
+      return;
+    }
+
+    const name = identity.assigned_user_name || identity.driver_name;
+    if (name) {
+      if (!byAssignedUserName.has(name)) byAssignedUserName.set(name, []);
+      byAssignedUserName.get(name).push(booking);
+    }
+  });
+
+  return { all, byAssignedUserId, byAssignedUserName };
+}
+
+function getCurrentUserBookings(groupedBookings, currentUser, currentRole) {
+  if (currentRole === "ADMIN" || currentRole === "STAFF") {
+    return groupedBookings.all;
+  }
+
+  const currentUserId = String(currentUser?.user_id || "").trim();
+  const currentUserName = String(currentUser?.name || "").trim();
+  const byId = currentUserId ? groupedBookings.byAssignedUserId.get(currentUserId) || [] : [];
+  const byName = currentUserName ? groupedBookings.byAssignedUserName.get(currentUserName) || [] : [];
+
+  return [...byId, ...byName];
+}
+
+function useDebouncedValue(value, delay = 250) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedValue(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 function getStatusLabel(status) {
   const normalized = normalizeStatus(status);
 
@@ -131,7 +183,7 @@ function getStatusMeta(status) {
   return { label: getStatusLabel(status), className: "gray" };
 }
 
-function JobCard({
+const JobCard = memo(function JobCard({
   booking,
   vehicleMap,
   onStart,
@@ -141,8 +193,14 @@ function JobCard({
   canStart,
   canComplete,
   current,
+  processing,
 }) {
-  const statusMeta = getStatusMeta(booking.status);
+  const status = normalizeStatus(booking.status);
+  const statusMeta = getStatusMeta(status);
+  const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
+  const startLabel = formatThaiDateTime(booking.start_datetime);
+  const endLabel = formatThaiDateTime(booking.end_datetime);
+  const disabled = Boolean(processing);
 
   return (
     <div className={`driver-job-card ${current ? "current" : ""}`}>
@@ -157,55 +215,58 @@ function JobCard({
       <div className="driver-job-grid">
         <div>
           <label>เวลาเริ่ม</label>
-          <b title={formatThaiDateTime(booking.start_datetime)}>{formatThaiDateTime(booking.start_datetime)}</b>
+          <b title={startLabel}>{startLabel}</b>
         </div>
         <div>
           <label>เวลาสิ้นสุด</label>
-          <b title={formatThaiDateTime(booking.end_datetime)}>{formatThaiDateTime(booking.end_datetime)}</b>
+          <b title={endLabel}>{endLabel}</b>
         </div>
         <div>
           <label>รถ / ป้ายทะเบียน</label>
-          <b title={formatVehicleLabel(booking, vehicleMap)}>{formatVehicleLabel(booking, vehicleMap)}</b>
+          <b title={vehicleLabel}>{vehicleLabel}</b>
         </div>
         <div>
           <label>สถานะ</label>
-          <b title={getStatusLabel(booking.status)}>{getStatusLabel(booking.status)}</b>
+          <b title={getStatusLabel(status)}>{getStatusLabel(status)}</b>
         </div>
       </div>
 
       <div className="driver-job-actions">
-        <button type="button" className="driver-job-detail-button" onClick={() => onShowDetails(booking)}>
+        <button type="button" className="driver-job-detail-button" disabled={disabled} onClick={() => onShowDetails(booking)}>
           ดูรายละเอียด
         </button>
 
-        {normalizeStatus(booking.status) === "APPROVED" && onCancelJob && (
-          <button type="button" className="warning-button" onClick={() => onCancelJob(booking)}>
+        {status === "APPROVED" && onCancelJob && (
+          <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
             ยกเลิกงาน
           </button>
         )}
 
-        {canStart && normalizeStatus(booking.status) === "APPROVED" && (
-          <button type="button" onClick={() => onStart(booking)}>
+        {canStart && status === "APPROVED" && (
+          <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
             รับงาน / ออกรถ
           </button>
         )}
 
-        {canComplete && normalizeStatus(booking.status) === "IN_USE" && (
-          <button type="button" className="warning-button" onClick={() => onComplete(booking)}>
+        {canComplete && status === "IN_USE" && (
+          <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
             จบงาน / คืนรถ
           </button>
         )}
       </div>
     </div>
   );
-}
+});
 
 export default function DriverJobs() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [waitingSearch, setWaitingSearch] = useState("");
+  const [processingAction, setProcessingAction] = useState(null);
+  const debouncedWaitingSearch = useDebouncedValue(waitingSearch);
 
   const currentUser = useMemo(() => getCurrentUser(), []);
   const currentRole = normalizeRole(currentUser?.role);
@@ -217,12 +278,26 @@ export default function DriverJobs() {
   const canStartTrip = hasPermission(null, "driver_jobs_start");
   const canCompleteTrip = hasPermission(null, "driver_jobs_complete");
 
-  async function loadData(options = {}) {
+  const mergeBooking = useCallback((bookingId, nextValues) => {
+    setBookings((current) =>
+      current.map((booking) =>
+        String(booking.booking_id) === String(bookingId)
+          ? { ...booking, ...nextValues }
+          : booking
+      )
+    );
+  }, []);
+
+  const loadData = useCallback(async (options = {}) => {
     try {
-      setLoading(true);
+      if (options.refreshOnly) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       setError("");
 
-      const bookingFetcher = options.freshBookings ? getBookingsFresh : getBookings;
+      const bookingFetcher = options.freshBookings || options.refreshOnly ? getBookingsFresh : getBookings;
       const [bookingData, vehicleData] = await Promise.all([bookingFetcher(), getVehicles()]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
@@ -239,12 +314,13 @@ export default function DriverJobs() {
       showError(message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -254,11 +330,13 @@ export default function DriverJobs() {
     return map;
   }, [vehicles]);
 
-  const assignedBookings = useMemo(() => {
-    const active = bookings.filter((booking) => normalizeStatus(booking.status) !== "CANCELLED");
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const groupedBookings = useMemo(() => groupBookingsByAssignee(bookings), [bookings]);
 
-    return active.filter((booking) => matchesCurrentUser(booking, currentUser));
-  }, [bookings, currentUser]);
+  const assignedBookings = useMemo(() => {
+    const grouped = getCurrentUserBookings(groupedBookings, currentUser, currentRole);
+    return grouped.filter((booking) => matchesCurrentUser(booking, currentUser));
+  }, [currentRole, currentUser, groupedBookings]);
 
   const currentJobs = useMemo(
     () => sortByStart(assignedBookings.filter((booking) => normalizeStatus(booking.status) === "IN_USE")),
@@ -270,10 +348,10 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          return isToday(booking.start_datetime) && status === "APPROVED";
+          return isToday(booking.start_datetime, todayKey) && status === "APPROVED";
         })
       ),
-    [assignedBookings]
+    [assignedBookings, todayKey]
   );
 
   const waitingJobs = useMemo(
@@ -282,11 +360,12 @@ export default function DriverJobs() {
   );
 
   const filteredWaitingJobs = useMemo(
-    () => waitingJobs.filter((booking) => matchesWaitingSearch(booking, waitingSearch)),
-    [waitingJobs, waitingSearch]
+    () => waitingJobs.filter((booking) => matchesWaitingSearch(booking, debouncedWaitingSearch)),
+    [debouncedWaitingSearch, waitingJobs]
   );
 
-  async function handleStart(booking) {
+  const handleStart = useCallback(async (booking) => {
+    if (processingAction) return;
     const result = await Swal.fire({
       title: "รับงาน / ออกรถ",
       text: "ยืนยันการรับงานและออกรถใช่หรือไม่",
@@ -300,6 +379,7 @@ export default function DriverJobs() {
     if (!result.isConfirmed) return;
 
     try {
+      setProcessingAction({ bookingId: booking.booking_id, type: "start" });
       const response = await startTrip({
         booking_id: booking.booking_id,
         out_time: new Date().toISOString(),
@@ -316,13 +396,16 @@ export default function DriverJobs() {
       }
 
       await showSuccess("เริ่มงานและบันทึกการออกรถสำเร็จ");
-      await loadData({ freshBookings: true, logBookingId: booking.booking_id });
+      mergeBooking(booking.booking_id, { status: "IN_USE", updated_at: new Date().toISOString() });
     } catch (err) {
       showError(err.message || "เริ่มงานไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
     }
-  }
+  }, [currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
 
-  async function handleComplete(booking) {
+  const handleComplete = useCallback(async (booking) => {
+    if (processingAction) return;
     const result = await Swal.fire({
       title: "จบงาน / คืนรถ",
       showCancelButton: true,
@@ -336,6 +419,7 @@ export default function DriverJobs() {
     if (!result.isConfirmed) return;
 
     try {
+      setProcessingAction({ bookingId: booking.booking_id, type: "complete" });
       await completeTrip({
         booking_id: booking.booking_id,
         in_time: new Date().toISOString(),
@@ -346,13 +430,16 @@ export default function DriverJobs() {
       });
 
       await showSuccess("จบงานและบันทึกการคืนรถสำเร็จ");
-      await loadData();
+      mergeBooking(booking.booking_id, { status: "COMPLETED", updated_at: new Date().toISOString() });
     } catch (err) {
       showError(err.message || "จบงานไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
     }
-  }
+  }, [currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
 
-  async function handleCancelJob(booking) {
+  const handleCancelJob = useCallback(async (booking) => {
+    if (processingAction) return;
     const result = await Swal.fire({
       title: "ยกเลิกงาน",
       text: "ยืนยันการยกเลิกงานนี้ใช่หรือไม่",
@@ -366,6 +453,7 @@ export default function DriverJobs() {
     if (!result.isConfirmed) return;
 
     try {
+      setProcessingAction({ bookingId: booking.booking_id, type: "cancel" });
       const response = await driverCancelJob({
         booking_id: booking.booking_id,
       });
@@ -376,13 +464,20 @@ export default function DriverJobs() {
       }
 
       await showSuccess("ยกเลิกงานสำเร็จ");
-      await loadData({ freshBookings: true });
+      mergeBooking(booking.booking_id, {
+        assigned_user_id: "",
+        assigned_user_name: "",
+        status: "APPROVED",
+        staff_note: response?.staff_note || booking.staff_note,
+      });
     } catch (err) {
       showError(err.message || "ยกเลิกงานไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
     }
-  }
+  }, [mergeBooking, processingAction]);
 
-  function showDetails(booking) {
+  const showDetails = useCallback((booking) => {
     const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
 
     Swal.fire({
@@ -405,7 +500,7 @@ export default function DriverJobs() {
         </div>
       `,
     });
-  }
+  }, [vehicleMap]);
 
   if (!canViewPage) {
     return <div className="form-card">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
@@ -419,7 +514,7 @@ export default function DriverJobs() {
           <p>ดูและจัดการงานที่ถูกมอบหมายให้คนขับ</p>
         </div>
 
-        <button type="button" onClick={loadData}>
+        <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
           รีเฟรชข้อมูล
         </button>
       </div>
@@ -450,6 +545,11 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    processing={
+                      processingAction?.bookingId === booking.booking_id
+                        ? processingAction.type
+                        : ""
+                    }
                     current
                   />
                 ))}
@@ -478,6 +578,11 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    processing={
+                      processingAction?.bookingId === booking.booking_id
+                        ? processingAction.type
+                        : ""
+                    }
                   />
                 ))}
               </div>
@@ -515,6 +620,11 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    processing={
+                      processingAction?.bookingId === booking.booking_id
+                        ? processingAction.type
+                        : ""
+                    }
                   />
                 ))}
               </div>

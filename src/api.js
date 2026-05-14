@@ -1,7 +1,7 @@
 const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";
 // const API_BASE_URL = "http://localhost:8787";
 
-const API_CACHE_TTL_MS = 30000;
+const API_CACHE_TTL_MS = 60000;
 const apiCache = new Map();
 
 function cloneData(value) {
