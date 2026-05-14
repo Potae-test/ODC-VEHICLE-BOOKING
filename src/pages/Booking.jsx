@@ -882,11 +882,11 @@ export default function Booking() {
           <p>จองรถผ่านแบบฟอร์มแบบโมดัล และติดตามรายการจองล่าสุดได้ในตารางด้านล่าง</p>
         </div>
 
-        {canCreateBookings && (
+        {/* {canCreateBookings && (
           <button type="button" disabled={Boolean(processingAction)} onClick={handleCreateBooking}>
               ➕ เพิ่มรายการจองใหม่
           </button>
-        )}
+        )} */}
         {canViewBookings && (
           <button type="button" disabled={refreshing || loading} onClick={refreshBookings}>
             {refreshing ? "Refreshing..." : "Refresh"}
