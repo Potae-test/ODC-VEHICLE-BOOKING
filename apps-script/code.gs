@@ -154,6 +154,19 @@ function ensureColumn(sheet, headers, columnName) {
   return index;
 }
 
+function normalizePhone_(value) {
+  return String(value || "").trim();
+}
+
+function ensureTextColumn_(sheet, headers, columnName) {
+  const colIndex = headers.indexOf(columnName);
+  if (colIndex < 0) return;
+
+  sheet
+    .getRange(2, colIndex + 1, Math.max(sheet.getMaxRows() - 1, 1), 1)
+    .setNumberFormat("@");
+}
+
 function buildColumnMap(headers) {
   const columnMap = {};
   headers.forEach((header, index) => {
@@ -429,6 +442,7 @@ function createBooking(data) {
     const requesterNameCol = ensureColumn(sheet, headers, "requester_name");
     const departmentCol = ensureColumn(sheet, headers, "department");
     const phoneCol = ensureColumn(sheet, headers, "phone");
+    ensureTextColumn_(sheet, headers, "phone");
     const startCol = ensureColumn(sheet, headers, "start_datetime");
     const endCol = ensureColumn(sheet, headers, "end_datetime");
     const destinationCol = ensureColumn(sheet, headers, "destination");
@@ -453,7 +467,7 @@ function createBooking(data) {
     bookingRow[bookingNoCol] = bookingNo;
     bookingRow[requesterNameCol] = data.requester_name || "";
     bookingRow[departmentCol] = data.department || "";
-    bookingRow[phoneCol] = data.phone || "";
+    bookingRow[phoneCol] = normalizePhone_(data.phone);
     bookingRow[startCol] = data.start_datetime || "";
     bookingRow[endCol] = data.end_datetime || "";
     bookingRow[destinationCol] = data.destination || "";
@@ -500,6 +514,7 @@ function updateBooking(data) {
   const table = readSheetTable(sheet);
   const headers = table.headers;
   const columnMap = table.columnMap;
+  ensureTextColumn_(sheet, headers, "phone");
 
   const editableFields = [
     "requester_name",
@@ -529,7 +544,7 @@ function updateBooking(data) {
   editableFields.forEach((field) => {
     const col = columnMap[field];
     if (col !== undefined && data[field] !== undefined) {
-      rowValues[col] = data[field];
+      rowValues[col] = field === "phone" ? normalizePhone_(data[field]) : data[field];
     }
   });
 

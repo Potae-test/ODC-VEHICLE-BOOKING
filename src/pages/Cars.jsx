@@ -34,6 +34,27 @@ function normalizeVehicleStatus(status) {
   return "AVAILABLE";
 }
 
+function getVehicleTypeText(type) {
+  const value = String(type || "").trim();
+  const normalized = value.toUpperCase();
+
+  if (!value) return "-";
+  if (normalized === "VAN") return "รถตู้";
+  if (normalized === "SEDAN") return "รถเก๋ง";
+  if (normalized === "MOTORCYCLE") return "จักรยานยนต์";
+  if (normalized === "OTHER") return "อื่นๆ";
+  return value;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 const initialForm = {
   vehicle_code: "",
   vehicle_type: "",
@@ -66,55 +87,138 @@ export default function Cars() {
     }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function handleOpenCreateVehicle() {
+    const result = await Swal.fire({
+      title: "เพิ่มข้อมูลรถ",
+      html: `
+        <div class="swal-form">
+          <label>ชื่อรถ</label>
+          <input id="vehicle_code" class="swal2-input" placeholder="เช่น รถตู้โตโยต้า">
 
-    if (!form.vehicle_code.trim()) {
-      showError("กรุณากรอกรหัสรถ เช่น ODC-04");
-      return;
-    }
+          <label>ทะเบียนรถ</label>
+          <input id="plate_no" class="swal2-input" placeholder="เช่น 1กข 1234">
 
-    if (!form.vehicle_type.trim()) {
-      showError("กรุณากรอกประเภทรถ");
-      return;
-    }
+          <label>ประเภทรถ</label>
+          <select id="vehicle_type" class="swal2-select">
+            <option value="VAN">รถตู้</option>
+            <option value="SEDAN">รถเก๋ง</option>
+            <option value="MOTORCYCLE">จักรยานยนต์</option>
+            <option value="OTHER">อื่นๆ โปรดระบุ</option>
+          </select>
 
-    if (!form.plate_no.trim()) {
-      showError("กรุณากรอกทะเบียนรถ");
-      return;
-    }
+          <div id="otherVehicleDiv" style="display:none;">
+            <label>ระบุประเภทรถ</label>
+            <input
+              id="vehicle_type_other"
+              class="swal2-input"
+              placeholder="เช่น รถบัส, รถกระบะ"
+            >
+          </div>
+
+          <label>สถานะ</label>
+          <select id="status" class="swal2-select">
+            <option value="AVAILABLE">พร้อมใช้งาน</option>
+            <option value="UNAVAILABLE">ไม่พร้อมใช้งาน</option>
+          </select>
+
+          <label>หมายเหตุ</label>
+          <input id="note" class="swal2-input" placeholder="-">
+        </div>
+      `,
+      width: 750,
+      showCancelButton: true,
+      confirmButtonText: "เพิ่มรถ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#1455c8",
+      cancelButtonColor: "#64748b",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        const vehicleType = document.getElementById("vehicle_type");
+        const otherDiv = document.getElementById("otherVehicleDiv");
+
+        vehicleType.addEventListener("change", () => {
+          otherDiv.style.display = vehicleType.value === "OTHER" ? "block" : "none";
+        });
+      },
+      preConfirm: () => {
+        const vehicle_code = document.getElementById("vehicle_code").value.trim();
+        const plate_no = document.getElementById("plate_no").value.trim();
+        const vehicle_type_select = document.getElementById("vehicle_type").value;
+        let vehicle_type = vehicle_type_select;
+        const status = document.getElementById("status").value;
+        const note = document.getElementById("note").value.trim();
+
+        if (vehicle_type_select === "OTHER") {
+          vehicle_type = document.getElementById("vehicle_type_other").value.trim();
+        }
+
+        if (!vehicle_code || !plate_no || !vehicle_type) {
+          Swal.showValidationMessage("กรุณากรอกรหัสรถ ทะเบียนรถ และประเภทรถ");
+          return false;
+        }
+
+        return {
+          vehicle_code,
+          plate_no,
+          vehicle_type,
+          status,
+          note,
+        };
+      },
+    });
+
+    if (!result.isConfirmed) return;
 
     try {
-      setSaving(true);
-      await createVehicle(form);
+      await createVehicle(result.value);
       await showSuccess("เพิ่มรถสำเร็จ");
-      setForm(initialForm);
       await loadVehicles();
     } catch (err) {
       showError(err.message || "เพิ่มรถไม่สำเร็จ");
-    } finally {
-      setSaving(false);
     }
   }
 
-  async function handleEdit(car) {
+  async function handleEditVehicle(car) {
     if (normalizeVehicleStatus(car.effective_status || car.status) === "IN_USE") {
       showError("รถกำลังใช้งาน ไม่สามารถแก้ไขหรือลบได้");
       return;
     }
+
+    const allowedVehicleTypes = ["VAN", "SEDAN", "MOTORCYCLE"];
+    const currentVehicleType = String(car.vehicle_type || "").trim();
+    const selectedVehicleType = allowedVehicleTypes.includes(currentVehicleType)
+      ? currentVehicleType
+      : "OTHER";
+    const otherVehicleType = selectedVehicleType === "OTHER" ? currentVehicleType : "";
 
     const result = await Swal.fire({
       title: "แก้ไขข้อมูลรถ",
       html: `
         <div class="swal-form">
           <label>รหัสรถ</label>
-          <input id="vehicle_code" class="swal2-input" value="${car.vehicle_code || ""}">
+          <input id="vehicle_code" class="swal2-input" value="${escapeHtml(car.vehicle_code || "")}">
 
           <label>ประเภทรถ</label>
-          <input id="vehicle_type" class="swal2-input" value="${car.vehicle_type || ""}" placeholder="เช่น รถตู้">
+          <select id="vehicle_type" class="swal2-select">
+            <option value="VAN" ${selectedVehicleType === "VAN" ? "selected" : ""}>รถตู้</option>
+            <option value="SEDAN" ${selectedVehicleType === "SEDAN" ? "selected" : ""}>รถเก๋ง</option>
+            <option value="MOTORCYCLE" ${selectedVehicleType === "MOTORCYCLE" ? "selected" : ""}>จักรยานยนต์</option>
+            <option value="OTHER" ${selectedVehicleType === "OTHER" ? "selected" : ""}>อื่นๆ โปรดระบุ</option>
+          </select>
+
+          <div id="otherVehicleDiv" style="display:${selectedVehicleType === "OTHER" ? "block" : "none"};">
+            <label>ระบุประเภทรถ</label>
+            <input
+              id="vehicle_type_other"
+              class="swal2-input"
+              value="${escapeHtml(otherVehicleType)}"
+              placeholder="เช่น รถบัส, รถกระบะ"
+            >
+          </div>
 
           <label>ทะเบียนรถ</label>
-          <input id="plate_no" class="swal2-input" value="${car.plate_no || ""}">
+          <input id="plate_no" class="swal2-input" value="${escapeHtml(car.plate_no || "")}">
 
           <label>สถานะ</label>
           <select id="status" class="swal2-select">
@@ -123,7 +227,10 @@ export default function Cars() {
           </select>
 
           <label>คนขับประจำ</label>
-          <input id="driver_name" class="swal2-input" value="${car.driver_name || ""}" placeholder="-">
+          <input id="driver_name" class="swal2-input" value="${escapeHtml(car.driver_name || "")}" placeholder="-">
+
+          <label>หมายเหตุ</label>
+          <input id="note" class="swal2-input" value="${escapeHtml(car.note || "")}" placeholder="-">
         </div>
       `,
       width: 750,
@@ -132,12 +239,37 @@ export default function Cars() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: () => {
+        const vehicleType = document.getElementById("vehicle_type");
+        const otherDiv = document.getElementById("otherVehicleDiv");
+        const otherInput = document.getElementById("vehicle_type_other");
+
+        const toggleOtherVehicleDiv = () => {
+          const showOther = vehicleType.value === "OTHER";
+          otherDiv.style.display = showOther ? "block" : "none";
+
+          if (showOther && !otherInput.value.trim()) {
+            otherInput.value = currentVehicleType;
+          }
+        };
+
+        vehicleType.addEventListener("change", toggleOtherVehicleDiv);
+        toggleOtherVehicleDiv();
+      },
       preConfirm: () => {
         const vehicle_code = document.getElementById("vehicle_code").value.trim();
-        const vehicle_type = document.getElementById("vehicle_type").value.trim();
+        const vehicle_type_select = document.getElementById("vehicle_type").value;
+        let vehicle_type = vehicle_type_select;
         const plate_no = document.getElementById("plate_no").value.trim();
         const status = document.getElementById("status").value;
         const driver_name = document.getElementById("driver_name").value.trim();
+        const note = document.getElementById("note").value.trim();
+
+        if (vehicle_type_select === "OTHER") {
+          vehicle_type = document.getElementById("vehicle_type_other").value.trim();
+        }
 
         if (!vehicle_code || !vehicle_type || !plate_no) {
           Swal.showValidationMessage("กรุณากรอกรหัสรถ ประเภทรถ และทะเบียนรถ");
@@ -151,6 +283,7 @@ export default function Cars() {
           plate_no,
           status,
           driver_name: driver_name || "-",
+          note,
         };
       },
     });
@@ -214,79 +347,18 @@ export default function Cars() {
           <p>ข้อมูลจาก Google Sheet ผ่าน Cloudflare Worker API</p>
         </div>
 
-        <button type="button" onClick={loadVehicles}>
-          รีเฟรชข้อมูล
-        </button>
-      </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {canCreateVehicles && (
+            <button type="button" onClick={handleOpenCreateVehicle}>
+              เพิ่มรถ
+            </button>
+          )}
 
-      {canCreateVehicles && (
-        <form className="form-card" onSubmit={handleSubmit}>
-          <h3>เพิ่มรถใหม่</h3>
-
-          <div className="form-grid">
-            <div>
-              <label>รหัสรถ</label>
-              <input
-                value={form.vehicle_code}
-                onChange={(e) =>
-                  setForm({ ...form, vehicle_code: e.target.value })
-                }
-                placeholder="เช่น ODC-04"
-              />
-            </div>
-
-            <div>
-              <label>ประเภทรถ</label>
-              <input
-                value={form.vehicle_type}
-                onChange={(e) =>
-                  setForm({ ...form, vehicle_type: e.target.value })
-                }
-                placeholder="เช่น รถตู้ / รถพยาบาล"
-              />
-            </div>
-
-            <div>
-              <label>ทะเบียนรถ</label>
-              <input
-                value={form.plate_no}
-                onChange={(e) =>
-                  setForm({ ...form, plate_no: e.target.value })
-                }
-                placeholder="เช่น 1กข 1234"
-              />
-            </div>
-
-            <div>
-              <label>สถานะ</label>
-              <select
-                value={form.status}
-                onChange={(e) =>
-                  setForm({ ...form, status: e.target.value })
-                }
-              >
-                <option value="AVAILABLE">พร้อมใช้งาน</option>
-                <option value="UNAVAILABLE">ไม่พร้อมใช้งาน</option>
-              </select>
-            </div>
-
-            <div>
-              <label>คนขับประจำ</label>
-              <input
-                value={form.driver_name}
-                onChange={(e) =>
-                  setForm({ ...form, driver_name: e.target.value })
-                }
-                placeholder="เช่น คุณสมชาย"
-              />
-            </div>
-          </div>
-
-          <button disabled={saving}>
-            {saving ? "กำลังบันทึก..." : "เพิ่มรถ"}
+          <button type="button" onClick={loadVehicles}>
+            รีเฟรชข้อมูล
           </button>
-        </form>
-      )}
+        </div>
+      </div>
 
       {loading ? (
         <p>กำลังโหลดข้อมูลรถ...</p>
@@ -316,7 +388,7 @@ export default function Cars() {
                     <td>
                       <b>{car.vehicle_code}</b>
                     </td>
-                    <td>{car.vehicle_type}</td>
+                    <td>{getVehicleTypeText(car.vehicle_type)}</td>
                     <td>{car.plate_no}</td>
                     <td>
                       <span className={getStatusClass(car.effective_status)}>
@@ -330,7 +402,7 @@ export default function Cars() {
                       ) : (
                         <>
                       {canEditVehicles && (
-                        <button type="button" onClick={() => handleEdit(car)}>
+                        <button type="button" onClick={() => handleEditVehicle(car)}>
                           แก้ไข
                         </button>
                       )}

@@ -1,7 +1,7 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
 export const PERMISSION_CONFIG_VERSION = "2026-05-14.1";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-14.1";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-14.2";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
@@ -51,6 +51,7 @@ export const ACTION_PERMISSION_GROUPS = [
     label: "รายการจอง",
     permissions: [
       { id: "bookings_view", label: "ดูรายการ" },
+      { id: "bookings_detail", label: "ดูรายละเอียดรายการจอง" },
       { id: "bookings_create", label: "สร้างรายการ" },
       { id: "bookings_edit", label: "แก้ไขรายการ" },
       { id: "bookings_delete", label: "ลบรายการ" },
@@ -91,7 +92,10 @@ export const ACTION_PERMISSION_GROUPS = [
   {
     id: "reports",
     label: "รายงาน",
-    permissions: [{ id: "driver_summary_view", label: "ดูสรุปงานคนขับ" }],
+    permissions: [
+      { id: "driver_summary_view", label: "ดูสรุปงานคนขับ" },
+      { id: "driver_summary_cards_scope", label: "ขอบเขตการเห็นกล่องสรุปคนขับ" },
+    ],
   },
   {
     id: "driver_jobs",
@@ -117,6 +121,7 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
   ADMIN: ACTION_PERMISSION_ITEMS.map((item) => item.id),
   STAFF: [
     "bookings_view",
+    "bookings_detail",
     "bookings_edit",
     "bookings_create",
     "bookings_approve",
@@ -132,20 +137,29 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "drivers_create",
     "drivers_edit",
     "drivers_delete",
+    "driver_jobs_start",
+    "driver_jobs_complete",
+    "driver_summary_cards_scope",
   ],
   USER: [
     "bookings_view", 
+    "bookings_detail",
     "bookings_create", 
     "driver_summary_view",
-    "bookings_edit"
+    "bookings_edit",
+    "bookings_cancel",
+    "driver_jobs_complete",
   ],
   DRIVER: [
     "bookings_view",
+    "bookings_detail",
     "vehicles_view",
     "driver_summary_view",
     "driver_jobs_view",
     "driver_jobs_start",
     "driver_jobs_complete",
+    "driver_summary_cards_scope",
+    "vehicles_edit",
   ],
 };
 
@@ -265,6 +279,86 @@ export function saveActionPermissionConfig(config) {
   localStorage.setItem(ACTION_PERMISSION_VERSION_STORAGE_KEY, ACTION_PERMISSION_CONFIG_VERSION);
   window.dispatchEvent(new Event("odc-action-permissions-updated"));
   return nextConfig;
+}
+
+export const DRIVER_SUMMARY_CARD_SCOPE_STORAGE_KEY = "odc_driver_summary_card_scope";
+
+export const DEFAULT_DRIVER_SUMMARY_CARD_SCOPE = {
+  ADMIN: "ALL",
+  STAFF: "ALL",
+  USER: "NONE",
+  DRIVER: "SELF",
+};
+
+function normalizeDriverSummaryCardScope(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "SELF" || normalized === "ALL" || normalized === "NONE") {
+    return normalized;
+  }
+  return "";
+}
+
+export function loadDriverSummaryCardScopeConfig() {
+  try {
+    const saved = localStorage.getItem(DRIVER_SUMMARY_CARD_SCOPE_STORAGE_KEY);
+    if (!saved) {
+      return { ...DEFAULT_DRIVER_SUMMARY_CARD_SCOPE };
+    }
+
+    const parsed = JSON.parse(saved);
+    const config = { ...DEFAULT_DRIVER_SUMMARY_CARD_SCOPE };
+
+    Object.keys(config).forEach((role) => {
+      if (role === "ADMIN") {
+        config[role] = "ALL";
+        return;
+      }
+
+      const normalized = normalizeDriverSummaryCardScope(parsed?.[role]);
+      if (normalized) {
+        config[role] = normalized;
+      }
+    });
+
+    return config;
+  } catch {
+    return { ...DEFAULT_DRIVER_SUMMARY_CARD_SCOPE };
+  }
+}
+
+export function saveDriverSummaryCardScopeConfig(config) {
+  const nextConfig = { ...DEFAULT_DRIVER_SUMMARY_CARD_SCOPE };
+
+  Object.keys(nextConfig).forEach((role) => {
+    if (role === "ADMIN") {
+      nextConfig[role] = "ALL";
+      return;
+    }
+
+    const normalized = normalizeDriverSummaryCardScope(config?.[role]);
+    if (normalized) {
+      nextConfig[role] = normalized;
+    }
+  });
+
+  localStorage.setItem(DRIVER_SUMMARY_CARD_SCOPE_STORAGE_KEY, JSON.stringify(nextConfig));
+  window.dispatchEvent(new Event("odc-action-permissions-updated"));
+  return nextConfig;
+}
+
+export function getDriverSummaryCardScope(role, config = loadDriverSummaryCardScopeConfig()) {
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === "ADMIN" || normalizedRole === "STAFF") {
+    return "ALL";
+  }
+
+  const scope = normalizeDriverSummaryCardScope(config?.[normalizedRole]);
+  if (scope) return scope;
+
+  if (normalizedRole === "DRIVER") return "SELF";
+  if (normalizedRole === "USER") return "NONE";
+  return "NONE";
 }
 
 function getCurrentUser() {

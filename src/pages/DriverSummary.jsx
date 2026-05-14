@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { getBookings, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
-import { hasPermission, normalizeRole } from "../permissions";
+import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
 
 const COUNTED_STATUSES = new Set(["APPROVED", "IN_USE", "COMPLETED"]);
 const TABLE_PAGE_SIZE = 5;
@@ -182,6 +182,30 @@ function countByCategory(bookings, category) {
   return bookings.filter((booking) => getStatusCategory(booking.status) === category).length;
 }
 
+function compareDriverUserIds(a, b) {
+  const aId = normalizeDriverId(a.user_id);
+  const bId = normalizeDriverId(b.user_id);
+
+  if (aId && bId) {
+    const byId = aId.localeCompare(bId, "en", { numeric: true, sensitivity: "base" });
+    if (byId !== 0) return byId;
+  } else if (aId) {
+    return -1;
+  } else if (bId) {
+    return 1;
+  }
+
+  return a.name.localeCompare(b.name, "th");
+}
+
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("odc_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
 const DriverSummaryTableRow = memo(function DriverSummaryTableRow({ row, onDetail }) {
   return (
     <tr>
@@ -265,6 +289,10 @@ export default function DriverSummary() {
     [rangeMode, customStart, customEnd]
   );
 
+  const currentUser = useMemo(() => getCurrentUser(), []);
+  const currentRole = normalizeRole(currentUser?.role);
+  const cardScope = getDriverSummaryCardScope(currentRole);
+
   const driverOptions = useMemo(() => {
     const options = new Map();
 
@@ -281,7 +309,7 @@ export default function DriverSummary() {
       });
     });
 
-    return [...options.values()].sort((a, b) => a.name.localeCompare(b.name, "th"));
+    return [...options.values()].sort(compareDriverUserIds);
   }, [drivers]);
 
   const driverRows = useMemo(() => {
@@ -350,19 +378,35 @@ export default function DriverSummary() {
       .sort((a, b) => b.selectedCount - a.selectedCount || a.name.localeCompare(b.name, "th"));
   }, [bookings, driverOptions, monthRange, selectedDriver, selectedRange, todayRange, weekRange]);
 
+  const visibleDriverRows = useMemo(() => {
+    if (cardScope === "NONE") return [];
+
+    const orderedRows = [...driverRows].sort(compareDriverUserIds);
+
+    if (cardScope === "SELF") {
+      const currentUserId = normalizeDriverId(currentUser?.user_id);
+      return orderedRows.filter((row) => normalizeDriverId(row.user_id) === currentUserId);
+    }
+
+    return orderedRows;
+  }, [cardScope, currentUser?.user_id, driverRows]);
+
+  // Keep the card source aligned with the table visibility rules.
+  const driverCardRows = visibleDriverRows;
+
   const detailRow = useMemo(
-    () => (detailDriver ? driverRows.find((row) => row.key === detailDriver) : null),
-    [detailDriver, driverRows]
+    () => (detailDriver ? visibleDriverRows.find((row) => row.key === detailDriver) : null),
+    [detailDriver, visibleDriverRows]
   );
 
-  const totalTablePages = Math.max(1, Math.ceil(driverRows.length / TABLE_PAGE_SIZE));
+  const totalTablePages = Math.max(1, Math.ceil(visibleDriverRows.length / TABLE_PAGE_SIZE));
   const paginatedDriverRows = useMemo(
     () =>
-      driverRows.slice(
+      visibleDriverRows.slice(
         (tablePage - 1) * TABLE_PAGE_SIZE,
         tablePage * TABLE_PAGE_SIZE
       ),
-    [driverRows, tablePage]
+    [visibleDriverRows, tablePage]
   );
   const handleOpenDetail = useCallback((driverKey) => setDetailDriver(driverKey), []);
 
@@ -381,9 +425,9 @@ export default function DriverSummary() {
         <button disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>รีเฟรชข้อมูล</button>
       </div>
 
-      {!loading && !error && (
+      {!loading && !error && cardScope !== "NONE" && (
         <div className="driver-summary-card-grid">
-          {driverRows.map((row) => (
+          {driverCardRows.map((row) => (
             <div className="driver-summary-card" key={row.key}>
               <div className="driver-summary-card-header">
                 <h3>{row.name}</h3>
@@ -560,14 +604,14 @@ export default function DriverSummary() {
                   </tr>
                 ))}
 
-                {driverRows.length === 0 && (
+                {visibleDriverRows.length === 0 && (
                   <tr>
                     <td colSpan="7">ไม่พบข้อมูลคนขับสำหรับรายงาน</td>
                   </tr>
                 )}
               </tbody>
             </table>
-            {driverRows.length > TABLE_PAGE_SIZE && (
+            {visibleDriverRows.length > TABLE_PAGE_SIZE && (
               <div className="pagination">
                 <button
                   type="button"
@@ -618,18 +662,18 @@ export default function DriverSummary() {
               <table>
                 <thead>
                   <tr>
-                    <th>เลขที่จอง</th>
+                    <th>ลำดับ</th>
                     <th>วันที่เริ่มต้น</th>
                     <th>ปลายทาง</th>
-                    <th>วัตถุประสงค์</th>
+                    <th>เหตุผลการใช้รถ</th>
                     <th>สถานะ</th>
-                    <th>รหัสยานพาหนะ</th>
+                    {/* <th>รหัสยานพาหนะ</th> */}
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRow.allDetailBookings.map((booking) => (
+                  {detailRow.allDetailBookings.map((booking, index) => (
                     <tr key={booking.booking_id}>
-                      <td>{booking.booking_no || "-"}</td>
+                      <td>{index + 1}</td>
                       <td>{formatThaiDateTime(booking.start_datetime)}</td>
                       <td>{booking.destination || "-"}</td>
                       <td>{booking.purpose || "-"}</td>
@@ -638,7 +682,7 @@ export default function DriverSummary() {
                           {getStatusLabel(booking.status)}
                         </span>
                       </td>
-                      <td>{booking.vehicle_id || "-"}</td>
+                      {/* <td>{booking.vehicle_id || "-"}</td> */}
                     </tr>
                   ))}
 

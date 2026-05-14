@@ -163,11 +163,11 @@ export default function App() {
             </button>
           )}
 
-          {canAccessPage(user.role, "staff", permissionConfig) && (
+          {/* {canAccessPage(user.role, "staff", permissionConfig) && (
             <button className={page === "staff" ? "active" : ""} onClick={() => goPage("staff")}>
               👥 เจ้าหน้าที่
             </button>
-          )}
+          )} */}
 
           {canAccessPage(user.role, "calendar", permissionConfig) && (
             <button className={page === "calendar" ? "active" : ""} onClick={() => goPage("calendar")}>

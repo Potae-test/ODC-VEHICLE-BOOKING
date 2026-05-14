@@ -4,7 +4,7 @@ import moment from "moment";
 import Swal from "sweetalert2";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "moment/locale/th";
-import { getBookings } from "../api";
+import { getBookings, getVehicles } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 
 moment.locale("th");
@@ -45,7 +45,7 @@ function getCalendarStatusMeta(status) {
   }
 
   return {
-    label: "ติดจอง",
+    label: "อนุมัติแล้ว",
     className: "blue",
     color: "#1d4ed8",
     backgroundColor: "#dbeafe",
@@ -53,8 +53,38 @@ function getCalendarStatusMeta(status) {
   };
 }
 
-function getVehicleLabel(booking) {
-  return booking.vehicle_name || booking.vehicle_code || booking.vehicle_id || "-";
+function getVehicleTypeText(type) {
+  const value = String(type || "").trim();
+  const normalized = value.toUpperCase();
+
+  if (!value) return "-";
+  if (normalized === "VAN") return "รถตู้";
+  if (normalized === "SEDAN") return "รถเก๋ง";
+  if (normalized === "MOTORCYCLE") return "จักรยานยนต์";
+  if (normalized === "OTHER") return "อื่นๆ";
+  return value;
+}
+
+function getVehicleLabel(booking, vehicleMap) {
+  const vehicleId = String(booking.vehicle_id || "").trim();
+  if (!vehicleId) return "-";
+
+  const vehicle = vehicleMap.get(vehicleId);
+  if (!vehicle) return vehicleId;
+
+  const vehicleType = getVehicleTypeText(
+    vehicle.vehicle_type ||
+      booking.vehicle_type ||
+      booking.vehicle_type_request ||
+      ""
+  );
+
+  const plate =
+    vehicle.license_plate ||
+    vehicle.plate_no ||
+    "-";
+
+  return `${vehicleType} / ${plate}`;
 }
 
 function getDriverLabel(booking) {
@@ -74,9 +104,18 @@ const CalendarEvent = memo(function CalendarEvent({ event }) {
 
 export default function CalendarPage() {
   const [bookings, setBookings] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  const vehicleMap = useMemo(() => {
+    const map = new Map();
+    vehicles.forEach((vehicle) => {
+      map.set(String(vehicle.vehicle_id || "").trim(), vehicle);
+    });
+    return map;
+  }, [vehicles]);
 
   const loadBookings = useCallback(async (options = {}) => {
     try {
@@ -87,12 +126,17 @@ export default function CalendarPage() {
       }
       setError("");
 
-      const data = await getBookings(options.refreshOnly ? { fresh: true } : {});
-      setBookings(Array.isArray(data) ? data : []);
+      const [bookingData, vehicleData] = await Promise.all([
+        getBookings(options.refreshOnly ? { fresh: true } : {}),
+        getVehicles(),
+      ]);
+      setBookings(Array.isArray(bookingData) ? bookingData : []);
+      setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
       setBookings([]);
+      setVehicles([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -122,7 +166,11 @@ export default function CalendarPage() {
     () =>
       activeBookings.map((booking) => ({
         id: booking.booking_id,
-        title: `${booking.booking_no || "-"} - ${booking.requester_name || "-"}`,
+        title: `${booking.requester_name || "-"} - ${
+              String(booking.destination || "-").length > 20
+                ? `${String(booking.destination).substring(0,50)}...`
+                : booking.destination || "-"
+            }`,
         start: new Date(booking.start_datetime),
         end: new Date(booking.end_datetime),
         resource: booking,
@@ -140,11 +188,11 @@ export default function CalendarPage() {
         color: meta.color,
         borderRadius: "8px",
         padding: "3px 6px",
-        fontSize: "14px",
+        fontSize: "17px",
         lineHeight: "1.25",
       },
     };
-  }, []);
+  }, [vehicleMap]);
 
   const handleSelectEvent = useCallback(async (event) => {
     const booking = event.resource;
@@ -153,13 +201,13 @@ export default function CalendarPage() {
     await Swal.fire({
       title: "รายละเอียดการจอง",
       html: `
-        <div style="text-align:left;font-size:18px;line-height:1.7;color:#1f2937">
-          <div><b>เลขที่จอง:</b> ${booking.booking_no || "-"}</div>
+        <div style="text-align:left;font-size:25px;line-height:1.7;color:#1f2937">
+         
           <div><b>ผู้จอง:</b> ${booking.requester_name || "-"}</div>
           <div><b>วันเวลาเริ่ม:</b> ${formatThaiDateTime(booking.start_datetime)}</div>
           <div><b>วันเวลาสิ้นสุด:</b> ${formatThaiDateTime(booking.end_datetime)}</div>
           <div><b>ปลายทาง:</b> ${booking.destination || "-"}</div>
-          <div><b>รถ:</b> ${getVehicleLabel(booking)}</div>
+          <div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>
           <div><b>คนขับ:</b> ${getDriverLabel(booking)}</div>
           <div><b>สถานะ:</b> ${meta.label}</div>
           ${booking.staff_note ? `<div><b>หมายเหตุเจ้าหน้าที่:</b> ${booking.staff_note}</div>` : ""}
@@ -169,8 +217,9 @@ export default function CalendarPage() {
       confirmButtonColor: "#334155",
       width: 560,
       buttonsStyling: true,
+      //  <div><b>เลขที่จอง:</b> ${booking.booking_no || "-"}</div
     });
-  }, []);
+  }, [vehicleMap]);
 
   return (
     <div>
@@ -198,7 +247,7 @@ export default function CalendarPage() {
               กำลังใช้งาน
             </span>
             <span className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
-              ติดจอง
+              อนุมัติแล้ว (แต่ยังไม่ถึงเวลาที่จะใช้งาน)
             </span>
           </div>
           <div style={{ color: "#475569" }}>

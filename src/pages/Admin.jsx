@@ -27,12 +27,15 @@ import {
 import {
   ACTION_PERMISSION_GROUPS,
   DEFAULT_ROLE_ACTION_PERMISSIONS,
+  DEFAULT_DRIVER_SUMMARY_CARD_SCOPE,
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_ITEMS,
   hasPermission,
+  loadDriverSummaryCardScopeConfig,
   loadActionPermissionConfig,
   loadPermissionConfig,
   normalizeRole,
+  saveDriverSummaryCardScopeConfig,
   saveActionPermissionConfig,
   savePermissionConfig,
 } from "../permissions";
@@ -60,6 +63,18 @@ function getVehicleStatusText(status) {
   if (status === "MAINTENANCE") return "ซ่อมบำรุง";
   if (status === "INACTIVE") return "ปิดใช้งาน";
   return status || "-";
+}
+
+function getVehicleTypeText(type) {
+  const value = String(type || "").trim();
+  const normalized = value.toUpperCase();
+
+  if (!value) return "-";
+  if (normalized === "VAN") return "รถตู้";
+  if (normalized === "SEDAN") return "รถเก๋ง";
+  if (normalized === "MOTORCYCLE") return "จักรยานยนต์";
+  if (normalized === "OTHER") return "อื่นๆ";
+  return value;
 }
 
 function getVehicleStatusClass(status) {
@@ -111,6 +126,9 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
   const [actionPermissionConfig, setActionPermissionConfig] = useState(loadActionPermissionConfig);
+  const [driverSummaryCardScopeConfig, setDriverSummaryCardScopeConfig] = useState(
+    loadDriverSummaryCardScopeConfig
+  );
   const [selectedPermissionRole, setSelectedPermissionRole] = useState("STAFF");
   const [bookingPage, setBookingPage] = useState(1);
   const [driverInactiveReasons, setDriverInactiveReasons] = useState([
@@ -720,6 +738,30 @@ async function handleDeleteUser(u) {
     await showSuccess("คืนค่าสิทธิ์ action เริ่มต้นสำเร็จ");
   }
 
+  function handleChangeDriverSummaryCardScope(role, scope) {
+    if (role === "ADMIN") return;
+
+    setDriverSummaryCardScopeConfig((current) => ({
+      ...current,
+      [role]: scope,
+    }));
+  }
+
+  async function handleSaveDriverSummaryCardScope() {
+    const savedConfig = saveDriverSummaryCardScopeConfig(driverSummaryCardScopeConfig);
+    setDriverSummaryCardScopeConfig(savedConfig);
+    await showSuccess("บันทึกสิทธิ์กล่องสรุปคนขับสำเร็จ");
+  }
+
+  async function handleResetDriverSummaryCardScope() {
+    const confirmed = await showConfirm("ยืนยันคืนค่ากล่องสรุปคนขับเริ่มต้นใช่หรือไม่?");
+    if (!confirmed) return;
+
+    const savedConfig = saveDriverSummaryCardScopeConfig(DEFAULT_DRIVER_SUMMARY_CARD_SCOPE);
+    setDriverSummaryCardScopeConfig(savedConfig);
+    await showSuccess("คืนค่ากล่องสรุปคนขับเริ่มต้นสำเร็จ");
+  }
+
 async function handleEditDriver(d) {
   const result = await Swal.fire({
     title: "แก้ไขข้อมูลคนขับ",
@@ -807,35 +849,71 @@ async function handleOpenCreateVehicle() {
         <input id="license_plate" class="swal2-input" placeholder="เช่น 1ข 1234">
 
         <label>ประเภทรถ</label>
-        <input id="vehicle_type" class="swal2-input" placeholder="เช่น รถตู้">
+        <select id="vehicle_type" class="swal2-select">
+          <option value="VAN">รถตู้</option>
+          <option value="SEDAN">รถเก๋ง</option>
+          <option value="MOTORCYCLE">จักรยานยนต์</option>
+          <option value="OTHER">อื่นๆ โปรดระบุ</option>
+        </select>
+
+        <div id="otherVehicleDiv" style="display:none;">
+          <label>ระบุประเภทรถ</label>
+          <input 
+            id="vehicle_type_other" 
+            class="swal2-input"
+            placeholder="เช่น รถบัส, รถกระบะ"
+          >
+        </div>
 
         <label>สถานะ</label>
         <select id="vehicle_status" class="swal2-select">
           <option value="AVAILABLE">พร้อมใช้งาน</option>
-          <option value="IN_USE">กำลังใช้งาน</option>
-          <option value="MAINTENANCE">ซ่อมบำรุง</option>
-          <option value="INACTIVE">ปิดใช้งาน</option>
+          <option value="INACTIVE">ไม่พร้อมใช้งาน</option>
         </select>
 
         <label>หมายเหตุ</label>
         <input id="vehicle_note" class="swal2-input" placeholder="-">
       </div>
     `,
+
     width: 750,
     showCancelButton: true,
     confirmButtonText: "เพิ่มรถ",
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+
+    didOpen: () => {
+      const vehicleType = document.getElementById("vehicle_type");
+      const otherDiv = document.getElementById("otherVehicleDiv");
+
+      vehicleType.addEventListener("change", () => {
+        otherDiv.style.display =
+          vehicleType.value === "OTHER"
+            ? "block"
+            : "none";
+      });
+    },
+
     preConfirm: () => {
       const vehicle_name = document.getElementById("vehicle_name").value.trim();
       const license_plate = document.getElementById("license_plate").value.trim();
-      const vehicle_type = document.getElementById("vehicle_type").value.trim();
+
+      let vehicle_type = document.getElementById("vehicle_type").value;
+
+      if (vehicle_type === "OTHER") {
+        vehicle_type = document
+          .getElementById("vehicle_type_other")
+          .value.trim();
+      }
+
       const status = document.getElementById("vehicle_status").value;
       const note = document.getElementById("vehicle_note").value.trim();
 
       if (!vehicle_name || !license_plate || !vehicle_type) {
-        Swal.showValidationMessage("กรุณากรอกชื่อรถ ทะเบียนรถ และประเภทรถ");
+        Swal.showValidationMessage(
+          "กรุณากรอกชื่อรถ ทะเบียนรถ และประเภทรถ"
+        );
         return false;
       }
 
@@ -853,14 +931,21 @@ async function handleOpenCreateVehicle() {
 
   try {
     await createVehicle(result.value);
-    await showSuccess("เพิ่มรถสำเร็จ");
+    await showSuccess("เพิ่มข้อมูลรถสำเร็จ");
     await refreshVehicles();
   } catch (err) {
-    showError(err.message || "เพิ่มรถไม่สำเร็จ");
+    showError(err.message || "เพิ่มข้อมูลรถไม่สำเร็จ");
   }
 }
 
 async function handleEditVehicle(vehicle) {
+  const allowedVehicleTypes = ["VAN", "SEDAN", "MOTORCYCLE"];
+  const currentVehicleType = String(vehicle.vehicle_type || "").trim();
+  const selectedVehicleType = allowedVehicleTypes.includes(currentVehicleType)
+    ? currentVehicleType
+    : "OTHER";
+  const otherVehicleType = selectedVehicleType === "OTHER" ? currentVehicleType : "";
+
   const result = await Swal.fire({
     title: "แก้ไขข้อมูลรถ",
     html: `
@@ -872,14 +957,27 @@ async function handleEditVehicle(vehicle) {
         <input id="license_plate" class="swal2-input" value="${vehicle.license_plate || ""}">
 
         <label>ประเภทรถ</label>
-        <input id="vehicle_type" class="swal2-input" value="${vehicle.vehicle_type || ""}">
+        <select id="vehicle_type" class="swal2-select">
+          <option value="VAN" ${selectedVehicleType === "VAN" ? "selected" : ""}>รถตู้</option>
+          <option value="SEDAN" ${selectedVehicleType === "SEDAN" ? "selected" : ""}>รถเก๋ง</option>
+          <option value="MOTORCYCLE" ${selectedVehicleType === "MOTORCYCLE" ? "selected" : ""}>จักรยานยนต์</option>
+          <option value="OTHER" ${selectedVehicleType === "OTHER" ? "selected" : ""}>อื่นๆ โปรดระบุ</option>
+        </select>
+
+        <div id="otherVehicleDiv" style="display:${selectedVehicleType === "OTHER" ? "block" : "none"};">
+          <label>ระบุประเภทรถ</label>
+          <input 
+            id="vehicle_type_other" 
+            class="swal2-input"
+            value="${otherVehicleType}"
+            placeholder="เช่น รถบัส, รถกระบะ"
+          >
+        </div>
 
         <label>สถานะ</label>
         <select id="vehicle_status" class="swal2-select">
           <option value="AVAILABLE" ${vehicle.status === "AVAILABLE" ? "selected" : ""}>พร้อมใช้งาน</option>
-          <option value="IN_USE" ${vehicle.status === "IN_USE" ? "selected" : ""}>กำลังใช้งาน</option>
-          <option value="MAINTENANCE" ${vehicle.status === "MAINTENANCE" ? "selected" : ""}>ซ่อมบำรุง</option>
-          <option value="INACTIVE" ${vehicle.status === "INACTIVE" ? "selected" : ""}>ปิดใช้งาน</option>
+          <option value="INACTIVE" ${vehicle.status === "INACTIVE" ? "selected" : ""}>ไม่พร้อมใช้งาน</option>
         </select>
 
         <label>หมายเหตุ</label>
@@ -892,10 +990,32 @@ async function handleEditVehicle(vehicle) {
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    didOpen: () => {
+      const vehicleType = document.getElementById("vehicle_type");
+      const otherDiv = document.getElementById("otherVehicleDiv");
+      const otherInput = document.getElementById("vehicle_type_other");
+
+      const toggleOtherVehicleDiv = () => {
+        const showOther = vehicleType.value === "OTHER";
+        otherDiv.style.display = showOther ? "block" : "none";
+
+        if (showOther && !otherInput.value.trim()) {
+          otherInput.value = currentVehicleType;
+        }
+      };
+
+      vehicleType.addEventListener("change", toggleOtherVehicleDiv);
+      toggleOtherVehicleDiv();
+    },
     preConfirm: () => {
       const vehicle_name = document.getElementById("vehicle_name").value.trim();
       const license_plate = document.getElementById("license_plate").value.trim();
-      const vehicle_type = document.getElementById("vehicle_type").value.trim();
+      const vehicle_type_select = document.getElementById("vehicle_type").value;
+      let vehicle_type = vehicle_type_select;
+
+      if (vehicle_type_select === "OTHER") {
+        vehicle_type = document.getElementById("vehicle_type_other").value.trim();
+      }
       const status = document.getElementById("vehicle_status").value;
       const note = document.getElementById("vehicle_note").value.trim();
 
@@ -1065,9 +1185,56 @@ async function handleDeleteVehicle(vehicle) {
       </div>
       )}
 
+      {canManageSettings && (
+        <div className="form-card permission-card">
+          <h3>สิทธิ์การเห็นกล่องสรุปคนขับ</h3>
+          <div className="section-toolbar permission-toolbar">
+            <button type="button" onClick={handleSaveDriverSummaryCardScope}>
+              บันทึกสิทธิ์กล่องสรุปคนขับ
+            </button>
+            <button
+              type="button"
+              className="warning-button"
+              onClick={handleResetDriverSummaryCardScope}
+            >
+              คืนค่าเริ่มต้น
+            </button>
+          </div>
+
+          <div className="table-wrap">
+            <table className="permission-table">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>การเห็นกล่องสรุปคนขับ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(DEFAULT_DRIVER_SUMMARY_CARD_SCOPE).map((role) => (
+                  <tr key={role}>
+                    <td>{role}</td>
+                    <td>
+                      <select
+                        value={driverSummaryCardScopeConfig[role] || "NONE"}
+                        disabled={role === "ADMIN"}
+                        onChange={(e) => handleChangeDriverSummaryCardScope(role, e.target.value)}
+                      >
+                        <option value="SELF">เห็นเฉพาะคนขับคนนั้นๆ</option>
+                        <option value="ALL">เห็นทุกคน</option>
+                        <option value="NONE">ไม่เห็นเลย</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {canViewVehicles && (
       <div className="form-card">
-        <h3>Vehicle Management</h3>
+        <h3>จัดการรถ</h3>
         <div className="section-toolbar">
           {canCreateVehicles && (
           <button type="button" onClick={handleOpenCreateVehicle}>
@@ -1107,7 +1274,7 @@ async function handleDeleteVehicle(vehicle) {
                     <td>{vehicle.vehicle_id || "-"}</td>
                     <td>{vehicle.vehicle_name || "-"}</td>
                     <td>{vehicle.license_plate || "-"}</td>
-                    <td>{vehicle.vehicle_type || "-"}</td>
+                    <td>{getVehicleTypeText(vehicle.vehicle_type)}</td>
                     <td>
                       <span className={getVehicleStatusClass(vehicle.status)}>
                         {getVehicleStatusText(vehicle.status)}

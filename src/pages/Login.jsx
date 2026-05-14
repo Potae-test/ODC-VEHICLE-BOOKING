@@ -70,7 +70,8 @@ export default function Login({ onLogin }) {
           staff pass: 1234<br />
           user pass: 1234<br />
           driver1 pass: 1234<br />
-          driver2 pass: 1234
+          driver2 pass: 1234<br />
+          driver3 pass: 1234
         </div>
       </form>
     </div>
