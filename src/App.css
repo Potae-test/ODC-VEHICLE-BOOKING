@@ -1831,3 +1831,7 @@ label {
     width: 100%;
   }
 }
+.buttonCreateBookings{
+  justify-content: end;
+  justify-items: end;
+}

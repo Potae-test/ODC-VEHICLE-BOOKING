@@ -124,7 +124,7 @@ export default function App() {
           <div className="brand-logo">🚐</div>
           <div>
             <h1>ระบบงานจองรถ</h1>
-            <p>ศูนย์รับบริการจองรถและติดตามงานขับรถ</p>
+            <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
           </div>
         </div>
 
@@ -193,11 +193,11 @@ export default function App() {
             </button>
           )}
 
-          <div className="sidebar-help">
+          {/* <div className="sidebar-help">
             <b>ศูนย์ช่วยเหลือ</b>
             <p>ฝ่ายระบบงาน</p>
             <p>02-xxx-xxxx</p>
-          </div>
+          </div> */}
         </aside>
 
         <main className="main-content">

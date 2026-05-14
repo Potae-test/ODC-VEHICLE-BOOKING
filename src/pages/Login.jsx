@@ -12,7 +12,7 @@ function getRedirectPath(role) {
 }
 
 export default function Login({ onLogin }) {
-  const [email, setEmail] = useState("admin@odc.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +20,7 @@ export default function Login({ onLogin }) {
     e.preventDefault();
 
     if (!email.trim()) {
-      alert("กรุณากรอก Email");
+      alert("กรุณากรอก Username");
       return;
     }
 
@@ -45,14 +45,14 @@ export default function Login({ onLogin }) {
         <h1>ระบบงานจองรถ</h1>
         <p>ศูนย์รับบริการจองรถและติดตามงานขับรถ</p>
 
-        <label>Email</label>
+        <label>ชื่อผู้ใช้งาน</label>
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="กรอก Email"
+          placeholder="กรอกชื่อผู้ใช้งาน"
         />
         <div>
-          <label>Password</label>
+          <label>รหัสผ่าน</label>
 
           <input
             type="password"
@@ -67,11 +67,10 @@ export default function Login({ onLogin }) {
 
         <div className="login-help">
           <b>ทดสอบ:</b><br />
-          admin@odc.local<br />
-          staff@odc.local<br />
-          user@odc.local<br />
-        driver1@odc.local<br />
-         driver2@odc.local 
+          staff pass: 1234<br />
+          user pass: 1234<br />
+          driver1 pass: 1234<br />
+          driver2 pass: 1234
         </div>
       </form>
     </div>

@@ -1,5 +1,10 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
+export const PERMISSION_CONFIG_VERSION = "2026-05-14.1";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-14.1";
+
+const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
+const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
 
 export const PERMISSION_ITEMS = [
   { id: "admin_dashboard", label: "Admin Dashboard", pages: ["admin"] },
@@ -23,11 +28,21 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "booking-approval",
     "driver-summary",
     "driver-jobs",
+    "driver-management",
     "vehicle-management",
     "booking-cancellation-history",
   ],
-  USER: ["booking-list", "calendar", "vehicle-management"],
-  DRIVER: ["driver-summary", "driver-jobs"],
+  USER: [
+    "booking-list", 
+    "calendar", 
+    "driver-summary", 
+  ],
+  DRIVER: [
+    "booking-list",
+    "calendar",
+    "driver-summary", 
+    "vehicle-management",
+    "driver-jobs"],
 };
 
 export const ACTION_PERMISSION_GROUPS = [
@@ -103,19 +118,30 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
   STAFF: [
     "bookings_view",
     "bookings_edit",
+    "bookings_create",
     "bookings_approve",
     "bookings_cancel",
+    "bookings_delete",
     "drivers_view",
     "vehicles_view",
+    "vehicles_create",
+    "vehicles_edit",
+    "vehicles_delete",
     "driver_summary_view",
     "driver_jobs_view",
-    "driver_jobs_start",
-    "driver_jobs_complete",
+    "drivers_create",
+    "drivers_edit",
+    "drivers_delete",
   ],
-  USER: ["bookings_view", "bookings_create", "vehicles_view"],
+  USER: [
+    "bookings_view", 
+    "bookings_create", 
+    "driver_summary_view",
+    "bookings_edit"
+  ],
   DRIVER: [
     "bookings_view",
-    "bookings_edit",
+    "vehicles_view",
     "driver_summary_view",
     "driver_jobs_view",
     "driver_jobs_start",
@@ -156,10 +182,25 @@ export function getDefaultActionPermissionConfig() {
   );
 }
 
+function resetStoredPermissionConfig(storageKey, versionStorageKey, version) {
+  localStorage.removeItem(storageKey);
+  localStorage.setItem(versionStorageKey, version);
+}
+
 export function loadPermissionConfig() {
   const defaults = getDefaultPermissionConfig();
 
   try {
+    const savedVersion = localStorage.getItem(PERMISSION_VERSION_STORAGE_KEY);
+    if (savedVersion !== PERMISSION_CONFIG_VERSION) {
+      resetStoredPermissionConfig(
+        PERMISSION_STORAGE_KEY,
+        PERMISSION_VERSION_STORAGE_KEY,
+        PERMISSION_CONFIG_VERSION
+      );
+      return defaults;
+    }
+
     const saved = localStorage.getItem(PERMISSION_STORAGE_KEY);
     if (!saved) return defaults;
 
@@ -181,6 +222,7 @@ export function savePermissionConfig(config) {
   };
 
   localStorage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify(nextConfig));
+  localStorage.setItem(PERMISSION_VERSION_STORAGE_KEY, PERMISSION_CONFIG_VERSION);
   window.dispatchEvent(new Event("odc-permissions-updated"));
   return nextConfig;
 }
@@ -189,6 +231,16 @@ export function loadActionPermissionConfig() {
   const defaults = getDefaultActionPermissionConfig();
 
   try {
+    const savedVersion = localStorage.getItem(ACTION_PERMISSION_VERSION_STORAGE_KEY);
+    if (savedVersion !== ACTION_PERMISSION_CONFIG_VERSION) {
+      resetStoredPermissionConfig(
+        ACTION_PERMISSION_STORAGE_KEY,
+        ACTION_PERMISSION_VERSION_STORAGE_KEY,
+        ACTION_PERMISSION_CONFIG_VERSION
+      );
+      return defaults;
+    }
+
     const saved = localStorage.getItem(ACTION_PERMISSION_STORAGE_KEY);
     if (!saved) return defaults;
 
@@ -210,6 +262,7 @@ export function saveActionPermissionConfig(config) {
   };
 
   localStorage.setItem(ACTION_PERMISSION_STORAGE_KEY, JSON.stringify(nextConfig));
+  localStorage.setItem(ACTION_PERMISSION_VERSION_STORAGE_KEY, ACTION_PERMISSION_CONFIG_VERSION);
   window.dispatchEvent(new Event("odc-action-permissions-updated"));
   return nextConfig;
 }

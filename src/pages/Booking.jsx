@@ -963,13 +963,19 @@ export default function Booking() {
               </select>
             </div>
           </div>
-
+          {canCreateBookings && (
+          <button type="button"  disabled={Boolean(processingAction)} onClick={handleCreateBooking}>
+              ➕ เพิ่มรายการจองใหม่
+          </button>
+        )}
           {loading ? (
             <p>กำลังโหลดข้อมูลรายการจอง...</p>
           ) : (
             <>
+
               <div className="table-wrap" style={{ marginTop: 24 }}>
                 <table>
+                  
                   <thead>
                     <tr>
                       <th>เลขที่</th>
