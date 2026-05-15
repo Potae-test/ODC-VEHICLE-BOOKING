@@ -404,9 +404,13 @@ export default function DriverJobs() {
 
     try {
       setProcessingAction({ bookingId: booking.booking_id, type: "start" });
+      const nowIso = new Date().toISOString();
+      const startBy = currentUser?.name || currentUser?.email || "";
       const response = await startTrip({
         booking_id: booking.booking_id,
-        out_time: new Date().toISOString(),
+        out_time: nowIso,
+        actual_start_datetime: nowIso,
+        actual_start_by: startBy,
         out_mileage: "",
         assigned_user_id: currentUser?.user_id || "",
         assigned_user_name: currentUser?.name || "",
@@ -420,7 +424,12 @@ export default function DriverJobs() {
       }
 
       await showSuccess("เริ่มงานและบันทึกการออกรถสำเร็จ");
-      mergeBooking(booking.booking_id, { status: "IN_USE", updated_at: new Date().toISOString() });
+      mergeBooking(booking.booking_id, {
+        status: "IN_USE",
+        actual_start_datetime: nowIso,
+        actual_start_by: startBy,
+        updated_at: nowIso,
+      });
     } catch (err) {
       showError(err.message || "เริ่มงานไม่สำเร็จ");
     } finally {
@@ -444,9 +453,13 @@ export default function DriverJobs() {
 
     try {
       setProcessingAction({ bookingId: booking.booking_id, type: "complete" });
+      const nowIso = new Date().toISOString();
+      const returnBy = currentUser?.name || currentUser?.email || "";
       await completeTrip({
         booking_id: booking.booking_id,
-        in_time: new Date().toISOString(),
+        in_time: nowIso,
+        actual_return_datetime: nowIso,
+        actual_return_by: returnBy,
         in_mileage: "",
         remark: "",
         assigned_user_id: currentUser?.user_id || "",
@@ -454,7 +467,12 @@ export default function DriverJobs() {
       });
 
       await showSuccess("จบงานและบันทึกการคืนรถสำเร็จ");
-      mergeBooking(booking.booking_id, { status: "COMPLETED", updated_at: new Date().toISOString() });
+      mergeBooking(booking.booking_id, {
+        status: "COMPLETED",
+        actual_return_datetime: nowIso,
+        actual_return_by: returnBy,
+        updated_at: nowIso,
+      });
     } catch (err) {
       showError(err.message || "จบงานไม่สำเร็จ");
     } finally {

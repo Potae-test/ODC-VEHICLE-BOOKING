@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
 import {
   approveBooking,
@@ -1064,6 +1064,8 @@ export default function Booking() {
             <div><span class="booking-detail-label">เบอร์โทร</span><span class="booking-detail-value">${escapeHtml(booking.phone || "-")}</span></div>
             <div><span class="booking-detail-label">เวลาไป</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.start_datetime) || "-")}</span></div>
             <div><span class="booking-detail-label">เวลากลับ</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.end_datetime) || "-")}</span></div>
+            <div><span class="booking-detail-label">เวลาออกรถจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_start_datetime ? formatThaiDateTime(booking.actual_start_datetime) : "-")}</span></div>
+            <div><span class="booking-detail-label">เวลากลับจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_return_datetime ? formatThaiDateTime(booking.actual_return_datetime) : "-")}</span></div>
             <div><span class="booking-detail-label">รถที่ขอ</span><span class="booking-detail-value">${escapeHtml(getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""))}</span></div>
             <div><span class="booking-detail-label">ปลายทาง</span><span class="booking-detail-value">${escapeHtml(booking.destination || "-")}</span></div>
             <div><span class="booking-detail-label">เหตุผลการใช้รถ</span><span class="booking-detail-value">${escapeHtml(booking.purpose || "-")}</span></div>
@@ -1337,69 +1339,6 @@ export default function Booking() {
                           onCancel={handleCancelBooking}
                         />
                       ))
-                      /* legacy inline row kept unreachable for minimal diff */ || pageItems.map((booking) => {
-                        const statusMeta = getStatusMeta(booking.status);
-                        const status = normalizeStatus(booking.status);
-                        const canShowProcess =
-                          canProcessBookings &&
-                          ["PENDING", "APPROVED"].includes(status);
-
-                        const canShowEdit =
-                          canEditBookings && isEditableBookingStatus(status);
-
-                        const canShowCancel =
-                          canCancelBookings &&
-                          !["COMPLETED", "CANCELLED", "APPROVED", "IN_USE"].includes(status);
-
-                        return (
-                          <tr key={booking.booking_id}>
-                            <td>{booking.booking_no || "-"}</td>
-                            <td>{booking.requester_name || "-"}</td>
-                            <td>{formatThaiDateTime(booking.start_datetime)}</td>
-                            <td>{formatThaiDateTime(booking.end_datetime)}</td>
-                            <td>{booking.destination || "-"}</td>
-                            <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
-                            <td>{getBookingDriverLabel(booking)}</td>
-                            <td>
-                              <span
-                                className={`status ${statusMeta.className}`}
-                                title={statusMeta.help}
-                              >
-                                {statusMeta.label}
-                              </span>
-                            </td>
-                            <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 20}}>
-                              {booking.staff_note || "-"}
-                            </td>
-                            <td className="action-buttons">
-                              {canShowProcess && (
-                                <button type="button" onClick={() => handleProcessBooking(booking)}>
-                                  {status === "APPROVED" ? "เปลี่ยนคนขับ/รถ" : "อนุมัติ"}
-                                </button>
-                              )}
-                              {canShowEdit && (
-                                <button
-                                  type="button"
-                                  className="warning-button booking-action-button"
-                                  onClick={() => handleEditBooking(booking)}
-                                >
-                                  แก้ไข
-                                </button>
-                              )}
-                              {canShowCancel && (
-                                <button
-                                  type="button"
-                                  // className="danger-button booking-action-button"
-                                  className="danger-button"
-                                  onClick={() => handleCancelBooking(booking)}
-                                >
-                                  {status === "PENDING" ? "ยกเลิก" : "ลบ"}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
                     )}
                   </tbody>
                 </table>
@@ -1413,6 +1352,5 @@ export default function Booking() {
     </div>
   );
 }
-
 
 

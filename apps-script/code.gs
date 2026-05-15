@@ -176,6 +176,11 @@ function createDriverJobLogPayload_(data) {
     vehicle_id: data.vehicle_id || "",
     action: data.action || "",
     reason: data.reason || "",
+    requester_name: data.requester_name || "",
+    start_datetime: data.start_datetime || "",
+    end_datetime: data.end_datetime || "",
+    destination: data.destination || "",
+    purpose: data.purpose || "",
     created_at: new Date().toISOString(),
     created_by: data.created_by || "",
   };
@@ -680,6 +685,11 @@ function approveBooking(data) {
         vehicle_id: rowValues[vehicleIdCol],
         action: "ASSIGNED",
         reason: rowValues[staffNoteCol] || "",
+        requester_name: rowValues[columnMap.requester_name] || "",
+        start_datetime: rowValues[startCol] || "",
+        end_datetime: rowValues[endCol] || "",
+        destination: rowValues[columnMap.destination] || "",
+        purpose: rowValues[columnMap.purpose] || "",
         created_by: currentUserName || "STAFF",
       })
     );
@@ -710,6 +720,8 @@ function startTrip(data) {
   const statusCol = columnMap.status;
   const vehicleIdCol = columnMap.vehicle_id;
   const updatedAtCol = columnMap.updated_at;
+  const actualStartDatetimeCol = ensureColumn(bookingSheet, headers, "actual_start_datetime");
+  const actualStartByCol = ensureColumn(bookingSheet, headers, "actual_start_by");
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
@@ -725,9 +737,15 @@ function startTrip(data) {
   const currentRow = row - 1;
   const now = new Date();
   const currentBooking = applyAssignedUserFallback(rowsToObjects(headers, [values[currentRow]])[0] || {}, userLookup);
+  const assignedUserId = currentBooking.assigned_user_id || data.assigned_user_id || "";
+  const assignedUserName = currentBooking.assigned_user_name || data.assigned_user_name || "";
+  const actualStartDatetime = data.actual_start_datetime || data.out_time || now.toISOString();
+  const actualStartBy = data.actual_start_by || assignedUserName || "";
 
   const bookingRowValues = table.rows[row - 2].slice();
   bookingRowValues[statusCol] = "IN_USE";
+  bookingRowValues[actualStartDatetimeCol] = actualStartDatetime;
+  bookingRowValues[actualStartByCol] = actualStartBy;
   bookingRowValues[updatedAtCol] = now;
   setRowValues(bookingSheet, row, bookingRowValues);
 
@@ -740,6 +758,11 @@ function startTrip(data) {
       vehicle_id: currentBooking.vehicle_id || "",
       action: "STARTED",
       reason: "",
+      requester_name: currentBooking.requester_name || "",
+      start_datetime: currentBooking.start_datetime || "",
+      end_datetime: currentBooking.end_datetime || "",
+      destination: currentBooking.destination || "",
+      purpose: currentBooking.purpose || "",
       created_by: assignedUserName || "",
     })
   );
@@ -759,8 +782,6 @@ function startTrip(data) {
   const logRemarkCol = ensureColumn(logSheet, logHeaders, "remark");
   const logCreatedAtCol = ensureColumn(logSheet, logHeaders, "created_at");
   const logUpdatedAtCol = ensureColumn(logSheet, logHeaders, "updated_at");
-  const assignedUserId = currentBooking.assigned_user_id || data.assigned_user_id || "";
-  const assignedUserName = currentBooking.assigned_user_name || data.assigned_user_name || "";
 
   const logRowValues = Array(logHeaders.length).fill("");
   logRowValues[logIdCol] = logId;
@@ -783,6 +804,9 @@ function startTrip(data) {
     data: {
       booking_id: data.booking_id,
       status: "IN_USE",
+      actual_start_datetime: actualStartDatetime,
+      actual_start_by: actualStartBy,
+      updated_at: now.toISOString(),
       log_id: logId
     }
   });
@@ -798,6 +822,8 @@ function completeTrip(data) {
 
   const statusCol = bookingColumnMap.status;
   const updatedAtCol = bookingColumnMap.updated_at;
+  const actualReturnDatetimeCol = ensureColumn(bookingSheet, bookingHeaders, "actual_return_datetime");
+  const actualReturnByCol = ensureColumn(bookingSheet, bookingHeaders, "actual_return_by");
 
   const logTable = readSheetTable(logSheet);
   const logValues = [logTable.headers].concat(logTable.rows);
@@ -822,10 +848,14 @@ function completeTrip(data) {
 
   const bookingRowValues = bookingTable.rows[bookingRow - 2].slice();
   bookingRowValues[statusCol] = "COMPLETED";
+  const completedBooking = rowsToObjects(bookingHeaders, [bookingRowValues])[0] || {};
+  const actualReturnDatetime = data.actual_return_datetime || data.in_time || new Date().toISOString();
+  const actualReturnBy = data.actual_return_by || completedBooking.assigned_user_name || data.assigned_user_name || "";
+  bookingRowValues[actualReturnDatetimeCol] = actualReturnDatetime;
+  bookingRowValues[actualReturnByCol] = actualReturnBy;
   bookingRowValues[updatedAtCol] = new Date();
   setRowValues(bookingSheet, bookingRow, bookingRowValues);
 
-  const completedBooking = rowsToObjects(bookingHeaders, [bookingRowValues])[0] || {};
   const completedAssignedUserId = String(completedBooking.assigned_user_id || "").trim();
   const completedAssignedUserName = String(completedBooking.assigned_user_name || "").trim();
 
@@ -838,6 +868,11 @@ function completeTrip(data) {
       vehicle_id: completedBooking.vehicle_id || "",
       action: "COMPLETED",
       reason: data.remark || "",
+      requester_name: completedBooking.requester_name || "",
+      start_datetime: completedBooking.start_datetime || "",
+      end_datetime: completedBooking.end_datetime || "",
+      destination: completedBooking.destination || "",
+      purpose: completedBooking.purpose || "",
       created_by: completedAssignedUserName || "",
     })
   );
@@ -859,7 +894,10 @@ function completeTrip(data) {
         message: "Complete trip success",
         data: {
           booking_id: data.booking_id,
-          status: "COMPLETED"
+          status: "COMPLETED",
+          actual_return_datetime: actualReturnDatetime,
+          actual_return_by: actualReturnBy,
+          updated_at: new Date().toISOString()
         }
       });
     }
@@ -932,6 +970,11 @@ function driverCancelJob(data) {
       vehicle_id: currentBooking.vehicle_id || "",
       action: "DRIVER_CANCELLED",
       reason: reason,
+      requester_name: currentBooking.requester_name || "",
+      start_datetime: currentBooking.start_datetime || "",
+      end_datetime: currentBooking.end_datetime || "",
+      destination: currentBooking.destination || "",
+      purpose: currentBooking.purpose || "",
       created_by: cancelledBy || "",
     })
   );

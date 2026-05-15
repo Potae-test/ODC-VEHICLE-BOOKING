@@ -1894,7 +1894,7 @@ label {
 
 .driver-summary-detail-expanded-grid span {
   display: block;
-  font-size: 13px;
+  font-size: 19px;
   color: #64748b;
   margin-bottom: 4px;
 }
@@ -1902,7 +1902,7 @@ label {
 .driver-summary-detail-expanded-grid b {
   display: block;
   color: #0f172a;
-  font-size: 14px;
+  font-size: 25px;
   line-height: 1.5;
   word-break: break-word;
 }

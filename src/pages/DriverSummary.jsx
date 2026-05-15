@@ -626,7 +626,7 @@ export default function DriverSummary() {
       </div>
 
       <div className="form-card">
-        <h3>ตารางเปรียบเทียบคนขับ</h3>
+        <h3>ตารางสรุปรายละเอียดงาน</h3>
 
         <div className="section-counter">
           {selectedRange.label}: {formatThaiDateTime(selectedRange.start)} -{" "}
