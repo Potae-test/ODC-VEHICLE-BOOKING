@@ -536,7 +536,7 @@ export default function DriverJobs() {
       await showSuccess("ยกเลิกงานสำเร็จ");
       const staffNote =
         response?.staff_note ||
-        `คนขับยกเลิกงานโดย ${currentUser?.name || currentUser?.email || ""}: ${result.value}`;
+        `ยกเลิกงานโดย ${currentUser?.name || currentUser?.email || ""}: ${result.value}`;
       mergeBooking(booking.booking_id, {
         assigned_user_id: "",
         assigned_user_name: "",

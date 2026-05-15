@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { deleteBookingCancellationHistory, getBookingCancellationHistory } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
@@ -46,6 +46,10 @@ function getStatusMeta() {
     className: "red",
     help: "รายการนี้ถูกยกเลิกและบันทึกลงในประวัติการยกเลิก",
   };
+}
+
+function getCancellationDeleteId(item) {
+  return String(item.cancellation_id || item.booking_id || item.id || item.row_number || "").trim();
 }
 
 export default function BookingCancellationHistory() {
@@ -153,7 +157,7 @@ export default function BookingCancellationHistory() {
       return;
     }
 
-    const cancellationId = item.cancellation_id;
+    const cancellationId = getCancellationDeleteId(item);
     if (!cancellationId) {
       showError("ไม่พบรหัสรายการที่ต้องการลบ");
       return;
@@ -169,10 +173,28 @@ export default function BookingCancellationHistory() {
 
     try {
       setDeletingId(cancellationId);
-      await deleteBookingCancellationHistory(cancellationId);
-      await loadData();
+
+      console.log("Deleting cancellation history", {
+        cancellationId,
+        item,
+      });
+
+      const response = await deleteBookingCancellationHistory({
+        cancellation_id: item.cancellation_id || "",
+        booking_id: item.booking_id || "",
+        id: item.id || "",
+        row_number: item.row_number || "",
+      });
+
+      console.log("Deleted cancellation history response", response);
+
+      setHistory((current) =>
+        current.filter((row) => getCancellationDeleteId(row) !== cancellationId)
+      );
+
       showSuccess("ลบประวัติการยกเลิกสำเร็จ");
     } catch (err) {
+      console.error("Delete cancellation history failed", err);
       const message = err.message || "ลบประวัติการยกเลิกไม่สำเร็จ";
       showError(message);
     } finally {
@@ -245,14 +267,14 @@ export default function BookingCancellationHistory() {
               />
             </div>
 
-            <div>
+            {/* <div>
               <label>ผู้ยกเลิก</label>
               <input
                 value={filters.cancelled_by}
                 onChange={(e) => setFilter("cancelled_by", e.target.value)}
                 placeholder="ค้นหาผู้ยกเลิก"
               />
-            </div>
+            </div> */}
           </div>
 
           <div className="table-wrap" style={{ marginTop: 24 }}>
@@ -277,7 +299,7 @@ export default function BookingCancellationHistory() {
                   </tr>
                 ) : (
                   pageItems.map((item) => (
-                    <tr key={item.cancellation_id || item.booking_id}>
+                    <tr key={getCancellationDeleteId(item) || item.booking_no}>
                       <td>{item.booking_no || item.cancellation_id || "-"}</td>
                       <td>{item.requester_name || "-"}</td>
                       <td>{item.destination || "-"}</td>
@@ -295,9 +317,9 @@ export default function BookingCancellationHistory() {
                             type="button"
                             className="danger-button"
                             onClick={() => handleDelete(item)}
-                            disabled={deletingId === item.cancellation_id}
+                            disabled={deletingId === getCancellationDeleteId(item)}
                           >
-                            {deletingId === item.cancellation_id ? "กำลังลบ..." : "ลบ"}
+                            {deletingId === getCancellationDeleteId(item) ? "กำลังลบ..." : "ลบ"}
                           </button>
                         ) : (
                           "-"

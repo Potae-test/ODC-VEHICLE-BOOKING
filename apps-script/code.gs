@@ -54,7 +54,7 @@ function doPost(e) {
     if (action === "deleteUser") return deleteUser(body.data);
     if (action === "updateDriver") return updateDriver(body.data);
     if (action === "deleteDriver") return deleteDriver(body.data);
-    if (action === "deleteBookingCancellationHistory") return deleteBookingCancellationHistory(body.data);
+    if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
     return jsonOutput({
       success: false,
@@ -1183,7 +1183,7 @@ function cancelBooking(data) {
 
 function ensureCancellationHistorySheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName("BookingCancellations");
+  let sheet = ss.getSheetByName("BookingCancellationHistory") || ss.getSheetByName("BookingCancellations");
 
   const headers = [
     "cancellation_id",
@@ -1208,7 +1208,7 @@ function ensureCancellationHistorySheet() {
   ];
 
   if (!sheet) {
-    sheet = ss.insertSheet("BookingCancellations");
+    sheet = ss.insertSheet("BookingCancellationHistory");
     appendSheetRow(sheet, headers);
     return sheet;
   }
@@ -1243,7 +1243,8 @@ function getBookingCancellations() {
     });
   }
 
-  const data = rowsToObjects(headers, rows).map((obj) => ({
+  const data = rowsToObjects(headers, rows).map((obj, index) => ({
+    row_number: index + 2,
     ...obj,
     assigned_user_id: obj.assigned_user_id || obj.driver_id || "",
     assigned_user_name: obj.assigned_user_name || obj.driver_name || ""
@@ -1260,33 +1261,65 @@ function deleteBookingCancellationHistory(data) {
   const sheet = ensureCancellationHistorySheet();
   const { headers, rows } = readSheetTable(sheet);
 
-  const cancellationIdCol = headers.indexOf("cancellation_id");
+  const searchId = String(data && (data.cancellation_id || data.booking_id || data.id) || "").trim();
+  const rowNumber = Number(data && data.row_number);
 
-  if (!data.cancellation_id) {
+  if (rowNumber && rowNumber >= 2 && rowNumber <= sheet.getLastRow()) {
+    sheet.deleteRow(rowNumber);
+
     return jsonOutput({
-      success: false,
-      message: "cancellation_id is required"
+      success: true,
+      message: "ลบประวัติการยกเลิกสำเร็จ",
+      deleted_id: String(rowNumber)
     });
   }
 
+  if (!searchId) {
+    return jsonOutput({
+      success: false,
+      message: "ไม่พบรายการประวัติการยกเลิกที่ต้องการลบ",
+      debug: {
+        searchId,
+        rowNumber,
+        headers
+      }
+    });
+  }
+
+  const matchColumns = ["cancellation_id", "booking_id", "id"]
+    .map((columnName) => ({
+      columnName,
+      columnIndex: headers.indexOf(columnName),
+    }))
+    .filter((entry) => entry.columnIndex >= 0);
+
   for (let i = 0; i < rows.length; i++) {
-    if (String(rows[i][cancellationIdCol]) === String(data.cancellation_id)) {
+    const row = rows[i];
+    const matched = matchColumns.some((entry) => String(row[entry.columnIndex] || "").trim() === searchId);
+
+    if (matched) {
       sheet.deleteRow(i + 2);
 
       return jsonOutput({
         success: true,
-        message: "Delete cancellation history success"
+        message: "ลบประวัติการยกเลิกสำเร็จ",
+        deleted_id: searchId
       });
     }
   }
 
   return jsonOutput({
     success: false,
-    message: "Cancellation history not found"
+    message: "ไม่พบรายการประวัติการยกเลิกที่ต้องการลบ",
+    debug: {
+      searchId,
+      rowNumber,
+      headers
+    }
   });
 }
 
-// Attach this function to a monthly time-driven trigger in Apps Script.
+// Attach this function' to a monthly time-driven trigger in Apps Script.
 // It removes cancellation history rows older than one month while keeping the header row intact.
 function clearBookingCancellationHistoryMonthly() {
   const sheet = ensureCancellationHistorySheet();

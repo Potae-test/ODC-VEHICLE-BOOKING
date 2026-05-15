@@ -66,6 +66,21 @@ async function getCachedCollection(key, fetcher) {
 }
 
 async function apiRequest(action, options = {}) {
+  if (options.method === "POST") {
+    const json = await fetchJson(`${API_BASE_URL}/api/${action}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action,
+        data: options.body || {},
+      }),
+    });
+
+    return json;
+  }
+
   if (options.fresh) {
     const json = await fetchJson(`${API_BASE_URL}/api/${action}?ts=${Date.now()}`);
     return json.data || [];
@@ -196,17 +211,27 @@ export async function getBookingCancellationHistory() {
   });
 }
 
-export async function deleteBookingCancellationHistory(cancellation_id) {
+export async function deleteBookingCancellationHistory(input) {
+  const payload =
+    typeof input === "object"
+      ? input
+      : {
+          cancellation_id: input,
+          booking_id: input,
+          id: input,
+        };
+
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/cancellations/delete`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ cancellation_id }),
+    body: JSON.stringify(payload),
   });
 
   invalidateApiCache(["booking-cancellations"]);
-  return json.data;
+
+  return json.data || json;
 }
 
 export async function createBooking(data) {
