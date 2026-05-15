@@ -10,6 +10,7 @@ cd ODC-VEHICLE-BOOKING
 npm install
 ถ้ามี SweetAlert:
 npm install sweetalert2
+npm install flatpickr
 
 3) Login Cloudflare ใหม่
 npx wrangler login
