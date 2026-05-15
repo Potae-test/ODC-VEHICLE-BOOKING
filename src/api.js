@@ -65,6 +65,18 @@ async function getCachedCollection(key, fetcher) {
   return cloneData(data);
 }
 
+async function apiRequest(action, options = {}) {
+  if (options.fresh) {
+    const json = await fetchJson(`${API_BASE_URL}/api/${action}?ts=${Date.now()}`);
+    return json.data || [];
+  }
+
+  return getCachedCollection(action, async () => {
+    const json = await fetchJson(`${API_BASE_URL}/api/${action}`);
+    return json.data || [];
+  });
+}
+
 function toVehiclePayload(data = {}) {
   const vehicleName = data.vehicle_name ?? data.vehicle_code ?? "";
   const licensePlate = data.license_plate ?? data.plate_no ?? "";
@@ -173,6 +185,10 @@ export async function getBookingsFresh() {
   return getBookings({ fresh: true });
 }
 
+export async function getDriverJobLogs(options = {}) {
+  return apiRequest("driver_job_logs", options);
+}
+
 export async function getBookingCancellationHistory() {
   return getCachedCollection("booking-cancellations", async () => {
     const json = await fetchJson(`${API_BASE_URL}/api/bookings/cancellations`);
@@ -233,12 +249,12 @@ export async function approveBooking(data) {
     body: JSON.stringify(payload),
   });
 
-  invalidateApiCache(["bookings"]);
+  invalidateApiCache(["bookings", "driver_job_logs"]);
   return json.data;
 }
 
 export async function startTrip(data) {
-  invalidateApiCache(["bookings"]);
+  invalidateApiCache(["bookings", "driver_job_logs"]);
 
   const res = await fetch(`${API_BASE_URL}/api/bookings/start-trip`, {
     method: "POST",
@@ -247,7 +263,7 @@ export async function startTrip(data) {
   });
 
   const json = await res.json();
-  invalidateApiCache(["bookings"]);
+  invalidateApiCache(["bookings", "driver_job_logs"]);
   return json;
 }
 
@@ -258,7 +274,7 @@ export async function completeTrip(data) {
     body: JSON.stringify(data),
   });
 
-  invalidateApiCache(["bookings"]);
+  invalidateApiCache(["bookings", "driver_job_logs"]);
   return json.data;
 }
 
@@ -269,7 +285,7 @@ export async function driverCancelJob(data) {
     body: JSON.stringify(data),
   });
 
-  invalidateApiCache(["bookings"]);
+  invalidateApiCache(["bookings", "driver_job_logs"]);
   return json.data;
 }
 

@@ -469,7 +469,7 @@ const BookingTableRow = memo(function BookingTableRow({
   const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status);
   const canShowEdit = canEditBookings && isEditableBookingStatus(status);
   const canShowCancel =
-    canCancelBookings && !["COMPLETED", "CANCELLED", "APPROVED", "IN_USE"].includes(status);
+    canCancelBookings && !["COMPLETED", "CANCELLED", "IN_USE"].includes(status);
 
   return (
     <tr>
@@ -485,7 +485,7 @@ const BookingTableRow = memo(function BookingTableRow({
           {statusMeta.label}
         </span>
       </td>
-      <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 14 }}>
+      <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 25}}>
         {booking.staff_note || "-"}
       </td>
       <td className="action-buttons">
@@ -499,7 +499,7 @@ const BookingTableRow = memo(function BookingTableRow({
             {processing === "process"
               ? "Processing..."
               : status === "APPROVED"
-                ? "เปลี่ยนแปลงคนขับ/รถ"
+                ? "เปลี่ยนคนขับ/รถ"
                 : "อนุมัติ"}
           </button>
         )}
@@ -1374,7 +1374,7 @@ export default function Booking() {
                             <td className="action-buttons">
                               {canShowProcess && (
                                 <button type="button" onClick={() => handleProcessBooking(booking)}>
-                                  {status === "APPROVED" ? "เปลี่ยนแปลงคนขับ/รถ" : "อนุมัติ"}
+                                  {status === "APPROVED" ? "เปลี่ยนคนขับ/รถ" : "อนุมัติ"}
                                 </button>
                               )}
                               {canShowEdit && (

@@ -36,6 +36,8 @@ npx wrangler deploy src/index.ts --name odc-vehicle-api
 
 ถ้าจะดึง code ล่าสุดจาก GitHub
 git pull
+git reset --hard origin/main
+git fetch --all
 
 ถ้าจะอัพ code ขึ้น GitHub
 git add .
@@ -47,3 +49,10 @@ Auto Close Tag
 Auto Rename Tag
 Auto-Save on Window Change
 Material Icon Theme
+
+--------------
+
+wrangler Update
+npm install -g wrangler@latest
+npm i -D wrangler@latest
+wrangler --version

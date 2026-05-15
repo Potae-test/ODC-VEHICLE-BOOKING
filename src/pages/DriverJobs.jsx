@@ -9,6 +9,18 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function getVehicleTypeText(type) {
+  const value = String(type || "").trim();
+  const normalized = value.toUpperCase();
+
+  if (!value) return "-";
+  if (normalized === "VAN") return "รถตู้";
+  if (normalized === "SEDAN") return "รถเก๋ง";
+  if (normalized === "MOTORCYCLE") return "จักรยานยนต์";
+  if (normalized === "OTHER") return "อื่นๆ";
+  return value;
+}
+
 function getCurrentUser() {
   try {
     return JSON.parse(localStorage.getItem("odc_user") || "null");
@@ -74,9 +86,21 @@ function compactText(value) {
 
 function formatVehicleLabel(booking, vehicleMap) {
   const vehicle = vehicleMap.get(String(booking.vehicle_id || "").trim());
-  const plate = vehicle?.license_plate || vehicle?.plate_no || "-";
-  if (!booking.vehicle_id && plate === "-") return "-";
-  return `${booking.vehicle_id || "-"} / ${plate}`;
+
+  if (!vehicle) return "-";
+
+  const vehicleType = getVehicleTypeText(
+    vehicle.vehicle_type ||
+    booking.vehicle_type ||
+    booking.vehicle_type_request
+  );
+
+  const plate =
+    vehicle.license_plate ||
+    vehicle.plate_no ||
+    "-";
+
+  return `${vehicleType} / ${plate}`;
 }
 
 function getBookingIdentity(booking) {
@@ -483,6 +507,7 @@ export default function DriverJobs() {
         booking_id: booking.booking_id,
         reason: result.value,
         cancelled_by: currentUser?.name || currentUser?.email || "",
+        cancelled_user_id: currentUser?.user_id || "",
       });
 
       if (response?.success === false) {
@@ -493,11 +518,15 @@ export default function DriverJobs() {
       await showSuccess("ยกเลิกงานสำเร็จ");
       const staffNote =
         response?.staff_note ||
-        `คนขับยกเลิกงาน: ${result.value}`;
+        `คนขับยกเลิกงานโดย ${currentUser?.name || currentUser?.email || ""}: ${result.value}`;
       mergeBooking(booking.booking_id, {
         assigned_user_id: "",
         assigned_user_name: "",
-        status: "APPROVED",
+        vehicle_id: "",
+        vehicle_name: "",
+        vehicle_code: "",
+        vehicle_plate: "",
+        status: "PENDING",
         staff_note: staffNote,
       });
     } catch (err) {
@@ -511,7 +540,8 @@ export default function DriverJobs() {
     const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
 
     Swal.fire({
-      title: booking.booking_no || "รายละเอียดงาน",
+      title: "รายละเอียดงาน",
+      // title: booking.booking_no || "รายละเอียดงาน",
       width: 720,
       confirmButtonText: "ปิด",
       confirmButtonColor: "#1455c8",

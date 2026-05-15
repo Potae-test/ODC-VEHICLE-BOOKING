@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { getBookings, getUsers } from "../api";
+import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
+import { getDriverJobLogs, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
 
@@ -90,6 +90,61 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function normalizeAction(action) {
+  return String(action || "").trim().toUpperCase();
+}
+
+function getDriverJobActionCategory(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "ASSIGNED") return "approved";
+  if (action === "STARTED") return "in_use";
+  if (action === "COMPLETED") return "completed";
+  if (action === "DRIVER_CANCELLED") return "cancelled";
+
+  return null;
+}
+
+function getDriverJobActionLabel(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "ASSIGNED") return "ได้รับมอบหมาย";
+  if (action === "STARTED") return "เริ่มใช้งาน";
+  if (action === "COMPLETED") return "เสร็จสิ้น";
+  if (action === "DRIVER_CANCELLED") return "คนขับยกเลิก";
+
+  return action || "-";
+}
+
+function getDriverJobActionDescription(booking) {
+  const action = normalizeAction(booking.action);
+  const reason = String(booking.reason || "").trim();
+
+  if (action === "ASSIGNED") return "ได้รับมอบหมายงาน";
+  if (action === "STARTED") return "เริ่มใช้งานรถ";
+  if (action === "COMPLETED") return "จบงาน / คืนรถ";
+  if (action === "DRIVER_CANCELLED") {
+    return reason ? `คนขับยกเลิกงาน: ${reason}` : "คนขับยกเลิกงาน";
+  }
+
+  return reason || booking.action || "-";
+}
+
+function getDriverJobActionClass(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "COMPLETED") return "status gray";
+  if (action === "STARTED") return "status green";
+  if (action === "ASSIGNED") return "status blue";
+  if (action === "DRIVER_CANCELLED") return "status red";
+
+  return "status";
+}
+
+function getDetailKey(booking, index) {
+  return booking.log_id || `${booking.booking_id || "log"}-${index}`;
+}
+
 function getStatusLabel(status) {
   const normalized = normalizeStatus(status);
   if (normalized === "PENDING") return "รออนุมัติ";
@@ -144,11 +199,11 @@ function isCountedStatus(booking) {
 }
 
 function isSummaryStatus(booking) {
-  return Boolean(getStatusCategory(booking.status)) && normalizeDriverName(booking.assigned_user_name);
+  return Boolean(getDriverJobActionCategory(booking));
 }
 
 function isInRange(booking, range) {
-  const date = parseBookingDate(booking.start_datetime);
+  const date = parseBookingDate(booking.created_at || booking.updated_at || booking.start_datetime);
   return date && date >= range.start && date <= range.end;
 }
 
@@ -166,20 +221,24 @@ function countByRange(bookings, range) {
 
 function latestBooking(bookings) {
   return [...bookings]
-    .filter((booking) => parseBookingDate(booking.start_datetime))
-    .sort((a, b) => parseBookingDate(b.start_datetime) - parseBookingDate(a.start_datetime))[0];
+    .filter((booking) => parseBookingDate(booking.created_at || booking.updated_at || booking.start_datetime))
+    .sort(
+      (a, b) =>
+        parseBookingDate(b.created_at || b.updated_at || b.start_datetime) -
+        parseBookingDate(a.created_at || a.updated_at || a.start_datetime)
+    )[0];
 }
 
 function sortLatestFirst(bookings) {
   return [...bookings].sort((a, b) => {
-    const dateA = parseBookingDate(a.start_datetime)?.getTime() || 0;
-    const dateB = parseBookingDate(b.start_datetime)?.getTime() || 0;
+    const dateA = parseBookingDate(a.created_at || a.updated_at || a.start_datetime)?.getTime() || 0;
+    const dateB = parseBookingDate(b.created_at || b.updated_at || b.start_datetime)?.getTime() || 0;
     return dateB - dateA;
   });
 }
 
 function countByCategory(bookings, category) {
-  return bookings.filter((booking) => getStatusCategory(booking.status) === category).length;
+  return bookings.filter((booking) => getDriverJobActionCategory(booking) === category).length;
 }
 
 function compareDriverUserIds(a, b) {
@@ -220,7 +279,9 @@ const DriverSummaryTableRow = memo(function DriverSummaryTableRow({ row, onDetai
       </td>
       <td>
         {row.latest
-          ? `${row.latest.booking_no || "-"} / ${formatThaiDateTime(row.latest.start_datetime)}`
+          ? `${row.latest.booking_no || "-"} / ${formatThaiDateTime(
+              row.latest.created_at || row.latest.updated_at || row.latest.start_datetime
+            )}`
           : "-"}
       </td>
       <td>
@@ -243,6 +304,7 @@ export default function DriverSummary() {
   const [customEnd, setCustomEnd] = useState(toDateInputValue(new Date()));
   const [selectedDriver, setSelectedDriver] = useState("ALL");
   const [detailDriver, setDetailDriver] = useState(null);
+  const [expandedDetailKey, setExpandedDetailKey] = useState("");
   const [tablePage, setTablePage] = useState(1);
   const canViewDriverSummary = hasPermission(null, "driver_summary_view");
 
@@ -256,7 +318,7 @@ export default function DriverSummary() {
       setError("");
 
       const [bookingData, userData] = await Promise.all([
-        getBookings(options.refreshOnly ? { fresh: true } : {}),
+        getDriverJobLogs(options.refreshOnly ? { fresh: true } : {}),
         getUsers().catch(() => []),
       ]);
       setBookings(Array.isArray(bookingData) ? bookingData : []);
@@ -315,11 +377,8 @@ export default function DriverSummary() {
   const driverRows = useMemo(() => {
     const driverByName = new Map();
     const driverById = new Map();
-    const currentDriverNames = new Set();
 
     driverOptions.forEach((driver) => {
-      currentDriverNames.add(driver.name);
-
       if (driver.name && !driverByName.has(driver.name)) {
         driverByName.set(driver.name, driver.key);
       }
@@ -330,31 +389,51 @@ export default function DriverSummary() {
     });
 
     function getBookingDriverKey(booking) {
-      const driverId = normalizeDriverId(booking.assigned_user_id);
-      const name = normalizeDriverName(booking.assigned_user_name);
+      const driverId = normalizeDriverId(booking.driver_user_id || booking.assigned_user_id);
+      const name = normalizeDriverName(booking.driver_name || booking.assigned_user_name);
       if (driverId && driverById.has(driverId)) return driverById.get(driverId);
       return driverByName.get(name);
     }
 
-    const bookingsByDriverKey = new Map();
+    const latestBookingActionMap = new Map();
 
     bookings.forEach((booking) => {
-      const name = normalizeDriverName(booking.assigned_user_name);
-      if (!isSummaryStatus(booking) || !currentDriverNames.has(name)) return;
+      if (!isSummaryStatus(booking)) return;
 
       const key = getBookingDriverKey(booking);
       if (!key) return;
-      if (!bookingsByDriverKey.has(key)) bookingsByDriverKey.set(key, []);
-      bookingsByDriverKey.get(key).push(booking);
+
+      const summaryKey = `${key}::${booking.booking_id}`;
+      const currentTime = new Date(booking.created_at || booking.updated_at || 0).getTime();
+      const existing = latestBookingActionMap.get(summaryKey);
+      const existingTime = existing
+        ? new Date(existing.created_at || existing.updated_at || 0).getTime()
+        : 0;
+
+      if (!existing || currentTime >= existingTime) {
+        latestBookingActionMap.set(summaryKey, booking);
+      }
+    });
+
+    const bookingsByDriverKey = new Map();
+
+    latestBookingActionMap.forEach((booking, summaryKey) => {
+      const [driverKey] = summaryKey.split("::");
+
+      if (!bookingsByDriverKey.has(driverKey)) {
+        bookingsByDriverKey.set(driverKey, []);
+      }
+
+      bookingsByDriverKey.get(driverKey).push(booking);
     });
 
     return driverOptions
       .map((driver) => {
         const allDriverBookings = bookingsByDriverKey.get(driver.key) || [];
-        const summaryBookings = allDriverBookings.filter(isSummaryStatus);
+        const summaryBookings = sortLatestFirst(allDriverBookings);
         const selectedRangeBookings = summaryBookings.filter((booking) => isInRange(booking, selectedRange));
-        const allDetailBookings = sortLatestFirst(summaryBookings);
-        const latest = latestBooking(summaryBookings) || latestBooking(allDriverBookings);
+        const allDetailBookings = summaryBookings;
+        const latest = latestBooking(summaryBookings);
 
         return {
           key: driver.key,
@@ -463,8 +542,8 @@ export default function DriverSummary() {
                 <b>งานล่าสุด</b>
                 <span>
                   {row.latest
-                    ? `${row.latest.booking_no || "-"} / ${row.latest.destination || "-"} / ${formatThaiDateTime(
-                        row.latest.start_datetime
+                    ? `${row.latest.booking_no || "-"} / ${getDriverJobActionLabel(row.latest)} / ${formatThaiDateTime(
+                        row.latest.created_at || row.latest.updated_at || row.latest.start_datetime
                       )}`
                     : "-"}
                 </span>
@@ -646,14 +725,27 @@ export default function DriverSummary() {
       </div>
 
       {detailRow && (
-        <div className="driver-summary-modal-backdrop" onClick={() => setDetailDriver(null)}>
+        <div
+          className="driver-summary-modal-backdrop"
+          onClick={() => {
+            setExpandedDetailKey("");
+            setDetailDriver(null);
+          }}
+        >
           <div className="driver-summary-modal" onClick={(e) => e.stopPropagation()}>
             <div className="driver-summary-modal-header">
               <div>
                 <h3>รายละเอียดงาน: {detailRow.name}</h3>
                 <p>รวมทั้งหมด {detailRow.allDetailBookings.length} งาน</p>
               </div>
-              <button type="button" className="small-button" onClick={() => setDetailDriver(null)}>
+              <button
+                type="button"
+                className="small-button"
+                onClick={() => {
+                  setExpandedDetailKey("");
+                  setDetailDriver(null);
+                }}
+              >
                 ปิด
               </button>
             </div>
@@ -663,28 +755,78 @@ export default function DriverSummary() {
                 <thead>
                   <tr>
                     <th>ลำดับ</th>
-                    <th>วันที่เริ่มต้น</th>
-                    <th>ปลายทาง</th>
-                    <th>เหตุผลการใช้รถ</th>
+                    <th>วันที่สร้างการจอง</th>
                     <th>สถานะ</th>
-                    {/* <th>รหัสยานพาหนะ</th> */}
+                    <th>หมายเหตุ</th>
+                    <th>ผู้บันทึก</th>
+                    <th>รายละเอียด</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {detailRow.allDetailBookings.map((booking, index) => (
-                    <tr key={booking.booking_id}>
-                      <td>{index + 1}</td>
-                      <td>{formatThaiDateTime(booking.start_datetime)}</td>
-                      <td>{booking.destination || "-"}</td>
-                      <td>{booking.purpose || "-"}</td>
-                      <td>
-                        <span className={getStatusClass(booking.status)}>
-                          {getStatusLabel(booking.status)}
-                        </span>
-                      </td>
-                      {/* <td>{booking.vehicle_id || "-"}</td> */}
-                    </tr>
-                  ))}
+                  {detailRow.allDetailBookings.map((booking, index) => {
+                    const detailKey = getDetailKey(booking, index);
+                    const expanded = expandedDetailKey === detailKey;
+
+                    return (
+                      <Fragment key={detailKey}>
+                        <tr>
+                          <td>{index + 1}</td>
+                          <td>{formatThaiDateTime(booking.created_at || booking.updated_at || booking.start_datetime)}</td>
+                          <td>
+                            <span className={getDriverJobActionClass(booking)}>
+                              {getDriverJobActionLabel(booking)}
+                            </span>
+                          </td>
+                          <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescription(booking)}</td>
+                          <td>{booking.created_by || "-"}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="small-button"
+                              onClick={() => setExpandedDetailKey(expanded ? "" : detailKey)}
+                            >
+                              {expanded ? "ย่อรายละเอียด" : "ขยายรายละเอียด"}
+                            </button>
+                          </td>
+                        </tr>
+
+                        {expanded && (
+                          <tr className="driver-summary-detail-row">
+                            <td colSpan="6">
+                              <div className="driver-summary-detail-expanded-grid">
+                                <div>
+                                  <span>ผู้จอง</span>
+                                  <b>{booking.requester_name || "-"}</b>
+                                </div>
+                                <div>
+                                  <span>เวลาไป</span>
+                                  <b>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</b>
+                                </div>
+                                <div>
+                                  <span>เวลากลับ</span>
+                                  <b>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</b>
+                                </div>
+                                <div>
+                                  <span>ปลายทาง</span>
+                                  <b>{booking.destination || "-"}</b>
+                                </div>
+                              </div>
+
+                              <div style={{ marginTop: 12 }}>
+                                <button
+                                  type="button"
+                                  className="small-button"
+                                  onClick={() => setExpandedDetailKey("")}
+                                >
+                                  ย่อรายละเอียด
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
 
                   {detailRow.allDetailBookings.length === 0 && (
                     <tr>

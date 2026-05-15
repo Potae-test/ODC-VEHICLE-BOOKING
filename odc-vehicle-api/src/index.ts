@@ -167,6 +167,10 @@ export default {
       const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookingCancellations`);
       return jsonResponse(sheetJson);
     }
+    if ((url.pathname === "/api/driver-job-logs" || url.pathname === "/api/driver_job_logs") && request.method === "GET") {
+      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=driver_job_logs`);
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/bookings/cancellations/delete" && request.method === "POST") {
       const body = await request.json();
 
