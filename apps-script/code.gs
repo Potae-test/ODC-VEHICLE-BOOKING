@@ -586,7 +586,6 @@ function approveBooking(data) {
       message: "booking_id is required"
     });
   }
-
   if (!data.vehicle_id) {
     return jsonOutput({
       success: false,
@@ -786,6 +785,7 @@ function completeTrip(data) {
 
 function driverCancelJob(data) {
   const sheet = ensureBookingsSheet();
+  const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
 
   const table = readSheetTable(sheet);
   const headers = table.headers;
@@ -801,6 +801,16 @@ function driverCancelJob(data) {
     return jsonOutput({
       success: false,
       message: "booking_id is required"
+    });
+  }
+
+  const reason = String(data.reason || "").trim();
+  const cancelledBy = String(data.cancelled_by || "").trim();
+
+  if (!reason) {
+    return jsonOutput({
+      success: false,
+      message: "reason is required"
     });
   }
 
@@ -820,10 +830,56 @@ function driverCancelJob(data) {
   sheet.getRange(row, staffNoteCol + 1).setValue("คนขับยกเลิกงานนี้แล้ว");
   sheet.getRange(row, statusCol + 1).setValue("APPROVED");
   sheet.getRange(row, updatedAtCol + 1).setValue(now);
+  const staffNote = cancelledBy
+    ? "คนขับยกเลิกงานโดย " + cancelledBy + ": " + reason
+    : "คนขับยกเลิกงาน: " + reason;
+  const rowValues = table.rows[row - 2].slice();
+
+  rowValues[assignedUserIdCol] = "";
+  rowValues[assignedUserNameCol] = "";
+  rowValues[staffNoteCol] = staffNote;
+  rowValues[statusCol] = "APPROVED";
+  rowValues[updatedAtCol] = now;
+  setRowValues(sheet, row, rowValues);
+
+  if (logSheet) {
+    const logTable = readSheetTable(logSheet);
+    const logHeaders = logTable.headers;
+    const logIdCol = ensureColumn(logSheet, logHeaders, "log_id");
+    const logBookingIdCol = ensureColumn(logSheet, logHeaders, "booking_id");
+    const logActionCol = ensureColumn(logSheet, logHeaders, "action");
+    const logReasonCol = ensureColumn(logSheet, logHeaders, "reason");
+    const logCancelledByCol = ensureColumn(logSheet, logHeaders, "cancelled_by");
+    const logCreatedAtCol = ensureColumn(logSheet, logHeaders, "created_at");
+    const logUpdatedAtCol = ensureColumn(logSheet, logHeaders, "updated_at");
+    const logRowValues = Array(logHeaders.length).fill("");
+
+    logRowValues[logIdCol] = "LOG" + Utilities.formatString("%04d", logSheet.getLastRow());
+    logRowValues[logBookingIdCol] = data.booking_id;
+    logRowValues[logActionCol] = "DRIVER_CANCEL";
+    logRowValues[logReasonCol] = reason;
+    logRowValues[logCancelledByCol] = cancelledBy;
+    logRowValues[logCreatedAtCol] = now;
+    logRowValues[logUpdatedAtCol] = now;
+    appendSheetRow(logSheet, logRowValues);
+  }
 
   return jsonOutput({
     success: true,
-    message: "Driver cancel job success",
+    message: "Driver cancelled job success",
+    data: {
+      booking_id: data.booking_id,
+      status: "APPROVED",
+      assigned_user_id: "",
+      assigned_user_name: "",
+      staff_note: staffNote,
+      updated_at: now
+    }
+  });
+
+  return jsonOutput({
+    success: true,
+    message: "Driver cancelled job success",
     data: {
       booking_id: data.booking_id,
       status: "APPROVED",

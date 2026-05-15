@@ -986,7 +986,7 @@ export default function Booking() {
               .join("")}
           </select>
 
-          <label>หมายเหตุเจ้าหน้าที่</label>
+          <label>หมายเหตุ</label>
           <input id="staff_note" class="swal2-input" placeholder="-">
         </div>
       `,
@@ -1368,7 +1368,7 @@ export default function Booking() {
                                 {statusMeta.label}
                               </span>
                             </td>
-                            <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 14 }}>
+                            <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 20}}>
                               {booking.staff_note || "-"}
                             </td>
                             <td className="action-buttons">

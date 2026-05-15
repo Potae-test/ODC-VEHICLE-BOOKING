@@ -390,7 +390,7 @@ export default function DriverJobs() {
 
       console.log("DriverJobs startTrip response", response);
 
-      if (!response?.success) {
+      if (response?.success === false) {
         showError(response?.message || "เริ่มงานไม่สำเร็จ");
         return;
       }
@@ -448,6 +448,31 @@ export default function DriverJobs() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#dc2626",
       cancelButtonColor: "#64748b",
+      title: "ยกเลิกงาน",
+      html: `
+        <div class="swal-form">
+          <label>เหตุผลการยกเลิกงาน</label>
+          <textarea
+            id="driver_cancel_reason"
+            class="swal2-textarea"
+            rows="5"
+            placeholder="ระบุเหตุผล เช่น ติดภารกิจด่วน / รถมีปัญหา / ไม่สามารถรับงานได้"
+          ></textarea>
+        </div>
+      `,
+      width: 720,
+      confirmButtonText: "ยืนยันยกเลิกงาน",
+      cancelButtonText: "ยกเลิก",
+      preConfirm: () => {
+        const reason = document.getElementById("driver_cancel_reason").value.trim();
+
+        if (!reason) {
+          Swal.showValidationMessage("กรุณาระบุเหตุผลการยกเลิกงาน");
+          return false;
+        }
+
+        return reason;
+      },
     });
 
     if (!result.isConfirmed) return;
@@ -456,26 +481,31 @@ export default function DriverJobs() {
       setProcessingAction({ bookingId: booking.booking_id, type: "cancel" });
       const response = await driverCancelJob({
         booking_id: booking.booking_id,
+        reason: result.value,
+        cancelled_by: currentUser?.name || currentUser?.email || "",
       });
 
-      if (!response?.success) {
+      if (response?.success === false) {
         showError(response?.message || "ยกเลิกงานไม่สำเร็จ");
         return;
       }
 
       await showSuccess("ยกเลิกงานสำเร็จ");
+      const staffNote =
+        response?.staff_note ||
+        `คนขับยกเลิกงาน: ${result.value}`;
       mergeBooking(booking.booking_id, {
         assigned_user_id: "",
         assigned_user_name: "",
         status: "APPROVED",
-        staff_note: response?.staff_note || booking.staff_note,
+        staff_note: staffNote,
       });
     } catch (err) {
       showError(err.message || "ยกเลิกงานไม่สำเร็จ");
     } finally {
       setProcessingAction(null);
     }
-  }, [mergeBooking, processingAction]);
+  }, [currentUser?.email, currentUser?.name, mergeBooking, processingAction]);
 
   const showDetails = useCallback((booking) => {
     const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
