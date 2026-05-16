@@ -1,7 +1,7 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
 export const PERMISSION_CONFIG_VERSION = "2026-05-16.3";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-16.4";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-17.1";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
@@ -104,6 +104,14 @@ export const ACTION_PERMISSION_GROUPS = [
     ],
   },
   {
+    id: "calendar",
+    label: "ปฏิทิน",
+    permissions: [
+      { id: "calendar_active_drivers_view", label: "ดูกล่องคนขับพร้อมรับงาน" },
+      { id: "calendar_next_queue_driver_view", label: "ดูกล่องคนขับคิวถัดไป" },
+    ],
+  },
+  {
     id: "driver_jobs",
     label: "งานคนขับ",
     permissions: [
@@ -170,6 +178,8 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_jobs_start",
     "driver_jobs_complete",
     "driver_summary_cards_scope",
+    "calendar_active_drivers_view",
+    "calendar_next_queue_driver_view",
     "driver_unavailable_view",
     "driver_unavailable_create",
     "driver_unavailable_edit",
@@ -188,6 +198,7 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "bookings_edit",
     "bookings_cancel",
     "driver_jobs_complete",
+    "calendar_active_drivers_view",
   ],
   DRIVER: [
     "bookings_view",
@@ -416,6 +427,19 @@ export function hasPermission(userOrRole, permissionId, config = loadActionPermi
   );
 
   if (role === "ADMIN") return true;
+
+  const actionPermissionIds = new Set(ACTION_PERMISSION_ITEMS.map((item) => item.id));
+  const menuPermissionIds = new Set(PERMISSION_ITEMS.map((item) => item.id));
+
+  if (actionPermissionIds.has(permissionId)) {
+    return (config[role] || []).includes(permissionId);
+  }
+
+  if (menuPermissionIds.has(permissionId)) {
+    const menuConfig = loadPermissionConfig();
+    return (menuConfig[role] || []).includes(permissionId);
+  }
+
   return (config[role] || []).includes(permissionId);
 }
 

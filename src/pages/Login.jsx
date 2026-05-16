@@ -1,16 +1,6 @@
 import { useState } from "react";
 import { login } from "../api";
 
-function getRedirectPath(role) {
-  const normalizedRole = String(role || "").trim().toUpperCase();
-
-  if (normalizedRole === "ADMIN") return "/admin";
-  if (normalizedRole === "STAFF") return "/booking";
-  if (normalizedRole === "DRIVER") return "/driver-jobs";
-  if (normalizedRole === "USER") return "/booking";
-  return "/booking";
-}
-
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,8 +20,6 @@ export default function Login({ onLogin }) {
       const user = await login(email, password);
       localStorage.setItem("odc_user", JSON.stringify(user));
       onLogin(user);
-
-      window.location.href = getRedirectPath(user.role);
     } catch (err) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");
     } finally {

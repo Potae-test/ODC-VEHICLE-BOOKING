@@ -116,6 +116,31 @@ function renderDriverOptions(drivers, selectedDriverId = "") {
     .join("");
 }
 
+function getActionPermissionGroups() {
+  const groups = ACTION_PERMISSION_GROUPS.map((group) => ({
+    ...group,
+    permissions: [...group.permissions],
+  }));
+
+  const calendarGroup = groups.find((group) => group.id === "calendar");
+  if (calendarGroup) {
+    return groups;
+  }
+
+  return [
+    ...groups.slice(0, 5),
+    {
+      id: "calendar",
+      label: "ปฏิทิน",
+      permissions: [
+        { id: "calendar_active_drivers_view", label: "ดูกล่องคนขับพร้อมรับงาน" },
+        { id: "calendar_next_queue_driver_view", label: "ดูกล่องคนขับคิวถัดไป" },
+      ],
+    },
+    ...groups.slice(5),
+  ];
+}
+
 const BOOKING_PER_PAGE = 5;
 
 export default function Admin() {
@@ -126,6 +151,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
   const [actionPermissionConfig, setActionPermissionConfig] = useState(loadActionPermissionConfig);
+  const actionPermissionGroups = useMemo(() => getActionPermissionGroups(), []);
   const [driverSummaryCardScopeConfig, setDriverSummaryCardScopeConfig] = useState(
     loadDriverSummaryCardScopeConfig
   );
@@ -1158,7 +1184,7 @@ async function handleDeleteVehicle(vehicle) {
         </div>
 
         <div className="permission-action-grid">
-          {ACTION_PERMISSION_GROUPS.map((group) => (
+          {actionPermissionGroups.map((group) => (
             <div className="permission-action-group" key={group.id}>
               <h4>{group.label}</h4>
               {group.permissions.map((permission) => (

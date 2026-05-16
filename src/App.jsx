@@ -22,10 +22,29 @@ const DriverQueueLogs = lazy(() => import("./pages/DriverQueueLogs"));
 const Admin = lazy(() => import("./pages/Admin"));
 
 function getDefaultPageByRole(role) {
-  if (role === "ADMIN") return "admin";
-  if (role === "STAFF") return "staff";
-  if (role === "DRIVER") return "driver-jobs";
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === "ADMIN") return "admin";
+  if (normalizedRole === "STAFF") return "booking";
+  if (normalizedRole === "DRIVER") return "driver-jobs";
+  if (normalizedRole === "USER") return "calendar";
+
   return "booking";
+}
+
+function getPathByPage(page) {
+  if (page === "admin") return "/admin";
+  if (page === "staff") return "/staff";
+  if (page === "driver-jobs") return "/driver-jobs";
+  if (page === "driver-unavailable") return "/driver-unavailable";
+  if (page === "driver-unavailable-logs") return "/driver-unavailable-logs";
+  if (page === "driver-queue") return "/driver-queue";
+  if (page === "driver-queue-logs") return "/driver-queue-logs";
+  if (page === "calendar") return "/calendar";
+  if (page === "booking") return "/booking";
+  if (page === "booking-cancellation-history") return "/booking-cancellation-history";
+  if (page === "cars") return "/cars";
+  return "/booking";
 }
 
 function getPageFromPath(pathname) {
@@ -37,6 +56,9 @@ function getPageFromPath(pathname) {
   if (path === "/driver-unavailable-logs") return "driver-unavailable-logs";
   if (path === "/driver-queue") return "driver-queue";
   if (path === "/driver-queue-logs") return "driver-queue-logs";
+  if (path === "/calendar") return "calendar";
+  if (path === "/cars") return "cars";
+  if (path === "/booking-cancellation-history") return "booking-cancellation-history";
   if (path === "/booking") return "booking";
   return "";
 }
@@ -53,9 +75,16 @@ export default function App() {
       const savedUser = JSON.parse(saved);
       setUser(savedUser);
       const pathPage = getPageFromPath(window.location.pathname);
-      setPage(pathPage || getDefaultPageByRole(savedUser.role));
+      const defaultPage = getDefaultPageByRole(savedUser.role);
+      const nextPage = pathPage || defaultPage;
+      const nextPageAllowed = canAccessPage(savedUser.role, nextPage, permissionConfig);
+      const firstAllowedPage = getFirstAllowedPage(savedUser.role, permissionConfig);
+      const finalPage = nextPageAllowed ? nextPage : firstAllowedPage || defaultPage;
+
+      setPage(finalPage);
+      window.history.replaceState({}, "", getPathByPage(finalPage));
     }
-  }, []);
+  }, [permissionConfig]);
 
   useEffect(() => {
     if (!user) return;
@@ -117,7 +146,13 @@ export default function App() {
       <Login
         onLogin={(loggedInUser) => {
           setUser(loggedInUser);
-          setPage(getDefaultPageByRole(loggedInUser.role));
+          const defaultPage = getDefaultPageByRole(loggedInUser.role);
+          const defaultPageAllowed = canAccessPage(loggedInUser.role, defaultPage, permissionConfig);
+          const firstAllowedPage = getFirstAllowedPage(loggedInUser.role, permissionConfig);
+          const nextPage = defaultPageAllowed ? defaultPage : firstAllowedPage || defaultPage;
+
+          setPage(nextPage);
+          window.history.replaceState({}, "", getPathByPage(nextPage));
         }}
       />
     );

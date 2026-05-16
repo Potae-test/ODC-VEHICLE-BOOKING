@@ -56,3 +56,6 @@ wrangler Update
 npm install -g wrangler@latest
 npm i -D wrangler@latest
 wrangler --version
+
+------------
+Follow AGENTS.md architecture.

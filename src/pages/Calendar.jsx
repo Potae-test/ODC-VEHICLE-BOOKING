@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "moment/locale/th";
 import { getBookings, getDriverQueue, getDriverUnavailable, getUsers, getVehicles } from "../api";
+import { hasPermission } from "../permissions";
 import { formatThaiDateTime } from "../utils/date";
 
 moment.locale("th");
@@ -167,6 +168,14 @@ export default function CalendarPage() {
     });
     return map;
   }, [vehicles]);
+
+  const canViewActiveDriversSummary = hasPermission(null, "calendar_active_drivers_view");
+  const canViewNextQueueDriver = hasPermission(null, "calendar_next_queue_driver_view");
+
+  console.log("Calendar permissions", {
+    canViewActiveDriversSummary,
+    canViewNextQueueDriver,
+  });
 
   const loadData = useCallback(async (options = {}) => {
     try {
@@ -395,40 +404,44 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      <div className="form-card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>คนขับพร้อมรับงาน</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-            <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
-              พร้อมรับงาน {activeDriversNow.length} คน
-            </span>
-            {activeDriversNow.length > 0 ? (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {activeDriversNow.map((driver) => (
-                  <span key={driver.user_id} className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
-                    {driver.name}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
-            )}
-          </div>
-          <div style={{ color: "#475569" }}>
-            นับจากผู้ใช้งานที่มีสถานะ ACTIVE และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
+      {canViewActiveDriversSummary && (
+        <div className="form-card" style={{ marginBottom: 24 }}>
+          <h3 style={{ marginTop: 0 }}>คนขับพร้อมรับงาน</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+              <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
+                พร้อมรับงาน {activeDriversNow.length} คน
+              </span>
+              {activeDriversNow.length > 0 ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {activeDriversNow.map((driver) => (
+                    <span key={driver.user_id} className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
+                      {driver.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
+              )}
+            </div>
+            <div style={{ color: "#475569" }}>
+              นับจากผู้ใช้งานที่มีสถานะ ACTIVE และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="form-card" style={{ marginBottom: 24 }}>
-        <h3 style={{ marginTop: 0 }}>คนขับคิวถัดไป</h3>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <strong style={{ fontSize: 32 }}>{nextQueueDriver ? nextQueueDriver.driver_name : "-"}</strong>
-          <div style={{ color: "#475569" }}>
-            ตัวชี้คิว: {driverQueueState?.state_value || "0"}
+      {canViewNextQueueDriver && (
+        <div className="form-card" style={{ marginBottom: 24 }}>
+          <h3 style={{ marginTop: 0 }}>คนขับคิวถัดไป</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <strong style={{ fontSize: 32 }}>{nextQueueDriver ? nextQueueDriver.driver_name : "-"}</strong>
+            <div style={{ color: "#475569" }}>
+              ตัวชี้คิว: {driverQueueState?.state_value || "0"}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div
         className="form-card"
