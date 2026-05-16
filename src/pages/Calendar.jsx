@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Calendar, momentLocalizer } from "react-big-calendar";
 import moment from "moment";
 import Swal from "sweetalert2";
@@ -6,6 +6,7 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import "moment/locale/th";
 import { getBookings, getDriverQueue, getDriverUnavailable, getUsers, getVehicles } from "../api";
 import { hasPermission } from "../permissions";
+import BookingFormModal from "../components/booking/BookingFormModal";
 import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
 import { formatThaiDateTime } from "../utils/date";
@@ -43,6 +44,16 @@ function normalizeUnavailableType(type) {
 
 function getBookingCalendarStatusMeta(status) {
   const normalized = normalizeStatus(status);
+
+  if (normalized === "PENDING") {
+    return {
+      label: "รออนุมัติ",
+      className: "amber",
+      color: "#92400e",
+      backgroundColor: "#fef3c7",
+      borderColor: "#fcd34d",
+    };
+  }
 
   if (normalized === "IN_USE") {
     return {
@@ -163,6 +174,7 @@ export default function CalendarPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const visibleLoading = useMinimumLoading(loading, 350);
+  const bookingFormModalRef = useRef(null);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -174,11 +186,29 @@ export default function CalendarPage() {
 
   const canViewActiveDriversSummary = hasPermission(null, "calendar_active_drivers_view");
   const canViewNextQueueDriver = hasPermission(null, "calendar_next_queue_driver_view");
+  const canCreateBookings = hasPermission(null, "bookings_create");
 
   console.log("Calendar permissions", {
     canViewActiveDriversSummary,
     canViewNextQueueDriver,
   });
+
+  const openBookingForm = useCallback(
+    async (options = {}) => {
+      if (!canCreateBookings) {
+        await Swal.fire({
+          icon: "warning",
+          title: "คุณไม่มีสิทธิ์เพิ่มรายการจอง",
+          confirmButtonText: "ปิด",
+          confirmButtonColor: "#334155",
+        });
+        return;
+      }
+
+      await bookingFormModalRef.current?.openCreate(options);
+    },
+    [canCreateBookings]
+  );
 
   const loadData = useCallback(async (options = {}) => {
     try {
@@ -231,7 +261,7 @@ export default function CalendarPage() {
       bookings
         .filter((booking) => {
           const status = normalizeStatus(booking.status);
-          return status === "APPROVED" || status === "IN_USE";
+          return status === "PENDING" || status === "APPROVED" || status === "IN_USE";
         })
         .sort((a, b) => {
           const dateA = new Date(a.start_datetime || a.created_at || 0).getTime();
@@ -326,6 +356,21 @@ export default function CalendarPage() {
     return activeRows.find((row) => Number(row.queue_order || 0) > pointer) || activeRows[0] || null;
   }, [driverQueueRows, driverQueueState]);
 
+  const activeQueueRows = useMemo(() => {
+    return [...driverQueueRows]
+      .filter(
+        (row) =>
+          String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
+          String(row.driver_status || "").trim().toUpperCase() === "ACTIVE"
+      )
+      .sort((a, b) => {
+        const orderA = Number(a.queue_order || 0);
+        const orderB = Number(b.queue_order || 0);
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
+      });
+  }, [driverQueueRows]);
+
   const eventStyleGetter = useCallback((event) => {
     const meta =
       event.resource.kind === "unavailable"
@@ -407,44 +452,13 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {canViewActiveDriversSummary && (
-        <div className="form-card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginTop: 0 }}>คนขับพร้อมรับงาน</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-              <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
-                พร้อมรับงาน {activeDriversNow.length} คน
-              </span>
-              {activeDriversNow.length > 0 ? (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {activeDriversNow.map((driver) => (
-                    <span key={driver.user_id} className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
-                      {driver.name}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
-              )}
-            </div>
-            <div style={{ color: "#475569" }}>
-              นับจากผู้ใช้งานที่มีสถานะ ACTIVE และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
-            </div>
-          </div>
-        </div>
-      )}
+      <BookingFormModal
+        ref={bookingFormModalRef}
+        overlapCandidates={activeBookings}
+        onSuccess={() => loadData({ refreshOnly: true })}
+      />
 
-      {canViewNextQueueDriver && (
-        <div className="form-card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginTop: 0 }}>คนขับคิวถัดไป</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <strong style={{ fontSize: 32 }}>{nextQueueDriver ? nextQueueDriver.driver_name : "-"}</strong>
-            <div style={{ color: "#475569" }}>
-              ตัวชี้คิว: {driverQueueState?.state_value || "0"}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       <div
         className="form-card"
@@ -457,22 +471,25 @@ export default function CalendarPage() {
           <CalendarSkeleton />
         ) : (
           <>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-            <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
-              กำลังใช้งาน
-            </span>
-            <span className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
-              อนุมัติแล้ว
-            </span>
-            <span className="status red" style={{ fontSize: 16, padding: "6px 12px" }}>
-              วันไม่รับงาน
-            </span>
-          </div>
-          <div style={{ color: "#475569" }}>
-            แสดงเฉพาะรายการจอง <b>APPROVED</b> และ <b>IN_USE</b> พร้อมวันไม่รับงานของคนขับ
-          </div>
-        </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+                <span className="status amber" style={{ fontSize: 16, padding: "6px 12px" }}>
+                  รออนุมัติ
+                </span>
+                <span className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
+                  อนุมัติแล้ว
+                </span>
+                <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
+                  กำลังใช้งาน
+                </span>
+                <span className="status red" style={{ fontSize: 16, padding: "6px 12px" }}>
+                  วันไม่รับงาน
+                </span>
+              </div>
+              <div style={{ color: "#475569" }}>
+                แสดงรายการจอง <b>PENDING</b>, <b>APPROVED</b> และ <b>IN_USE</b> พร้อมวันไม่รับงานของคนขับ
+              </div>
+            </div>
 
         {error && !visibleLoading && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
 
@@ -490,6 +507,21 @@ export default function CalendarPage() {
               padding: 12,
             }}
           >
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+              <button
+                type="button"
+                className="calendar-create-button"
+                disabled={!canCreateBookings}
+                onClick={() =>
+                  openBookingForm({
+                    defaultStart: new Date(),
+                    defaultEnd: new Date(Date.now() + 60 * 60 * 1000),
+                  })
+                }
+              >
+                + เพิ่มรายการจอง
+              </button>
+            </div>
             <Calendar
               localizer={localizer}
               culture="th"
@@ -497,6 +529,7 @@ export default function CalendarPage() {
               startAccessor="start"
               endAccessor="end"
               style={{ height: 760, fontSize: 16 }}
+              selectable={canCreateBookings}
               eventPropGetter={eventStyleGetter}
               components={{
                 event: CalendarEvent,
@@ -510,6 +543,135 @@ export default function CalendarPage() {
           </>
         )}
       </div>
+      {(canViewActiveDriversSummary || canViewNextQueueDriver) && (
+        <div className="form-card" style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 16,
+              gridTemplateColumns:
+                canViewActiveDriversSummary && canViewNextQueueDriver ? "repeat(2, minmax(0, 1fr))" : "1fr",
+            }}
+          >
+            {canViewActiveDriversSummary && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 16,
+                  padding: 18,
+                  minWidth: 0,
+                }}
+              >
+                <h4 style={{ marginTop: 0, marginBottom: 0 }}>คนขับพร้อมรับงาน</h4>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+                  <span className="status green" style={{ fontSize: 23, padding: "6px 12px" }}>
+                    พร้อมรับงาน {activeDriversNow.length} คน
+                  </span>
+                  {activeDriversNow.length > 0 ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {activeDriversNow.map((driver) => (
+                        <span key={driver.user_id} className="status blue" style={{ fontSize: 23, padding: "6px 12px" }}>
+                          {driver.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 20, color: "#475569" }}>
+                  นับจากผู้ใช้งานที่มีสถานะ ACTIVE และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
+                </div>
+              </div>
+            )}
+
+            {canViewNextQueueDriver && (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 16,
+                  padding: 18,
+                  minWidth: 0,
+                }}
+              >
+                {/* <h4 style={{ marginTop: 0, marginBottom: 0 }}>คนขับคิวถัดไป</h4> */}
+                {/* <strong style={{ fontSize: 25, lineHeight: 1.2 }}>
+                  {nextQueueDriver ? nextQueueDriver.driver_name : "-"}
+                </strong> */}
+
+                <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+                  <div style={{ color: "#334155", fontWeight: 700 }}>ลำดับคิวทั้งหมด</div>
+                <div style={{ fontSize: 20, color: "#475569" }}>
+                  ตัวชี้คิว: {driverQueueState?.state_value || "0"}
+                </div>
+                  {activeQueueRows.length > 0 ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {activeQueueRows.map((row) => {
+                        const isNext =
+                          nextQueueDriver &&
+                          String(row.driver_user_id || "") === String(nextQueueDriver.driver_user_id || "");
+
+                        return (
+                          <div
+                            key={row.queue_id || `${row.driver_user_id || ""}-${row.queue_order || ""}`}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              flexWrap: "wrap",
+                              gap: 10,
+                              padding: "10px 12px",
+                              background: "#fff",
+                              border: `1px solid ${isNext ? "#60a5fa" : "#e2e8f0"}`,
+                              borderRadius: 12,
+                            }}
+                          >
+                            <span
+                              className="status blue"
+                              style={{
+                                minWidth: 56,
+                                justifyContent: "center",
+                                fontSize: 15,
+                                padding: "4px 10px",
+                              }}
+                            >
+                              {row.queue_order}
+                            </span>
+                            <span style={{ color: "#0f172a", fontWeight: 700, flex: "1 1 auto" }}>
+                              {row.driver_name}
+                            </span>
+                            {isNext && (
+                              <span
+                                className="status green"
+                                style={{
+                                  fontSize: 15,
+                                  padding: "4px 10px",
+                                }}
+                              >
+                                คิวถัดไป
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ color: "#64748b" }}>ยังไม่มีข้อมูลคิวคนขับ</div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

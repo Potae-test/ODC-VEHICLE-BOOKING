@@ -7,6 +7,7 @@ import {
   cancelDriverUnavailable,
   createDriverUnavailable,
   getDriverUnavailable,
+  getUsers,
   updateDriverUnavailable,
 } from "../api";
 import { formatThaiDateTime } from "../utils/date";
@@ -19,6 +20,15 @@ function getCurrentUser() {
   } catch {
     return null;
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function pad2(value) {
@@ -172,10 +182,31 @@ function getUnavailableReasonLabel(record) {
   return parts.join(" - ");
 }
 
-function buildFormHtml(record) {
+function buildFormHtml(record, options = {}) {
+  const { canSelectDriver = false, drivers = [], currentUser = null } = options;
   const type = normalizeType(record?.type || "ลา");
+  const selectedDriverId = record?.driver_user_id || currentUser?.user_id || "";
+  const driverDropdown = canSelectDriver
+    ? `
+      <label>คนขับ</label>
+      <select id="driver_user_id" class="swal2-select">
+        <option value="">-- เลือกคนขับ --</option>
+        ${drivers
+          .map(
+            (driver) => `
+          <option value="${escapeHtml(driver.user_id)}" ${String(driver.user_id) === String(selectedDriverId) ? "selected" : ""} data-driver-name="${escapeHtml(driver.name || "")}">
+            ${escapeHtml(driver.name || "-")}
+          </option>
+        `
+          )
+          .join("")}
+      </select>
+    `
+    : "";
+
   return `
     <div class="swal-form">
+      ${driverDropdown}
       <label>ประเภท</label>
       <select id="unavailable_type" class="swal2-select">
         <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา</option>
@@ -189,7 +220,7 @@ function buildFormHtml(record) {
         class="swal2-textarea"
         rows="5"
         placeholder="ระบุเหตุผลการไม่รับงาน"
-      >${record?.reason || ""}</textarea>
+      >${escapeHtml(record?.reason || "")}</textarea>
 
       <label>เวลาเริ่ม</label>
       <input
@@ -197,7 +228,7 @@ function buildFormHtml(record) {
         class="swal2-input"
         type="text"
         lang="en-GB"
-        value="${record?.start_datetime || ""}"
+        value="${escapeHtml(record?.start_datetime || "")}"
       >
 
       <label>เวลาสิ้นสุด</label>
@@ -206,7 +237,7 @@ function buildFormHtml(record) {
         class="swal2-input"
         type="text"
         lang="en-GB"
-        value="${record?.end_datetime || ""}"
+        value="${escapeHtml(record?.end_datetime || "")}"
       >
     </div>
   `;
@@ -214,6 +245,7 @@ function buildFormHtml(record) {
 
 export default function DriverUnavailable() {
   const [items, setItems] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -224,6 +256,7 @@ export default function DriverUnavailable() {
   const canCreate = hasPermission(null, "driver_unavailable_create");
   const canEdit = hasPermission(null, "driver_unavailable_edit");
   const canCancel = hasPermission(null, "driver_unavailable_cancel");
+  const canManageAllDrivers = currentRole === "ADMIN" || currentRole === "STAFF";
 
   const visibleItems = useMemo(() => {
     const rows = Array.isArray(items) ? items : [];
@@ -256,8 +289,20 @@ export default function DriverUnavailable() {
       }
       setError("");
 
-      const data = await getDriverUnavailable(options.refreshOnly ? { fresh: true } : {});
-      setItems(Array.isArray(data) ? data : []);
+      const [unavailableData, userData] = await Promise.all([
+        getDriverUnavailable(options.refreshOnly ? { fresh: true } : {}),
+        getUsers(options.refreshOnly ? { fresh: true } : {}),
+      ]);
+      setItems(Array.isArray(unavailableData) ? unavailableData : []);
+      setDrivers(
+        Array.isArray(userData)
+          ? userData.filter(
+              (user) =>
+                normalizeRole(user.role) === "DRIVER" &&
+                normalizeStatus(user.status) === "ACTIVE"
+            )
+          : []
+      );
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
@@ -275,7 +320,11 @@ export default function DriverUnavailable() {
   async function openForm(record = null) {
     const result = await Swal.fire({
       title: record ? "แก้ไขวันไม่รับงาน" : "เพิ่มวันไม่รับงาน",
-      html: buildFormHtml(record),
+      html: buildFormHtml(record, {
+        canSelectDriver: canManageAllDrivers,
+        drivers,
+        currentUser,
+      }),
       width: 760,
       showCancelButton: true,
       confirmButtonText: record ? "บันทึกการแก้ไข" : "บันทึก",
@@ -302,6 +351,21 @@ export default function DriverUnavailable() {
         const reason = document.getElementById("unavailable_reason").value.trim();
         const start_datetime = document.getElementById("start_datetime").value;
         const end_datetime = document.getElementById("end_datetime").value;
+        let driver_user_id = record?.driver_user_id || currentUser?.user_id || "";
+        let driver_name = record?.driver_name || currentUser?.name || "";
+
+        if (canManageAllDrivers) {
+          const driverSelect = document.getElementById("driver_user_id");
+          driver_user_id = driverSelect?.value || "";
+          const selectedOption = driverSelect?.selectedOptions?.[0];
+          driver_name =
+            selectedOption?.dataset?.driverName || selectedOption?.textContent?.trim() || "";
+
+          if (!driver_user_id) {
+            Swal.showValidationMessage("กรุณาเลือกคนขับ");
+            return false;
+          }
+        }
 
         if (!type || !start_datetime || !end_datetime) {
           Swal.showValidationMessage("กรุณากรอกข้อมูลให้ครบ");
@@ -315,8 +379,8 @@ export default function DriverUnavailable() {
 
         return {
           unavailable_id: record?.unavailable_id || "",
-          driver_user_id: record?.driver_user_id || currentUser?.user_id || "",
-          driver_name: record?.driver_name || currentUser?.name || "",
+          driver_user_id,
+          driver_name,
           type,
           reason,
           start_datetime,
@@ -409,6 +473,7 @@ export default function DriverUnavailable() {
             <table>
               <thead>
                 <tr>
+                  <th>คนขับ</th>
                   <th>ประเภท</th>
                   <th>เหตุผล</th>
                   <th>เวลาเริ่ม</th>
@@ -420,11 +485,12 @@ export default function DriverUnavailable() {
               <tbody>
                 {visibleItems.length === 0 ? (
                   <tr>
-                    <td colSpan="6">ไม่พบรายการวันไม่รับงาน</td>
+                    <td colSpan="7">ไม่พบรายการวันไม่รับงาน</td>
                   </tr>
                 ) : (
                   visibleItems.map((record) => (
                     <tr key={record.unavailable_id}>
+                      <td>{record.driver_name || "-"}</td>
                       <td>
                         <span className={`status ${getTypeClassName(record.type)}`}>
                           {getTypeLabel(record.type)}

@@ -2286,3 +2286,25 @@ label {
   justify-content:flex-end;
   margin:16px 0 12px;
 }
+
+.calendar-create-button {
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 10px 16px;
+  min-height: 40px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.calendar-create-button:hover:not(:disabled) {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+.calendar-create-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

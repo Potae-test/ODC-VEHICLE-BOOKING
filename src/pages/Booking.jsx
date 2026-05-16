@@ -3,7 +3,6 @@ import Swal from "sweetalert2";
 import {
   approveBooking,
   cancelBooking,
-  createBooking,
   confirmDriverQueueAssignment,
   checkDriverUnavailable,
   getDriverUnavailable,
@@ -11,7 +10,6 @@ import {
   recommendDriverForBooking,
   getVehicles,
   getUsers,
-  updateBooking,
 } from "../api";
 import flatpickr from "flatpickr";
 import "flatpickr/dist/flatpickr.min.css";
@@ -19,6 +17,7 @@ import { Thai } from "flatpickr/dist/l10n/th.js";
 import { formatThaiDateTime } from "../utils/date";
 import { showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
+import BookingFormModal from "../components/booking/BookingFormModal";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
@@ -839,219 +838,14 @@ export default function Booking() {
     }
   }, [page, bookingPages]);
 
-  const getBookingModalHtml = useCallback((booking) => {
-  const defaultVehicleType = booking?.vehicle_type_request || "VAN";
-  const vehicleTypeOptions = [
-    ...vehicleTypes.map(
-      (type) =>
-        `<option value="${escapeHtml(type)}"
-          ${type === defaultVehicleType ? "selected" : ""}>
-          ${escapeHtml(getVehicleTypeText(type))}
-        </option>`
-    ),
-  ].join("");
-
-    return `
-      <div class="swal-form">
-        <label>ชื่อผู้จอง</label>
-        <input
-          id="requester_name"
-          class="swal2-input"
-          placeholder="ชื่อ-นามสกุล"
-          value="${escapeHtml(booking?.requester_name || "")}"
-        >
-
-        <label>หน่วยงาน / ฝ่าย</label>
-        <input
-          id="department"
-          class="swal2-input"
-          placeholder="เช่น ฝ่ายประสานงาน"
-          value="${escapeHtml(booking?.department || "")}"
-        >
-
-        <label>เบอร์โทร</label>
-        <input
-          id="phone"
-          class="swal2-input"
-          placeholder="08x-xxx-xxxx"
-          value="${escapeHtml(booking?.phone || "")}"
-        >
-
-        <label>เวลาไป</label>
-        <div
-          id="booking_overlap_warning"
-          class="booking-overlap-warning"
-  
-        >
-          แจ้งเตือน: คุณมีรายการจองอื่นในช่วงวันเวลาใกล้เคียงกัน !!
-        </div>
- 
-        <input
-          id="start_datetime"
-          class="swal2-input"
-          type="text"
-          lang="en-GB"
-          value="${escapeHtml(booking?.start_datetime || "")}"
-        >
-
-        <label>เวลากลับ</label>
-        <input
-          id="end_datetime"
-          class="swal2-input"
-          type="text"
-          lang="en-GB"
-          value="${escapeHtml(booking?.end_datetime || "")}"
-        >
-
-        <label>ประเภทรถ</label>
-        <select id="vehicle_type_request" class="swal2-select">
-          ${vehicleTypeOptions}
-        </select>
-
-        <label>ปลายทาง</label>
-          <textarea
-            id="destination"
-            class="swal2-textarea"
-            rows="4"
-            placeholder="เช่น ศาลากลางจังหวัด"
-            style="
-              width:100%;
-              max-width:100%;
-              min-height:110px;
-              margin:0;
-              resize:vertical;
-              box-sizing:border-box;
-            "
-          >${escapeHtml(booking?.destination || "")}</textarea>
-
-        <label>เหตุผลการใช้รถ</label>
-          <textarea
-            id="purpose"
-            class="swal2-textarea"
-            rows="4"
-            placeholder="เช่น ประชุมราชการ"
-            style="
-              width:100%;
-              max-width:100%;
-              min-height:110px;
-              margin:0;
-              resize:vertical;
-              box-sizing:border-box;
-            "
-          >${escapeHtml(booking?.purpose || "")}</textarea>
-      </div>
-    `;
-  }, [vehicleTypes]);
-
-  const openBookingModal = useCallback(async (booking = null) => {
-    const result = await Swal.fire({
-      title: booking ? "แก้ไขรายการจอง" : "จองรถใหม่",
-      html: getBookingModalHtml(booking),
-      width: 780,
-      showCancelButton: true,
-      confirmButtonText: booking ? "บันทึก" : "ส่งคำขอจองรถ",
-      cancelButtonText: "ยกเลิก",
-      confirmButtonColor: "#1455c8",
-      cancelButtonColor: "#64748b",
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      didOpen: () => {
-        const modal = Swal.getPopup();
-        const warningEl = modal?.querySelector("#booking_overlap_warning");
-        const startInput = modal?.querySelector("#start_datetime");
-        const endInput = modal?.querySelector("#end_datetime");
-        const now = new Date();
-        const defaultStart = booking?.start_datetime || now;
-        const defaultEnd =
-          booking?.end_datetime || new Date(now.getTime() + 60 * 60 * 1000);
-
-        if (!warningEl || !startInput || !endInput) {
-          return;
-        }
-
-        const updateWarning = () => {
-          const overlaps = getOverlapBookings(
-            bookingGroups.overlapCandidates,
-            booking?.booking_id || "",
-            startInput.value,
-            endInput.value
-          );
-
-          warningEl.style.display = overlaps.length > 0 ? "block" : "none";
-        };
-
-        const startPicker = initThaiDateTimePicker("#start_datetime", defaultStart);
-        const endPicker = initThaiDateTimePicker("#end_datetime", defaultEnd);
-
-        startPicker?.config.onChange.push(updateWarning);
-        startPicker?.config.onValueUpdate.push(updateWarning);
-        endPicker?.config.onChange.push(updateWarning);
-        endPicker?.config.onValueUpdate.push(updateWarning);
-
-        startInput.addEventListener("input", updateWarning);
-        startInput.addEventListener("change", updateWarning);
-        endInput.addEventListener("input", updateWarning);
-        endInput.addEventListener("change", updateWarning);
-        updateWarning();
-      },
-      preConfirm: () => {
-        const requester_name = document.getElementById("requester_name").value.trim();
-        const department = document.getElementById("department").value.trim();
-        const phone = document.getElementById("phone").value.trim();
-        const start_datetime = document.getElementById("start_datetime").value;
-        const end_datetime = document.getElementById("end_datetime").value;
-        const vehicle_type_request = document.getElementById("vehicle_type_request").value.trim();
-        const destination = document.getElementById("destination").value.trim();
-        const purpose = document.getElementById("purpose").value.trim();
-
-        if (!requester_name || !phone || !start_datetime || !end_datetime || !destination) {
-          Swal.showValidationMessage("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
-          return false;
-        }
-
-        if (new Date(end_datetime) <= new Date(start_datetime)) {
-          Swal.showValidationMessage("วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม");
-          return false;
-        }
-
-        return {
-          booking_id: booking?.booking_id || "",
-          requester_name,
-          department,
-          phone,
-          start_datetime,
-          end_datetime,
-          vehicle_type_request,
-          destination,
-          purpose,
-          vehicle_id: booking?.vehicle_id || "",
-        };
-      },
-    });
-
-    if (!result.isConfirmed) return;
-
-    try {
-      if (booking) {
-        const updated = await updateBooking(result.value);
-        mergeBooking({ ...result.value, ...(updated || {}) });
-        await showSuccess("แก้ไขรายการสำเร็จ");
-      } else {
-        const created = await createBooking(result.value);
-        mergeBooking({ ...result.value, ...(created || {}) });
-        await showSuccess("ส่งคำขอจองรถสำเร็จ");
-      }
-    } catch (err) {
-      showError(err.message || (booking ? "แก้ไขรายการไม่สำเร็จ" : "จองรถไม่สำเร็จ"));
-    }
-  }, [bookingGroups.overlapCandidates, getBookingModalHtml, mergeBooking]);
+  const bookingFormModalRef = useRef(null);
 
   const handleCreateBooking = useCallback(async () => {
     if (processingAction) return;
     setProcessingAction({ bookingId: "new", type: "create" });
-    await openBookingModal();
+    await bookingFormModalRef.current?.openCreate();
     setProcessingAction(null);
-  }, [openBookingModal, processingAction]);
+  }, [processingAction]);
 
   const handleProcessBooking = useCallback(async (booking) => {
     if (processingAction) return;
@@ -1284,9 +1078,9 @@ export default function Booking() {
   const handleEditBooking = useCallback(async (booking) => {
     if (processingAction) return;
     setProcessingAction({ bookingId: booking.booking_id, type: "edit" });
-    await openBookingModal(booking);
+    await bookingFormModalRef.current?.openEdit(booking);
     setProcessingAction(null);
-  }, [openBookingModal, processingAction]);
+  }, [processingAction]);
 
   const handleViewBookingDetail = useCallback(
     async (booking) => {
@@ -1415,6 +1209,13 @@ export default function Booking() {
           </button>
         )}
       </div>
+
+      <BookingFormModal
+        ref={bookingFormModalRef}
+        overlapCandidates={bookingGroups.overlapCandidates}
+        vehicleTypes={vehicleTypes}
+        onSuccess={(savedBooking) => mergeBooking(savedBooking)}
+      />
 
       {visibleLoading && <PageSkeleton />}
 
