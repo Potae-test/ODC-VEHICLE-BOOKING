@@ -485,6 +485,132 @@ td {
   background: #eaf2ff !important;
 }
 
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+  background-size: 200% 100%;
+  border: 1px solid #e5e7eb;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-pulse {
+  animation: skeletonPulse 1.6s ease-in-out infinite;
+}
+
+.skeleton-page {
+  display: grid;
+  gap: 24px;
+  padding: 8px 0 24px;
+}
+
+.skeleton-card {
+  background: white;
+  border: 1px solid #dbe6f3;
+  border-radius: 24px;
+  box-shadow: 0 8px 24px rgba(15, 47, 92, 0.06);
+  padding: 28px;
+}
+
+.skeleton-line {
+  min-height: 18px;
+}
+
+.skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.skeleton-calendar {
+  gap: 20px;
+}
+
+.skeleton-calendar-card {
+  padding: 24px;
+}
+
+.skeleton-calendar-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.skeleton-calendar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.skeleton-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.skeleton-calendar-weekday {
+  padding: 4px 0;
+}
+
+.skeleton-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.skeleton-calendar-cell {
+  min-height: 112px;
+  padding: 12px;
+  border: 1px solid #dbe6f3;
+  border-radius: 18px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeleton-table {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 20px;
+}
+
+.skeleton-table table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+  background: white;
+}
+
+.skeleton-table th,
+.skeleton-table td {
+  padding: 16px;
+  border-bottom: 1px solid #dbe6f3;
+}
+
+.skeleton-table th {
+  background: #eaf2ff;
+}
+
+.skeleton-header-cell {
+  height: 18px;
+  width: 60%;
+  border-radius: 999px;
+}
+
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* Login */
 .login-page {
   min-height: 100vh;

@@ -6,6 +6,7 @@ import {
   loadPermissionConfig,
   normalizeRole,
 } from "./permissions";
+import PageSkeleton from "./components/skeletons/PageSkeleton";
 import "./App.css";
 
 const Cars = lazy(() => import("./pages/Cars"));
@@ -265,7 +266,7 @@ export default function App() {
         </aside>
 
         <main className="main-content">
-          <Suspense fallback={<p>กำลังโหลดหน้า...</p>}>
+          <Suspense fallback={<PageSkeleton />}>
             {!hasPageAccess && <div className="form-card">คุณไม่มีสิทธิ์เข้าถึง</div>}
             {hasPageAccess && page === "cars" && <Cars />}
             {hasPageAccess && page === "booking" && <Booking />}

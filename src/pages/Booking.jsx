@@ -19,6 +19,9 @@ import { Thai } from "flatpickr/dist/l10n/th.js";
 import { formatThaiDateTime } from "../utils/date";
 import { showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
+import PageSkeleton from "../components/skeletons/PageSkeleton";
+import TableSkeleton from "../components/skeletons/TableSkeleton";
+import useMinimumLoading from "../hooks/useMinimumLoading";
 
 const ROWS_PER_PAGE = 5;
 
@@ -637,6 +640,7 @@ export default function Booking() {
   const filterStartPickerRef = useRef(null);
   const filterEndPickerRef = useRef(null);
   const debouncedFilters = useDebouncedValue(filters);
+  const visibleLoading = useMinimumLoading(loading, 350);
 
   const canCreateBookings = hasPermission(null, "bookings_create");
   const canViewBookings = hasPermission(null, "bookings_view");
@@ -1412,9 +1416,9 @@ export default function Booking() {
         )}
       </div>
 
-      {loading && <div className="form-card">กำลังโหลดข้อมูล...</div>}
+      {visibleLoading && <PageSkeleton />}
 
-      {error && !loading && <div className="form-card">{error}</div>}
+      {error && !visibleLoading && <div className="form-card">{error}</div>}
 
       {canViewBookings && (
         <div className="form-card">
@@ -1524,8 +1528,8 @@ export default function Booking() {
               </button>
             )}
           </div>
-          {loading ? (
-            <p>กำลังโหลดข้อมูลรายการจอง...</p>
+          {visibleLoading ? (
+            <TableSkeleton rows={5} columns={10} />
           ) : (
             <>
 

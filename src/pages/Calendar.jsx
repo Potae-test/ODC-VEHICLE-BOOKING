@@ -6,6 +6,8 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import "moment/locale/th";
 import { getBookings, getDriverQueue, getDriverUnavailable, getUsers, getVehicles } from "../api";
 import { hasPermission } from "../permissions";
+import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
+import useMinimumLoading from "../hooks/useMinimumLoading";
 import { formatThaiDateTime } from "../utils/date";
 
 moment.locale("th");
@@ -160,6 +162,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const visibleLoading = useMinimumLoading(loading, 350);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -450,6 +453,10 @@ export default function CalendarPage() {
           lineHeight: 1.7,
         }}
       >
+        {visibleLoading ? (
+          <CalendarSkeleton />
+        ) : (
+          <>
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
             <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
@@ -467,15 +474,13 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {loading && <div style={{ padding: "24px 0" }}>กำลังโหลดปฏิทิน...</div>}
+        {error && !visibleLoading && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
 
-        {!loading && error && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
-
-        {!loading && !error && calendarEvents.length === 0 && (
+        {!visibleLoading && !error && calendarEvents.length === 0 && (
           <div style={{ marginBottom: 12, color: "#475569" }}>ไม่มีรายการที่ต้องแสดงในช่วงนี้</div>
         )}
 
-        {!loading && !error && (
+        {!visibleLoading && !error && (
           <div
             className="calendar-shell"
             style={{
@@ -501,6 +506,8 @@ export default function CalendarPage() {
               onSelectEvent={handleSelectEvent}
             />
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

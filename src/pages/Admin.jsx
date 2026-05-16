@@ -39,6 +39,8 @@ import {
   saveActionPermissionConfig,
   savePermissionConfig,
 } from "../permissions";
+import TableSkeleton from "../components/skeletons/TableSkeleton";
+import useMinimumLoading from "../hooks/useMinimumLoading";
 import Swal from "sweetalert2";
 
 function countByStatus(items, status) {
@@ -157,6 +159,7 @@ export default function Admin() {
   );
   const [selectedPermissionRole, setSelectedPermissionRole] = useState("STAFF");
   const [bookingPage, setBookingPage] = useState(1);
+  const visibleLoading = useMinimumLoading(loading, 350);
   const [driverInactiveReasons, setDriverInactiveReasons] = useState([
     "ลาป่วย",
     "ลาหยุด",
@@ -1269,8 +1272,8 @@ async function handleDeleteVehicle(vehicle) {
           )}
         </div>
 
-        {loading ? (
-          <p>กำลังโหลดข้อมูลรถ...</p>
+        {visibleLoading ? (
+          <TableSkeleton rows={6} columns={8} />
         ) : (
         <div className="table-wrap" style={{ marginTop: 24 }}>
           <table>

@@ -2,6 +2,8 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react
 import { getDriverJobLogs, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
+import PageSkeleton from "../components/skeletons/PageSkeleton";
+import useMinimumLoading from "../hooks/useMinimumLoading";
 
 const COUNTED_STATUSES = new Set(["APPROVED", "IN_USE", "COMPLETED"]);
 const TABLE_PAGE_SIZE = 5;
@@ -307,6 +309,7 @@ export default function DriverSummary() {
   const [expandedDetailKey, setExpandedDetailKey] = useState("");
   const [tablePage, setTablePage] = useState(1);
   const canViewDriverSummary = hasPermission(null, "driver_summary_view");
+  const visibleLoading = useMinimumLoading(loading, 350);
 
   const loadData = useCallback(async (options = {}) => {
     try {
@@ -633,10 +636,10 @@ export default function DriverSummary() {
           {formatThaiDateTime(selectedRange.end)}
         </div>
 
-        {loading && <p>กำลังโหลดข้อมูลสรุปงานคนขับ...</p>}
-        {error && <p className="driver-summary-error">{error}</p>}
+        {visibleLoading && <PageSkeleton />}
+        {error && !visibleLoading && <p className="driver-summary-error">{error}</p>}
 
-        {!loading && !error && (
+        {!visibleLoading && !error && (
           <div className="table-wrap">
             <table>
               <thead>

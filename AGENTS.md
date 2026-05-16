@@ -366,6 +366,34 @@ System is evolving toward:
 - Smart assignment
 - LINE notification integration
 
+# 23. Skeleton Loading Rules
+
+Use skeleton loading instead of plain loading text.
+
+Prefer:
+- page skeleton
+- table skeleton
+- card skeleton
+- calendar skeleton for month/week grids
+
+Rules:
+- keep loading UI lightweight and reusable
+- use shared components from `src/components/skeletons/`
+- do not render heavy widgets while loading
+- in calendar views, do not render `react-big-calendar` until loading is finished
+- page-level loading should use `useMinimumLoading(loading, 350)` to avoid flicker
+
+Avoid:
+- rendering giant skeleton DOM trees
+- skeleton flickering
+- custom one-off text placeholders on major pages
+- layout shifting
+
+All skeletons must:
+- preserve layout size
+- use consistent border radius
+- use pulse animation
+
 Design code extensibly.
 
 After changes:
