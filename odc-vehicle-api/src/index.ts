@@ -167,6 +167,28 @@ export default {
       const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookingCancellations`);
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/thai_holidays" && request.method === "GET") {
+      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=thai_holidays`);
+      return jsonResponse(sheetJson);
+    }
+    if (url.pathname === "/api/thai_holidays" && request.method === "POST") {
+      const body = await request.json().catch(() => ({}));
+      const action = String(body?.action || "thai_holidays").trim();
+      const resolvedAction = action === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action: resolvedAction,
+          data: body?.data || body || {},
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/getDriverUnavailable" && request.method === "GET") {
       const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverUnavailable`);
       return jsonResponse(sheetJson);

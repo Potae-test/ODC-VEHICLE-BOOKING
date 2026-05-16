@@ -350,6 +350,10 @@ export async function getDriverUnavailableLogs(options = {}) {
   return apiRequest("getDriverUnavailableLogs", options);
 }
 
+export async function getThaiHolidays(options = {}) {
+  return apiRequest("thai_holidays", options);
+}
+
 export async function createDriverUnavailable(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/createDriverUnavailable`, {
     method: "POST",

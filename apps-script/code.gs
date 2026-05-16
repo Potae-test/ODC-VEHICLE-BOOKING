@@ -25,6 +25,12 @@ function doGet(e) {
   if (action === "getDriverUnavailable") {
     return getDriverUnavailable();
   }
+  if (action === "thai_holidays" || action === "getThaiHolidays") {
+    return jsonOutput({
+      success: true,
+      data: getThaiHolidays(),
+    });
+  }
   if (action === "getDriverUnavailableLogs") {
     return getDriverUnavailableLogs();
   }
@@ -73,6 +79,12 @@ function doPost(e) {
     if (action === "updateDriverUnavailable") return updateDriverUnavailable(body.data);
     if (action === "cancelDriverUnavailable") return cancelDriverUnavailable(body.data);
     if (action === "checkDriverUnavailable") return checkDriverUnavailable(body.data);
+    if (action === "thai_holidays" || action === "getThaiHolidays") {
+      return jsonOutput({
+        success: true,
+        data: getThaiHolidays(),
+      });
+    }
     if (action === "updateDriverQueue") return updateDriverQueue(body.data);
     if (action === "resetDriverQueueState") return resetDriverQueueState(body.data);
     if (action === "recommendDriverForBooking") return recommendDriverForBooking(body.data);
@@ -1779,6 +1791,53 @@ function getDriverUnavailableLogs() {
     total: data.length,
     data,
   });
+}
+
+function getThaiHolidays() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ThaiHolidays");
+
+  if (!sheet) {
+    return [];
+  }
+
+  const { headers, rows } = readSheetTable(sheet);
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const data = rowsToObjects(headers, rows)
+    .map((row) => {
+      const status = String(row.status || "").trim().toUpperCase();
+      if (status === "INACTIVE") {
+        return null;
+      }
+
+      const dateValue = row.date instanceof Date
+        ? Utilities.formatDate(row.date, "Asia/Bangkok", "yyyy-MM-dd")
+        : String(row.date || "").trim().slice(0, 10);
+
+      if (!dateValue) {
+        return null;
+      }
+
+      return {
+        holiday_id: row.holiday_id || "",
+        date: dateValue,
+        name_th: row.name_th || "",
+        name_en: row.name_en || "",
+        type_th: row.type_th || "",
+        type_en: row.type_en || "",
+        color: row.color || "",
+        is_special: row.is_special || "",
+        source: row.source || "",
+        description: row.description || "",
+        status: row.status || "",
+      };
+    })
+    .filter(Boolean);
+
+  return data;
 }
 
 function createDriverUnavailable(data) {

@@ -4,7 +4,14 @@ import moment from "moment";
 import Swal from "sweetalert2";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "moment/locale/th";
-import { getBookings, getDriverQueue, getDriverUnavailable, getUsers, getVehicles } from "../api";
+import {
+  getBookings,
+  getDriverQueue,
+  getDriverUnavailable,
+  getThaiHolidays,
+  getUsers,
+  getVehicles,
+} from "../api";
 import { hasPermission } from "../permissions";
 import BookingFormModal from "../components/booking/BookingFormModal";
 import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
@@ -150,6 +157,78 @@ function isTimeOverlap(startA, endA, startB, endB) {
   return aStart < bEnd && bStart < aEnd;
 }
 
+function formatBuddhistMonthLabel(date) {
+  return `${moment(date).locale("th").format("MMMM")} ${date.getFullYear() + 543}`;
+}
+
+function formatGregorianMonthLabel(date) {
+  return `${moment(date).locale("en").format("MMMM")} ${date.getFullYear()}`;
+}
+
+function formatCalendarToolbarLabel(date, calendarLang) {
+  return calendarLang === "en" ? formatGregorianMonthLabel(date) : formatBuddhistMonthLabel(date);
+}
+
+const THAI_WEEKDAY_LABELS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+const EN_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function getThaiHolidayKey(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function getThaiHoliday(date, holidayMap) {
+  return holidayMap.get(getThaiHolidayKey(date)) || null;
+}
+
+function getHolidayTooltipText(holiday, calendarLang) {
+  if (!holiday) return "";
+
+  if (calendarLang === "en") {
+    const name = holiday.name_en || holiday.name_th || "";
+    const type = holiday.type_en || holiday.type_th || "";
+    return type ? `${name} (${type})` : name;
+  }
+
+  const name = holiday.name_th || holiday.name_en || "";
+  const type = holiday.type_th || holiday.type_en || "";
+  return type ? `${name} (${type})` : name;
+}
+
+const CalendarDateCellWrapper = memo(function CalendarDateCellWrapper({
+  value,
+  children,
+  holidayMap,
+  calendarLang,
+}) {
+  const date = value instanceof Date ? value : new Date(value);
+  const holiday = getThaiHoliday(date, holidayMap);
+  const day = date.getDay();
+  const isWeekend = day === 0 || day === 6;
+  const isHoliday = Boolean(holiday);
+
+  const background = isHoliday ? "#fff7ed" : isWeekend ? "#f8fafc" : "transparent";
+  const borderColor = isHoliday ? "#fcd34d" : isWeekend ? "#e2e8f0" : "transparent";
+
+  return (
+    <div
+      title={getHolidayTooltipText(holiday, calendarLang)}
+      style={{
+        width: "100%",
+        height: "100%",
+        minHeight: "100%",
+        background,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 10,
+        padding: 2,
+        boxSizing: "border-box",
+      }}
+    >
+      {children}
+    </div>
+  );
+});
+
 const CalendarEvent = memo(function CalendarEvent({ event }) {
   const meta = event.resource.kind === "unavailable"
     ? getUnavailableCalendarStatusMeta(event.resource.type)
@@ -163,18 +242,115 @@ const CalendarEvent = memo(function CalendarEvent({ event }) {
   );
 });
 
+const CalendarToolbar = memo(function CalendarToolbar({
+  date,
+  onNavigate,
+  calendarLang,
+  onChangeCalendarLang,
+}) {
+  const toolbarDate = date instanceof Date ? date : new Date(date || Date.now());
+  const label = formatCalendarToolbarLabel(toolbarDate, calendarLang);
+
+  const buttonStyle = {
+    border: "1px solid #cbd5e1",
+    background: "#fff",
+    color: "#0f172a",
+    borderRadius: 10,
+    padding: "8px 12px",
+    fontSize: 16,
+    fontWeight: 700,
+    cursor: "pointer",
+  };
+
+  const activeButtonStyle = {
+    background: "#16a34a",
+    borderColor: "#16a34a",
+    color: "#fff",
+  };
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+        marginBottom: 12,
+      }}
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <button type="button" style={buttonStyle} onClick={() => onNavigate("TODAY")}>
+          {CALENDAR_MESSAGES.today}
+        </button>
+        <button type="button" style={buttonStyle} onClick={() => onNavigate("PREV")}>
+          {CALENDAR_MESSAGES.previous}
+        </button>
+        <button type="button" style={buttonStyle} onClick={() => onNavigate("NEXT")}>
+          {CALENDAR_MESSAGES.next}
+        </button>
+      </div>
+
+      <div
+        style={{
+          flex: "1 1 240px",
+          textAlign: "center",
+          color: "#0f172a",
+          fontSize: 24,
+          fontWeight: 700,
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button
+          type="button"
+          style={{
+            ...buttonStyle,
+            ...(calendarLang === "th" ? activeButtonStyle : null),
+            minWidth: 52,
+          }}
+          onClick={() => onChangeCalendarLang("th")}
+        >
+          TH
+        </button>
+        <button
+          type="button"
+          style={{
+            ...buttonStyle,
+            ...(calendarLang === "en" ? activeButtonStyle : null),
+            minWidth: 52,
+          }}
+          onClick={() => onChangeCalendarLang("en")}
+        >
+          EN
+        </button>
+      </div>
+    </div>
+  );
+});
+
 export default function CalendarPage() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [users, setUsers] = useState([]);
+  const [thaiHolidays, setThaiHolidays] = useState([]);
   const [driverUnavailableRecords, setDriverUnavailableRecords] = useState([]);
   const [driverQueueRows, setDriverQueueRows] = useState([]);
   const [driverQueueState, setDriverQueueState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [calendarLang, setCalendarLang] = useState("th");
   const visibleLoading = useMinimumLoading(loading, 350);
   const bookingFormModalRef = useRef(null);
+
+  const handleNavigate = useCallback((nextDate) => {
+    setCalendarDate(nextDate);
+  }, []);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -184,14 +360,31 @@ export default function CalendarPage() {
     return map;
   }, [vehicles]);
 
+  const thaiHolidayMap = useMemo(() => {
+    const map = new Map();
+    thaiHolidays.forEach((holiday) => {
+      const key = String(holiday.date || "").trim();
+      if (key) {
+        map.set(key, holiday);
+      }
+    });
+    return map;
+  }, [thaiHolidays]);
+
+  const calendarFormats = useMemo(
+    () => ({
+      monthHeaderFormat: (date) => formatCalendarToolbarLabel(date, calendarLang),
+      weekdayFormat: (date) => {
+        const day = date instanceof Date ? date.getDay() : new Date(date).getDay();
+        return calendarLang === "en" ? EN_WEEKDAY_LABELS[day] : THAI_WEEKDAY_LABELS[day];
+      },
+    }),
+    [calendarLang]
+  );
+
   const canViewActiveDriversSummary = hasPermission(null, "calendar_active_drivers_view");
   const canViewNextQueueDriver = hasPermission(null, "calendar_next_queue_driver_view");
   const canCreateBookings = hasPermission(null, "bookings_create");
-
-  console.log("Calendar permissions", {
-    canViewActiveDriversSummary,
-    canViewNextQueueDriver,
-  });
 
   const openBookingForm = useCallback(
     async (options = {}) => {
@@ -219,10 +412,11 @@ export default function CalendarPage() {
       }
       setError("");
 
-      const [bookingData, vehicleData, userData, unavailableData, queueData] = await Promise.all([
+      const [bookingData, vehicleData, userData, holidayData, unavailableData, queueData] = await Promise.all([
         getBookings(options.refreshOnly ? { fresh: true } : {}),
         getVehicles(),
         getUsers(),
+        getThaiHolidays(options.refreshOnly ? { fresh: true } : {}),
         getDriverUnavailable(options.refreshOnly ? { fresh: true } : {}),
         getDriverQueue(options.refreshOnly ? { fresh: true } : {}),
       ]);
@@ -230,6 +424,11 @@ export default function CalendarPage() {
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
       setUsers(Array.isArray(userData) ? userData : []);
+      setThaiHolidays(
+        Array.isArray(holidayData)
+          ? holidayData.filter((holiday) => normalizeStatus(holiday.status) !== "INACTIVE")
+          : []
+      );
       setDriverUnavailableRecords(
         Array.isArray(unavailableData)
           ? unavailableData.filter((record) => normalizeStatus(record.status) === "ACTIVE")
@@ -243,6 +442,7 @@ export default function CalendarPage() {
       setBookings([]);
       setVehicles([]);
       setUsers([]);
+      setThaiHolidays([]);
       setDriverUnavailableRecords([]);
       setDriverQueueRows([]);
       setDriverQueueState(null);
@@ -522,17 +722,34 @@ export default function CalendarPage() {
                 + เพิ่มรายการจอง
               </button>
             </div>
-            <Calendar
-              localizer={localizer}
-              culture="th"
-              events={calendarEvents}
-              startAccessor="start"
-              endAccessor="end"
+              <Calendar
+                localizer={localizer}
+              culture={calendarLang}
+              date={calendarDate}
+                events={calendarEvents}
+                startAccessor="start"
+                endAccessor="end"
               style={{ height: 760, fontSize: 16 }}
               selectable={canCreateBookings}
+              onNavigate={handleNavigate}
               eventPropGetter={eventStyleGetter}
+              formats={calendarFormats}
               components={{
+                toolbar: (toolbarProps) => (
+                  <CalendarToolbar
+                    {...toolbarProps}
+                    calendarLang={calendarLang}
+                    onChangeCalendarLang={setCalendarLang}
+                  />
+                ),
                 event: CalendarEvent,
+                dateCellWrapper: (cellProps) => (
+                  <CalendarDateCellWrapper
+                    {...cellProps}
+                    holidayMap={thaiHolidayMap}
+                    calendarLang={calendarLang}
+                  />
+                ),
               }}
               messages={CALENDAR_MESSAGES}
               popup
