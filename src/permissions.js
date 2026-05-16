@@ -1,7 +1,7 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
-export const PERMISSION_CONFIG_VERSION = "2026-05-14.1";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-14.2";
+export const PERMISSION_CONFIG_VERSION = "2026-05-16.3";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-16.4";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
@@ -13,6 +13,10 @@ export const PERMISSION_ITEMS = [
   { id: "booking-approval", label: "อนุมัติรายการจอง", pages: ["staff"] },
   { id: "driver-summary", label: "สรุปงานคนขับ", pages: ["driver-summary"] },
   { id: "driver-jobs", label: "งานคนขับ", pages: ["driver-jobs"] },
+  { id: "driver-unavailable", label: "วันไม่รับงานของฉัน", pages: ["driver-unavailable"] },
+  { id: "driver-unavailable-logs", label: "ประวัติวันไม่รับงาน", pages: ["driver-unavailable-logs"] },
+  { id: "driver-queue", label: "คิวคนขับ", pages: ["driver-queue"] },
+  { id: "driver-queue-logs", label: "ประวัติคิวคนขับ", pages: ["driver-queue-logs"] },
   { id: "user-management", label: "จัดการผู้ใช้งาน", pages: ["admin"] },
   { id: "driver-management", label: "จัดการคนขับ", pages: ["admin"] },
   { id: "vehicle-management", label: "จัดการรถ", pages: ["cars"] },
@@ -28,21 +32,23 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "booking-approval",
     "driver-summary",
     "driver-jobs",
+    "driver-unavailable",
+    "driver-unavailable-logs",
+    "driver-queue",
+    "driver-queue-logs",
     "driver-management",
     "vehicle-management",
     "booking-cancellation-history",
   ],
-  USER: [
-    "booking-list", 
-    "calendar", 
-    "driver-summary", 
-  ],
+  USER: ["booking-list", "calendar"],
   DRIVER: [
     "booking-list",
     "calendar",
-    "driver-summary", 
+    "driver-summary",
     "vehicle-management",
-    "driver-jobs"],
+    "driver-jobs",
+    "driver-unavailable",
+  ],
 };
 
 export const ACTION_PERMISSION_GROUPS = [
@@ -50,13 +56,13 @@ export const ACTION_PERMISSION_GROUPS = [
     id: "bookings",
     label: "รายการจอง",
     permissions: [
-      { id: "bookings_view", label: "ดูรายการ" },
+      { id: "bookings_view", label: "ดูรายการจอง" },
       { id: "bookings_detail", label: "ดูรายละเอียดรายการจอง" },
-      { id: "bookings_create", label: "สร้างรายการ" },
-      { id: "bookings_edit", label: "แก้ไขรายการ" },
-      { id: "bookings_delete", label: "ลบรายการ" },
-      { id: "bookings_approve", label: "อนุมัติรายการ" },
-      { id: "bookings_cancel", label: "ยกเลิกรายการ" },
+      { id: "bookings_create", label: "สร้างรายการจอง" },
+      { id: "bookings_edit", label: "แก้ไขรายการจอง" },
+      { id: "bookings_delete", label: "ลบรายการจอง" },
+      { id: "bookings_approve", label: "อนุมัติรายการจอง" },
+      { id: "bookings_cancel", label: "ยกเลิกรายการจอง" },
     ],
   },
   {
@@ -107,15 +113,39 @@ export const ACTION_PERMISSION_GROUPS = [
     ],
   },
   {
+    id: "driver_unavailable",
+    label: "วันไม่รับงาน",
+    permissions: [
+      { id: "driver_unavailable_view", label: "ดูวันไม่รับงาน" },
+      { id: "driver_unavailable_create", label: "เพิ่มวันไม่รับงาน" },
+      { id: "driver_unavailable_edit", label: "แก้ไขวันไม่รับงาน" },
+      { id: "driver_unavailable_cancel", label: "ยกเลิกวันไม่รับงาน" },
+      { id: "driver_unavailable_logs_view", label: "ดูประวัติวันไม่รับงาน" },
+    ],
+  },
+  {
+    id: "driver_queue",
+    label: "คิวคนขับ",
+    permissions: [
+      { id: "driver_queue_view", label: "ดูคิวคนขับ" },
+      { id: "driver_queue_manage", label: "จัดการคิวคนขับ" },
+      { id: "driver_queue_logs_view", label: "ดูประวัติคิวคนขับ" },
+      { id: "driver_queue_reset", label: "รีเซ็ตคิวคนขับ" },
+    ],
+  },
+  {
+    id: "booking_manual_override",
+    label: "เลือกคนขับเอง",
+    permissions: [{ id: "booking_manual_driver_override", label: "เลือกคนขับเองตอนอนุมัติ" }],
+  },
+  {
     id: "settings",
     label: "ตั้งค่า",
-    permissions: [{ id: "settings_manage", label: "จัดการตั้งค่า" }],
+    permissions: [{ id: "settings_manage", label: "จัดการการตั้งค่า" }],
   },
 ];
 
-export const ACTION_PERMISSION_ITEMS = ACTION_PERMISSION_GROUPS.flatMap(
-  (group) => group.permissions
-);
+export const ACTION_PERMISSION_ITEMS = ACTION_PERMISSION_GROUPS.flatMap((group) => group.permissions);
 
 export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
   ADMIN: ACTION_PERMISSION_ITEMS.map((item) => item.id),
@@ -140,12 +170,21 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_jobs_start",
     "driver_jobs_complete",
     "driver_summary_cards_scope",
+    "driver_unavailable_view",
+    "driver_unavailable_create",
+    "driver_unavailable_edit",
+    "driver_unavailable_cancel",
+    "driver_unavailable_logs_view",
+    "driver_queue_view",
+    "driver_queue_manage",
+    "driver_queue_logs_view",
+    "driver_queue_reset",
+    "booking_manual_driver_override",
   ],
   USER: [
-    "bookings_view", 
+    "bookings_view",
     "bookings_detail",
-    "bookings_create", 
-    "driver_summary_view",
+    "bookings_create",
     "bookings_edit",
     "bookings_cancel",
     "driver_jobs_complete",
@@ -160,6 +199,10 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_jobs_complete",
     "driver_summary_cards_scope",
     "vehicles_edit",
+    "driver_unavailable_view",
+    "driver_unavailable_create",
+    "driver_unavailable_edit",
+    "driver_unavailable_cancel",
   ],
 };
 
@@ -171,6 +214,10 @@ const PAGE_ACTION_REQUIREMENTS = {
   calendar: ["bookings_view"],
   "driver-summary": ["driver_summary_view"],
   "driver-jobs": ["driver_jobs_view"],
+  "driver-unavailable": ["driver_unavailable_view"],
+  "driver-unavailable-logs": ["driver_unavailable_logs_view"],
+  "driver-queue": ["driver_queue_view"],
+  "driver-queue-logs": ["driver_queue_logs_view"],
   admin: ["settings_manage", "users_view", "drivers_view", "vehicles_view"],
 };
 
@@ -180,19 +227,13 @@ export function normalizeRole(role) {
 
 export function getDefaultPermissionConfig() {
   return Object.fromEntries(
-    Object.entries(DEFAULT_ROLE_PERMISSIONS).map(([role, permissions]) => [
-      role,
-      [...permissions],
-    ])
+    Object.entries(DEFAULT_ROLE_PERMISSIONS).map(([role, permissions]) => [role, [...permissions]])
   );
 }
 
 export function getDefaultActionPermissionConfig() {
   return Object.fromEntries(
-    Object.entries(DEFAULT_ROLE_ACTION_PERMISSIONS).map(([role, permissions]) => [
-      role,
-      [...permissions],
-    ])
+    Object.entries(DEFAULT_ROLE_ACTION_PERMISSIONS).map(([role, permissions]) => [role, [...permissions]])
   );
 }
 
@@ -392,9 +433,7 @@ export function getAllowedPages(role, config = loadPermissionConfig()) {
 
   const permissionIds = new Set(config[normalizedRole] || []);
   const allowedPages = new Set(
-    PERMISSION_ITEMS
-      .filter((item) => permissionIds.has(item.id))
-      .flatMap((item) => item.pages)
+    PERMISSION_ITEMS.filter((item) => permissionIds.has(item.id)).flatMap((item) => item.pages)
   );
 
   if (normalizedRole === "STAFF" || normalizedRole === "DRIVER") {
@@ -412,8 +451,9 @@ export function canAccessPage(role, page, config = loadPermissionConfig()) {
 
   const actionConfig = loadActionPermissionConfig();
   const actionRequirements = PAGE_ACTION_REQUIREMENTS[page] || [];
-  return actionRequirements.length === 0 || actionRequirements.some((permissionId) =>
-    hasPermission(normalizedRole, permissionId, actionConfig)
+  return (
+    actionRequirements.length === 0 ||
+    actionRequirements.some((permissionId) => hasPermission(normalizedRole, permissionId, actionConfig))
   );
 }
 
@@ -424,6 +464,10 @@ export function getFirstAllowedPage(role, config = loadPermissionConfig()) {
     "staff",
     "booking-cancellation-history",
     "driver-jobs",
+    "driver-unavailable",
+    "driver-unavailable-logs",
+    "driver-queue",
+    "driver-queue-logs",
     "calendar",
     "driver-summary",
     "admin",

@@ -22,6 +22,21 @@ function doGet(e) {
   if (action === "driver_job_logs") {
     return getDriverJobLogs();
   }
+  if (action === "getDriverUnavailable") {
+    return getDriverUnavailable();
+  }
+  if (action === "getDriverUnavailableLogs") {
+    return getDriverUnavailableLogs();
+  }
+  if (action === "getDriverQueue") {
+    return getDriverQueue();
+  }
+  if (action === "getDriverQueueState") {
+    return getDriverQueueState();
+  }
+  if (action === "getDriverQueueLogs") {
+    return getDriverQueueLogs();
+  }
   
   return jsonOutput({
     success: false,
@@ -54,6 +69,14 @@ function doPost(e) {
     if (action === "deleteUser") return deleteUser(body.data);
     if (action === "updateDriver") return updateDriver(body.data);
     if (action === "deleteDriver") return deleteDriver(body.data);
+    if (action === "createDriverUnavailable") return createDriverUnavailable(body.data);
+    if (action === "updateDriverUnavailable") return updateDriverUnavailable(body.data);
+    if (action === "cancelDriverUnavailable") return cancelDriverUnavailable(body.data);
+    if (action === "checkDriverUnavailable") return checkDriverUnavailable(body.data);
+    if (action === "updateDriverQueue") return updateDriverQueue(body.data);
+    if (action === "resetDriverQueueState") return resetDriverQueueState(body.data);
+    if (action === "recommendDriverForBooking") return recommendDriverForBooking(body.data);
+    if (action === "confirmDriverQueueAssignment") return confirmDriverQueueAssignment(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
     return jsonOutput({
@@ -662,6 +685,20 @@ function approveBooking(data) {
       success: false,
       message: availability.message,
       conflict_booking_no: availability.conflict_booking_no
+    });
+  }
+
+  const driverUnavailableConflict = getDriverUnavailableConflict(
+    data.assigned_user_id || data.driver_id || "",
+    currentBooking.start_datetime,
+    currentBooking.end_datetime,
+    ""
+  );
+
+  if (driverUnavailableConflict) {
+    return jsonOutput({
+      success: false,
+      message: "มีช่วงวันไม่รับงานทับกับรายการนี้",
     });
   }
 
@@ -1459,6 +1496,1194 @@ function checkVehicleAvailability(data, table) {
     available: true
   };
 }
+
+function ensureDriverUnavailableSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("DriverUnavailable");
+
+  const headers = [
+    "unavailable_id",
+    "driver_user_id",
+    "driver_name",
+    "type",
+    "reason",
+    "start_datetime",
+    "end_datetime",
+    "status",
+    "created_at",
+    "created_by",
+    "updated_at",
+    "updated_by",
+    "cancelled_at",
+    "cancelled_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("DriverUnavailable");
+    appendSheetRow(sheet, headers);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    appendSheetRow(sheet, headers);
+  }
+
+  return sheet;
+}
+
+function ensureDriverUnavailableLogsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("DriverUnavailableLogs");
+
+  const headers = [
+    "log_id",
+    "unavailable_id",
+    "driver_user_id",
+    "driver_name",
+    "action",
+    "old_value",
+    "new_value",
+    "reason",
+    "created_at",
+    "created_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("DriverUnavailableLogs");
+    appendSheetRow(sheet, headers);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    appendSheetRow(sheet, headers);
+  }
+
+  return sheet;
+}
+
+function normalizeDriverUnavailableStatus(status, endDatetime) {
+  const normalized = String(status || "").trim().toUpperCase();
+
+  if (normalized === "CANCELLED" || normalized === "EXPIRED") {
+    return normalized;
+  }
+
+  if (normalized && normalized !== "ACTIVE") {
+    return normalized;
+  }
+
+  const endTime = new Date(endDatetime).getTime();
+  if (!Number.isNaN(endTime) && endTime < Date.now()) {
+    return "EXPIRED";
+  }
+
+  return "ACTIVE";
+}
+
+function buildDriverUnavailableLogPayload_(data) {
+  return {
+    log_id: "DUL-" + Date.now(),
+    unavailable_id: data.unavailable_id || "",
+    driver_user_id: data.driver_user_id || "",
+    driver_name: data.driver_name || "",
+    action: data.action || "",
+    old_value: typeof data.old_value === "string" ? data.old_value : JSON.stringify(data.old_value || {}),
+    new_value: typeof data.new_value === "string" ? data.new_value : JSON.stringify(data.new_value || {}),
+    reason: data.reason || "",
+    created_at: new Date().toISOString(),
+    created_by: data.created_by || "",
+  };
+}
+
+function appendDriverUnavailableLog_(payload) {
+  const sheet = ensureDriverUnavailableLogsSheet();
+  const { headers } = readSheetTable(sheet);
+  const row = headers.map((header) => payload[header] ?? "");
+  appendSheetRow(sheet, row);
+}
+
+function getDriverUnavailableRowMap_(headers) {
+  const map = {};
+  headers.forEach((header, index) => {
+    map[header] = index;
+  });
+  return map;
+}
+
+function findDriverUnavailableRowById(table, unavailableId) {
+  const targetUnavailableId = String(unavailableId || "").trim();
+  if (!targetUnavailableId) {
+    return -1;
+  }
+
+  const rowMap = table.columnMap || getDriverUnavailableRowMap_(table.headers || []);
+  const idCol = rowMap.unavailable_id;
+
+  if (idCol === undefined) {
+    return -1;
+  }
+
+  for (let i = 0; i < table.rows.length; i++) {
+    const rowUnavailableId = String(table.rows[i][idCol] || "").trim();
+    if (rowUnavailableId === targetUnavailableId) {
+      return i + 2;
+    }
+  }
+
+  return -1;
+}
+
+function getDriverUnavailableRows(table) {
+  const now = Date.now();
+  return rowsToObjects(table.headers, table.rows).map((row, index) => {
+    const status = normalizeDriverUnavailableStatus(row.status, row.end_datetime);
+    return {
+      row_number: index + 2,
+      ...row,
+      status,
+      is_active_now: status === "ACTIVE" && new Date(row.start_datetime).getTime() < now && new Date(row.end_datetime).getTime() > now,
+    };
+  });
+}
+
+function getDriverUnavailableBookingsConflict(driverUserId, startDatetime, endDatetime, unavailableIdToIgnore) {
+  const bookingSheet = ensureBookingsSheet();
+  const bookingTable = readSheetTable(bookingSheet);
+  const bookings = rowsToObjects(bookingTable.headers, bookingTable.rows);
+  const normalizedDriverUserId = String(driverUserId || "").trim();
+
+  if (!normalizedDriverUserId || !startDatetime || !endDatetime) {
+    return null;
+  }
+
+  for (let i = 0; i < bookings.length; i++) {
+    const booking = bookings[i];
+    const status = String(booking.status || "").trim().toUpperCase();
+    if (status !== "APPROVED" && status !== "IN_USE") {
+      continue;
+    }
+
+    const assignedUserId = String(booking.assigned_user_id || booking.driver_id || "").trim();
+    const assignedUserName = String(booking.assigned_user_name || booking.driver_name || "").trim();
+    const sameDriver =
+      assignedUserId === normalizedDriverUserId ||
+      (!assignedUserId && assignedUserName && assignedUserName === normalizedDriverUserId);
+
+    if (!sameDriver) {
+      continue;
+    }
+
+    if (
+      booking.booking_id &&
+      String(booking.booking_id).trim() === String(unavailableIdToIgnore || "").trim()
+    ) {
+      continue;
+    }
+
+    if (
+      isTimeOverlap(startDatetime, endDatetime, booking.start_datetime, booking.end_datetime)
+    ) {
+      return booking;
+    }
+  }
+
+  return null;
+}
+
+function getDriverUnavailableConflict(driverUserId, startDatetime, endDatetime, unavailableIdToIgnore) {
+  const sheet = ensureDriverUnavailableSheet();
+  const table = readSheetTable(sheet);
+  const unavailableRows = getDriverUnavailableRows(table);
+  const normalizedDriverUserId = String(driverUserId || "").trim();
+
+  for (let i = 0; i < unavailableRows.length; i++) {
+    const row = unavailableRows[i];
+    const status = String(row.status || "").trim().toUpperCase();
+    if (status !== "ACTIVE") {
+      continue;
+    }
+
+    if (String(row.driver_user_id || "").trim() !== normalizedDriverUserId) {
+      continue;
+    }
+
+    if (
+      unavailableIdToIgnore &&
+      String(row.unavailable_id || "").trim() === String(unavailableIdToIgnore).trim()
+    ) {
+      continue;
+    }
+
+    if (isTimeOverlap(startDatetime, endDatetime, row.start_datetime, row.end_datetime)) {
+      return row;
+    }
+  }
+
+  return null;
+}
+
+function getDriverUnavailableResponse_(conflict) {
+  if (!conflict) {
+    return {
+      available: true,
+      reason: "",
+      unavailable: null,
+    };
+  }
+
+  const typeLabel = conflict.type || "ไม่รับงาน";
+  return {
+    available: false,
+    reason: `${typeLabel}${conflict.reason ? `: ${conflict.reason}` : ""}`,
+    unavailable: conflict,
+  };
+}
+
+function getDriverUnavailable() {
+  const sheet = ensureDriverUnavailableSheet();
+  const table = readSheetTable(sheet);
+
+  if (table.rows.length === 0) {
+    return jsonOutput({
+      success: true,
+      total: 0,
+      data: [],
+    });
+  }
+
+  const data = getDriverUnavailableRows(table);
+
+  return jsonOutput({
+    success: true,
+    total: data.length,
+    data: data,
+  });
+}
+
+function getDriverUnavailableLogs() {
+  const sheet = ensureDriverUnavailableLogsSheet();
+  const { headers, rows } = readSheetTable(sheet);
+
+  if (rows.length === 0) {
+    return jsonOutput({
+      success: true,
+      total: 0,
+      data: [],
+    });
+  }
+
+  const data = rowsToObjects(headers, rows);
+
+  return jsonOutput({
+    success: true,
+    total: data.length,
+    data,
+  });
+}
+
+function createDriverUnavailable(data) {
+  const sheet = ensureDriverUnavailableSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const now = new Date();
+
+  const driverUserId = String(data.driver_user_id || "").trim();
+  const driverName = String(data.driver_name || "").trim();
+  const type = String(data.type || "").trim();
+  const reason = String(data.reason || "").trim();
+  const startDatetime = String(data.start_datetime || "").trim();
+  const endDatetime = String(data.end_datetime || "").trim();
+  const createdBy = String(data.created_by || "").trim();
+
+  if (!driverUserId || !driverName || !type || !startDatetime || !endDatetime) {
+    return jsonOutput({
+      success: false,
+      message: "กรุณากรอกข้อมูลให้ครบ",
+    });
+  }
+
+  if (new Date(endDatetime).getTime() <= new Date(startDatetime).getTime()) {
+    return jsonOutput({
+      success: false,
+      message: "วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม",
+    });
+  }
+
+  const bookingConflict = getDriverUnavailableBookingsConflict(driverUserId, startDatetime, endDatetime, "");
+  if (bookingConflict) {
+    return jsonOutput({
+      success: false,
+      message: "มีงานที่ได้รับมอบหมายทับช่วงเวลานี้",
+    });
+  }
+
+  const unavailableId = "DU-" + now.getTime();
+  const row = Array(headers.length).fill("");
+
+  row[columnMap.unavailable_id] = unavailableId;
+  row[columnMap.driver_user_id] = driverUserId;
+  row[columnMap.driver_name] = driverName;
+  row[columnMap.type] = type;
+  row[columnMap.reason] = reason;
+  row[columnMap.start_datetime] = startDatetime;
+  row[columnMap.end_datetime] = endDatetime;
+  row[columnMap.status] = "ACTIVE";
+  row[columnMap.created_at] = now.toISOString();
+  row[columnMap.created_by] = createdBy;
+  row[columnMap.updated_at] = now.toISOString();
+  row[columnMap.updated_by] = createdBy;
+  row[columnMap.cancelled_at] = "";
+  row[columnMap.cancelled_by] = "";
+
+  appendSheetRow(sheet, row);
+
+  appendDriverUnavailableLog_(
+    buildDriverUnavailableLogPayload_({
+      unavailable_id: unavailableId,
+      driver_user_id: driverUserId,
+      driver_name: driverName,
+      action: "CREATED",
+      old_value: "",
+      new_value: {
+        unavailable_id: unavailableId,
+        driver_user_id: driverUserId,
+        driver_name: driverName,
+        type,
+        reason,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        status: "ACTIVE",
+      },
+      reason,
+      created_by: createdBy,
+    })
+  );
+
+  return jsonOutput({
+    success: true,
+    message: "Create driver unavailable success",
+    data: {
+      unavailable_id: unavailableId,
+      driver_user_id: driverUserId,
+      driver_name: driverName,
+      type,
+      reason,
+      start_datetime: startDatetime,
+      end_datetime: endDatetime,
+      status: "ACTIVE",
+      created_at: now.toISOString(),
+      created_by: createdBy,
+      updated_at: now.toISOString(),
+      updated_by: createdBy,
+      cancelled_at: "",
+      cancelled_by: "",
+    },
+  });
+}
+
+function updateDriverUnavailable(data) {
+  const sheet = ensureDriverUnavailableSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const rowNumber = findDriverUnavailableRowById(table, data.unavailable_id);
+
+  if (rowNumber <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Driver unavailable not found",
+    });
+  }
+
+  const rowIndex = rowNumber - 2;
+  const currentRow = table.rows[rowIndex].slice();
+  const oldValue = rowsToObjects(headers, [table.rows[rowIndex]])[0] || {};
+  const nextDriverUserId = String(data.driver_user_id || oldValue.driver_user_id || "").trim();
+  const nextDriverName = String(data.driver_name || oldValue.driver_name || "").trim();
+  const nextType = String(data.type || oldValue.type || "").trim();
+  const nextReason = String(data.reason || oldValue.reason || "").trim();
+  const nextStartDatetime = String(data.start_datetime || oldValue.start_datetime || "").trim();
+  const nextEndDatetime = String(data.end_datetime || oldValue.end_datetime || "").trim();
+  const updatedBy = String(data.updated_by || data.created_by || oldValue.updated_by || "").trim();
+  const nextStatus = normalizeDriverUnavailableStatus(oldValue.status || "ACTIVE", nextEndDatetime);
+
+  if (!nextDriverUserId || !nextDriverName || !nextType || !nextStartDatetime || !nextEndDatetime) {
+    return jsonOutput({
+      success: false,
+      message: "กรุณากรอกข้อมูลให้ครบ",
+    });
+  }
+
+  if (new Date(nextEndDatetime).getTime() <= new Date(nextStartDatetime).getTime()) {
+    return jsonOutput({
+      success: false,
+      message: "วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม",
+    });
+  }
+
+  const bookingConflict = getDriverUnavailableBookingsConflict(
+    nextDriverUserId,
+    nextStartDatetime,
+    nextEndDatetime,
+    data.unavailable_id
+  );
+  if (bookingConflict) {
+    return jsonOutput({
+      success: false,
+      message: "มีงานที่ได้รับมอบหมายทับช่วงเวลานี้",
+    });
+  }
+
+  currentRow[columnMap.driver_user_id] = nextDriverUserId;
+  currentRow[columnMap.driver_name] = nextDriverName;
+  currentRow[columnMap.type] = nextType;
+  currentRow[columnMap.reason] = nextReason;
+  currentRow[columnMap.start_datetime] = nextStartDatetime;
+  currentRow[columnMap.end_datetime] = nextEndDatetime;
+  currentRow[columnMap.status] = nextStatus;
+  currentRow[columnMap.updated_at] = new Date().toISOString();
+  currentRow[columnMap.updated_by] = updatedBy;
+
+  setRowValues(sheet, rowNumber, currentRow);
+
+  const newValue = rowsToObjects(headers, [currentRow])[0] || {};
+  appendDriverUnavailableLog_(
+    buildDriverUnavailableLogPayload_({
+      unavailable_id: data.unavailable_id,
+      driver_user_id: nextDriverUserId,
+      driver_name: nextDriverName,
+      action: "UPDATED",
+      old_value: oldValue,
+      new_value: newValue,
+      reason: nextReason,
+      created_by: updatedBy,
+    })
+  );
+
+  return jsonOutput({
+    success: true,
+    message: "Update driver unavailable success",
+    data: newValue,
+  });
+}
+
+function cancelDriverUnavailable(data) {
+  const sheet = ensureDriverUnavailableSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const rowNumber = findDriverUnavailableRowById(table, data.unavailable_id);
+
+  if (rowNumber <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Driver unavailable not found",
+    });
+  }
+
+  const rowIndex = rowNumber - 2;
+  const currentRow = table.rows[rowIndex].slice();
+  const oldValue = rowsToObjects(headers, [table.rows[rowIndex]])[0] || {};
+  const cancelledBy = String(data.cancelled_by || data.updated_by || data.created_by || "").trim();
+  const now = new Date().toISOString();
+
+  currentRow[columnMap.status] = "CANCELLED";
+  currentRow[columnMap.cancelled_at] = now;
+  currentRow[columnMap.cancelled_by] = cancelledBy;
+  currentRow[columnMap.updated_at] = now;
+  currentRow[columnMap.updated_by] = cancelledBy;
+
+  setRowValues(sheet, rowNumber, currentRow);
+
+  const newValue = rowsToObjects(headers, [currentRow])[0] || {};
+  appendDriverUnavailableLog_(
+    buildDriverUnavailableLogPayload_({
+      unavailable_id: data.unavailable_id,
+      driver_user_id: oldValue.driver_user_id || "",
+      driver_name: oldValue.driver_name || "",
+      action: "CANCELLED",
+      old_value: oldValue,
+      new_value: newValue,
+      reason: oldValue.reason || "",
+      created_by: cancelledBy,
+    })
+  );
+
+  return jsonOutput({
+    success: true,
+    message: "Cancel driver unavailable success",
+    data: newValue,
+  });
+}
+
+function checkDriverUnavailable(data) {
+  const driverUserId = String(data && (data.driver_user_id || data.assigned_user_id || "")).trim();
+  const startDatetime = String(data && data.start_datetime || "").trim();
+  const endDatetime = String(data && data.end_datetime || "").trim();
+
+  if (!driverUserId || !startDatetime || !endDatetime) {
+    return jsonOutput({
+      success: true,
+      data: {
+        available: true,
+        reason: "",
+        unavailable: null,
+      },
+    });
+  }
+
+  const conflict = getDriverUnavailableConflict(driverUserId, startDatetime, endDatetime, data.unavailable_id || "");
+
+  return jsonOutput({
+    success: true,
+    data: getDriverUnavailableResponse_(conflict),
+  });
+}
+
+function ensureDriverQueueSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("DriverQueue");
+
+  const headers = [
+    "queue_id",
+    "driver_user_id",
+    "driver_name",
+    "queue_order",
+    "status",
+    "last_assigned_at",
+    "last_booking_id",
+    "note",
+    "updated_at",
+    "updated_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("DriverQueue");
+    appendSheetRow(sheet, headers);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    appendSheetRow(sheet, headers);
+  }
+
+  return sheet;
+}
+
+function ensureDriverQueueStateSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("DriverQueueState");
+
+  const headers = ["state_key", "state_value", "updated_at", "updated_by"];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("DriverQueueState");
+    appendSheetRow(sheet, headers);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    appendSheetRow(sheet, headers);
+  }
+
+  const table = readSheetTable(sheet);
+  const keyCol = table.columnMap.state_key;
+  const valueCol = table.columnMap.state_value;
+  const updatedAtCol = table.columnMap.updated_at;
+  const updatedByCol = table.columnMap.updated_by;
+
+  let found = false;
+  for (let i = 0; i < table.rows.length; i++) {
+    if (String(table.rows[i][keyCol] || "").trim() === "last_assigned_queue_order") {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    const row = Array(table.headers.length).fill("");
+    row[keyCol] = "last_assigned_queue_order";
+    row[valueCol] = "0";
+    row[updatedAtCol] = new Date().toISOString();
+    row[updatedByCol] = "system";
+    appendSheetRow(sheet, row);
+  }
+
+  return sheet;
+}
+
+function ensureDriverQueueLogsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("DriverQueueLogs");
+
+  const headers = [
+    "log_id",
+    "booking_id",
+    "booking_no",
+    "recommended_driver_user_id",
+    "recommended_driver_name",
+    "assigned_driver_user_id",
+    "assigned_driver_name",
+    "assign_mode",
+    "reason",
+    "queue_before",
+    "queue_after",
+    "created_at",
+    "created_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("DriverQueueLogs");
+    appendSheetRow(sheet, headers);
+    return sheet;
+  }
+
+  if (sheet.getLastRow() === 0) {
+    appendSheetRow(sheet, headers);
+  }
+
+  return sheet;
+}
+
+function normalizeQueueStatus_(status) {
+  const normalized = String(status || "").trim().toUpperCase();
+  if (normalized === "ACTIVE") return "ACTIVE";
+  if (normalized === "INACTIVE") return "INACTIVE";
+  return "ACTIVE";
+}
+
+function getDriverQueueUserStatusLookup_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  if (!sheet) {
+    return {
+      byId: new Map(),
+      byName: new Map(),
+    };
+  }
+
+  const { headers, rows } = readSheetTable(sheet);
+  const userIdCol = headers.indexOf("user_id");
+  const nameCol = headers.indexOf("name");
+  const statusCol = headers.indexOf("status");
+
+  const byId = new Map();
+  const byName = new Map();
+
+  rows.forEach((row) => {
+    const userId = String(userIdCol !== -1 ? row[userIdCol] : "").trim();
+    const name = String(nameCol !== -1 ? row[nameCol] : "").trim();
+    const status = String(statusCol !== -1 ? row[statusCol] : "").trim().toUpperCase();
+    const payload = {
+      user_id: userId,
+      name,
+      status,
+    };
+
+    if (userId) {
+      byId.set(userId, payload);
+    }
+    if (name) {
+      byName.set(name.toLowerCase(), payload);
+    }
+  });
+
+  return { byId, byName };
+}
+
+function getDriverQueueStateValue_() {
+  const sheet = ensureDriverQueueStateSheet();
+  const table = readSheetTable(sheet);
+  const keyCol = table.columnMap.state_key;
+  const valueCol = table.columnMap.state_value;
+  const updatedAtCol = table.columnMap.updated_at;
+  const updatedByCol = table.columnMap.updated_by;
+
+  for (let i = 0; i < table.rows.length; i++) {
+    if (String(table.rows[i][keyCol] || "").trim() === "last_assigned_queue_order") {
+      return {
+        row_number: i + 2,
+        state_key: "last_assigned_queue_order",
+        state_value: String(table.rows[i][valueCol] || "0").trim() || "0",
+        updated_at: table.rows[i][updatedAtCol] || "",
+        updated_by: table.rows[i][updatedByCol] || "",
+      };
+    }
+  }
+
+  return {
+    row_number: -1,
+    state_key: "last_assigned_queue_order",
+    state_value: "0",
+    updated_at: "",
+    updated_by: "",
+  };
+}
+
+function setDriverQueueStateValue_(value, updatedBy) {
+  const sheet = ensureDriverQueueStateSheet();
+  const table = readSheetTable(sheet);
+  const keyCol = table.columnMap.state_key;
+  const valueCol = table.columnMap.state_value;
+  const updatedAtCol = table.columnMap.updated_at;
+  const updatedByCol = table.columnMap.updated_by;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < table.rows.length; i++) {
+    if (String(table.rows[i][keyCol] || "").trim() === "last_assigned_queue_order") {
+      const row = table.rows[i].slice();
+      row[valueCol] = String(value);
+      row[updatedAtCol] = now;
+      row[updatedByCol] = updatedBy || "";
+      setRowValues(sheet, i + 2, row);
+      return {
+        state_key: "last_assigned_queue_order",
+        state_value: String(value),
+        updated_at: now,
+        updated_by: updatedBy || "",
+      };
+    }
+  }
+
+  const row = Array(table.headers.length).fill("");
+  row[keyCol] = "last_assigned_queue_order";
+  row[valueCol] = String(value);
+  row[updatedAtCol] = now;
+  row[updatedByCol] = updatedBy || "";
+  appendSheetRow(sheet, row);
+  return {
+    state_key: "last_assigned_queue_order",
+    state_value: String(value),
+    updated_at: now,
+    updated_by: updatedBy || "",
+  };
+}
+
+function buildDriverQueueRows_() {
+  const queueSheet = ensureDriverQueueSheet();
+  const table = readSheetTable(queueSheet);
+  const userLookup = getDriverQueueUserStatusLookup_();
+
+  return rowsToObjects(table.headers, table.rows)
+    .map((row, index) => {
+      const userStatus = userLookup.byId.get(String(row.driver_user_id || "").trim()) ||
+        userLookup.byName.get(String(row.driver_name || "").trim().toLowerCase()) ||
+        null;
+      const queueOrder = Number(row.queue_order || 0) || 0;
+      const status = normalizeQueueStatus_(row.status);
+      return {
+        row_number: index + 2,
+        ...row,
+        queue_order: queueOrder,
+        status,
+        driver_status: userStatus ? userStatus.status : "",
+        driver_user_status: userStatus ? userStatus.status : "",
+        driver_active: !userStatus || userStatus.status === "ACTIVE",
+      };
+    })
+    .sort((a, b) => {
+      const orderDiff = Number(a.queue_order || 0) - Number(b.queue_order || 0);
+      if (orderDiff !== 0) return orderDiff;
+      return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
+    });
+}
+
+function getDriverQueueAvailableRows_(startDatetime, endDatetime) {
+  const queueRows = buildDriverQueueRows_();
+  const skipped = [];
+  const available = [];
+
+  queueRows.forEach((row) => {
+    if (row.status !== "ACTIVE") {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "คิวไม่ ACTIVE",
+      });
+      return;
+    }
+
+    if (row.driver_status !== "ACTIVE") {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "ผู้ใช้งานไม่ ACTIVE",
+      });
+      return;
+    }
+
+    const bookingConflict = getDriverUnavailableBookingsConflict(
+      row.driver_user_id,
+      startDatetime,
+      endDatetime,
+      ""
+    );
+    if (bookingConflict) {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "มีงานทับช่วงเวลานี้",
+      });
+      return;
+    }
+
+    const unavailableConflict = getDriverUnavailableConflict(
+      row.driver_user_id,
+      startDatetime,
+      endDatetime,
+      ""
+    );
+    if (unavailableConflict) {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "มีช่วงวันไม่รับงานทับ",
+      });
+      return;
+    }
+
+    available.push(row);
+  });
+
+  return {
+    available,
+    skipped,
+  };
+}
+
+function getDriverQueue() {
+  const rows = buildDriverQueueRows_();
+  const state = getDriverQueueStateValue_();
+
+  return jsonOutput({
+    success: true,
+    total: rows.length,
+    data: rows,
+    state,
+  });
+}
+
+function getDriverQueueState() {
+  const state = getDriverQueueStateValue_();
+  return jsonOutput({
+    success: true,
+    data: state,
+  });
+}
+
+function resetDriverQueueState(data) {
+  const updatedBy = String(data && (data.updated_by || data.created_by || data.reset_by || "")).trim();
+  const state = setDriverQueueStateValue_(String(data && data.last_assigned_queue_order !== undefined ? data.last_assigned_queue_order : 0), updatedBy);
+
+  return jsonOutput({
+    success: true,
+    message: "Reset driver queue state success",
+    data: state,
+  });
+}
+
+function getDriverQueueLogs() {
+  const sheet = ensureDriverQueueLogsSheet();
+  const { headers, rows } = readSheetTable(sheet);
+
+  if (rows.length === 0) {
+    return jsonOutput({
+      success: true,
+      total: 0,
+      data: [],
+    });
+  }
+
+  return jsonOutput({
+    success: true,
+    total: rows.length,
+    data: rowsToObjects(headers, rows),
+  });
+}
+
+function getNextQueueOrderFromState_(queueRows, lastAssignedQueueOrder) {
+  const sorted = [...queueRows].sort((a, b) => {
+    const orderDiff = Number(a.queue_order || 0) - Number(b.queue_order || 0);
+    if (orderDiff !== 0) return orderDiff;
+    return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
+  });
+
+  if (sorted.length === 0) {
+    return [];
+  }
+
+  const pointer = Number(lastAssignedQueueOrder || 0) || 0;
+  let startIndex = sorted.findIndex((row) => Number(row.queue_order || 0) > pointer);
+  if (startIndex === -1) startIndex = 0;
+
+  return [...sorted.slice(startIndex), ...sorted.slice(0, startIndex)];
+}
+
+function recommendDriverForBooking(data) {
+  const startDatetime = String(data && data.start_datetime || "").trim();
+  const endDatetime = String(data && data.end_datetime || "").trim();
+  const bookingId = String(data && data.booking_id || "").trim();
+
+  if (!startDatetime || !endDatetime) {
+    return jsonOutput({
+      success: false,
+      message: "วันเวลาไม่ถูกต้อง",
+      data: { skipped: [] },
+    });
+  }
+
+  if (new Date(endDatetime).getTime() <= new Date(startDatetime).getTime()) {
+    return jsonOutput({
+      success: false,
+      message: "วันเวลาสิ้นสุดต้องมากกว่าวันเวลาเริ่ม",
+      data: { skipped: [] },
+    });
+  }
+
+  const queueRows = buildDriverQueueRows_().filter((row) => row.status === "ACTIVE");
+  const state = getDriverQueueStateValue_();
+  const orderedRows = getNextQueueOrderFromState_(queueRows, state.state_value);
+  const skipped = [];
+
+  if (orderedRows.length === 0) {
+    return jsonOutput({
+      success: false,
+      message: "ไม่พบคนขับที่พร้อมรับงานในช่วงเวลานี้",
+      data: { skipped: [] },
+    });
+  }
+
+  for (let i = 0; i < orderedRows.length; i++) {
+    const row = orderedRows[i];
+    if (row.driver_status !== "ACTIVE") {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "ผู้ใช้งานไม่ ACTIVE",
+      });
+      continue;
+    }
+
+    const bookingConflict = getDriverUnavailableBookingsConflict(row.driver_user_id, startDatetime, endDatetime, bookingId);
+    if (bookingConflict) {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "มีงานทับช่วงเวลานี้",
+      });
+      continue;
+    }
+
+    const unavailableConflict = getDriverUnavailableConflict(row.driver_user_id, startDatetime, endDatetime, "");
+    if (unavailableConflict) {
+      skipped.push({
+        driver_user_id: row.driver_user_id || "",
+        driver_name: row.driver_name || "",
+        reason: "มีช่วงวันไม่รับงานทับ",
+      });
+      continue;
+    }
+
+    return jsonOutput({
+      success: true,
+      data: {
+        recommended_driver_user_id: row.driver_user_id || "",
+        recommended_driver_name: row.driver_name || "",
+        queue_order: row.queue_order || 0,
+        reason: "คิวถัดไป / พร้อมรับงาน",
+        skipped,
+      },
+    });
+  }
+
+  return jsonOutput({
+    success: false,
+    message: "ไม่พบคนขับที่พร้อมรับงานในช่วงเวลานี้",
+    data: { skipped },
+  });
+}
+
+function findDriverQueueRowByUserId_(table, driverUserId) {
+  const normalized = String(driverUserId || "").trim();
+  if (!normalized) return -1;
+  const driverUserIdCol = table.columnMap.driver_user_id;
+  if (driverUserIdCol === undefined) return -1;
+
+  for (let i = 0; i < table.rows.length; i++) {
+    if (String(table.rows[i][driverUserIdCol] || "").trim() === normalized) {
+      return i + 2;
+    }
+  }
+
+  return -1;
+}
+
+function findDriverQueueRowByQueueId_(table, queueId) {
+  const normalized = String(queueId || "").trim();
+  if (!normalized) return -1;
+  const queueIdCol = table.columnMap.queue_id;
+  if (queueIdCol === undefined) return -1;
+
+  for (let i = 0; i < table.rows.length; i++) {
+    if (String(table.rows[i][queueIdCol] || "").trim() === normalized) {
+      return i + 2;
+    }
+  }
+
+  return -1;
+}
+
+function updateDriverQueue(data) {
+  const sheet = ensureDriverQueueSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const updatedBy = String(data && (data.updated_by || data.created_by || data.updatedBy || "")).trim();
+
+  const targetRowNumber = findDriverQueueRowByQueueId_(table, data.queue_id) > 1
+    ? findDriverQueueRowByQueueId_(table, data.queue_id)
+    : findDriverQueueRowByUserId_(table, data.driver_user_id);
+
+  if (targetRowNumber <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Driver queue not found",
+    });
+  }
+
+  const currentRow = table.rows[targetRowNumber - 2].slice();
+  const moveDirection = String(data.move_direction || data.direction || "").trim().toUpperCase();
+
+  if (moveDirection === "UP" || moveDirection === "DOWN") {
+    const activeRows = buildDriverQueueRows_().filter((row) => normalizeQueueStatus_(row.status) === "ACTIVE");
+    const currentIndex = activeRows.findIndex((row) => row.row_number === targetRowNumber);
+    if (currentIndex === -1) {
+      return jsonOutput({
+        success: false,
+        message: "Driver queue not found",
+      });
+    }
+
+    const swapIndex = moveDirection === "UP" ? currentIndex - 1 : currentIndex + 1;
+    if (swapIndex < 0 || swapIndex >= activeRows.length) {
+      return jsonOutput({
+        success: false,
+        message: "Move not allowed",
+      });
+    }
+
+    const otherRow = activeRows[swapIndex];
+    const currentQueueOrder = currentRow[columnMap.queue_order];
+    const otherTableRow = table.rows[otherRow.row_number - 2].slice();
+
+    currentRow[columnMap.queue_order] = otherRow.queue_order;
+    currentRow[columnMap.updated_at] = new Date().toISOString();
+    currentRow[columnMap.updated_by] = updatedBy;
+
+    otherTableRow[columnMap.queue_order] = currentQueueOrder;
+    otherTableRow[columnMap.updated_at] = new Date().toISOString();
+    otherTableRow[columnMap.updated_by] = updatedBy;
+
+    setRowValues(sheet, targetRowNumber, currentRow);
+    setRowValues(sheet, otherRow.row_number, otherTableRow);
+
+    return jsonOutput({
+      success: true,
+      message: "Update driver queue success",
+      data: rowsToObjects(headers, [currentRow])[0] || {},
+    });
+  }
+
+  if (data.queue_order !== undefined) {
+    currentRow[columnMap.queue_order] = Number(data.queue_order) || 0;
+  }
+  if (data.status !== undefined) {
+    currentRow[columnMap.status] = normalizeQueueStatus_(data.status);
+  }
+  if (data.note !== undefined) {
+    currentRow[columnMap.note] = String(data.note || "");
+  }
+
+  currentRow[columnMap.updated_at] = new Date().toISOString();
+  currentRow[columnMap.updated_by] = updatedBy;
+  setRowValues(sheet, targetRowNumber, currentRow);
+
+  return jsonOutput({
+    success: true,
+    message: "Update driver queue success",
+    data: rowsToObjects(headers, [currentRow])[0] || {},
+  });
+}
+
+function confirmDriverQueueAssignment(data) {
+  const bookingId = String(data && data.booking_id || "").trim();
+  const bookingNo = String(data && data.booking_no || "").trim();
+  const recommendedDriverUserId = String(data && data.recommended_driver_user_id || "").trim();
+  const recommendedDriverName = String(data && data.recommended_driver_name || "").trim();
+  const assignedDriverUserId = String(data && data.assigned_driver_user_id || "").trim();
+  const assignedDriverName = String(data && data.assigned_driver_name || "").trim();
+  const assignMode = String(data && data.assign_mode || "").trim().toUpperCase() || "AUTO_RECOMMENDED";
+  const reason = String(data && data.reason || "").trim();
+  const createdBy = String(data && data.created_by || "").trim();
+
+  if (!bookingId || !assignedDriverUserId || !assignedDriverName) {
+    return jsonOutput({
+      success: false,
+      message: "booking_id and assigned driver are required",
+    });
+  }
+
+  const queueTable = readSheetTable(ensureDriverQueueSheet());
+  const queueRowNumber = findDriverQueueRowByUserId_(queueTable, assignedDriverUserId);
+  const stateBefore = getDriverQueueStateValue_();
+  const queueBefore = String(stateBefore.state_value || "0").trim() || "0";
+  let queueAfter = queueBefore;
+
+  if (queueRowNumber > 1) {
+    const row = queueTable.rows[queueRowNumber - 2].slice();
+    const queueOrder = Number(row[queueTable.columnMap.queue_order] || 0) || 0;
+    const now = new Date().toISOString();
+    row[queueTable.columnMap.last_assigned_at] = now;
+    row[queueTable.columnMap.last_booking_id] = bookingId;
+    row[queueTable.columnMap.updated_at] = now;
+    row[queueTable.columnMap.updated_by] = createdBy;
+    setRowValues(ensureDriverQueueSheet(), queueRowNumber, row);
+    queueAfter = String(queueOrder);
+    setDriverQueueStateValue_(queueOrder, createdBy);
+  }
+
+  const logSheet = ensureDriverQueueLogsSheet();
+  const logHeaders = readSheetTable(logSheet).headers;
+  const logRow = Array(logHeaders.length).fill("");
+  const now = new Date().toISOString();
+
+  logRow[logHeaders.indexOf("log_id")] = "DQL-" + Date.now();
+  logRow[logHeaders.indexOf("booking_id")] = bookingId;
+  logRow[logHeaders.indexOf("booking_no")] = bookingNo;
+  logRow[logHeaders.indexOf("recommended_driver_user_id")] = recommendedDriverUserId;
+  logRow[logHeaders.indexOf("recommended_driver_name")] = recommendedDriverName;
+  logRow[logHeaders.indexOf("assigned_driver_user_id")] = assignedDriverUserId;
+  logRow[logHeaders.indexOf("assigned_driver_name")] = assignedDriverName;
+  logRow[logHeaders.indexOf("assign_mode")] = assignMode;
+  logRow[logHeaders.indexOf("reason")] = reason;
+  logRow[logHeaders.indexOf("queue_before")] = queueBefore;
+  logRow[logHeaders.indexOf("queue_after")] = queueAfter;
+  logRow[logHeaders.indexOf("created_at")] = now;
+  logRow[logHeaders.indexOf("created_by")] = createdBy;
+  appendSheetRow(logSheet, logRow);
+
+  return jsonOutput({
+    success: true,
+    message: "Confirm driver queue assignment success",
+    data: {
+      booking_id: bookingId,
+      booking_no: bookingNo,
+      assign_mode: assignMode,
+      queue_before: queueBefore,
+      queue_after: queueAfter,
+    },
+  });
+}
+
 function getDrivers() {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()

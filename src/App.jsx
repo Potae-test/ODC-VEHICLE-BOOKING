@@ -15,6 +15,10 @@ const Staff = lazy(() => import("./pages/Staff"));
 const CalendarPage = lazy(() => import("./pages/Calendar"));
 const DriverSummary = lazy(() => import("./pages/DriverSummary"));
 const DriverJobs = lazy(() => import("./pages/DriverJobs"));
+const DriverUnavailable = lazy(() => import("./pages/DriverUnavailable"));
+const DriverUnavailableLogs = lazy(() => import("./pages/DriverUnavailableLogs"));
+const DriverQueue = lazy(() => import("./pages/DriverQueue"));
+const DriverQueueLogs = lazy(() => import("./pages/DriverQueueLogs"));
 const Admin = lazy(() => import("./pages/Admin"));
 
 function getDefaultPageByRole(role) {
@@ -29,6 +33,10 @@ function getPageFromPath(pathname) {
   if (path === "/admin" || path === "/dashboard") return "admin";
   if (path === "/staff") return "staff";
   if (path === "/driver-jobs") return "driver-jobs";
+  if (path === "/driver-unavailable") return "driver-unavailable";
+  if (path === "/driver-unavailable-logs") return "driver-unavailable-logs";
+  if (path === "/driver-queue") return "driver-queue";
+  if (path === "/driver-queue-logs") return "driver-queue-logs";
   if (path === "/booking") return "booking";
   return "";
 }
@@ -92,7 +100,7 @@ export default function App() {
 
   function goPage(nextPage) {
     if (!canAccessPage(user.role, nextPage, permissionConfig)) {
-      alert("คุณไม่มีสิทธิ์เข้าเมนูนี้");
+      alert("คุณไม่มีสิทธิ์เข้าถึงเมนูนี้");
       return;
     }
     setPage(nextPage);
@@ -156,18 +164,12 @@ export default function App() {
 
           {canAccessPage(user.role, "booking-cancellation-history", permissionConfig) && (
             <button
-              className={page === "booking-cancellation-history" ? "active" : ""} 
+              className={page === "booking-cancellation-history" ? "active" : ""}
               onClick={() => goPage("booking-cancellation-history")}
             >
               📚 ประวัติการยกเลิก
             </button>
           )}
-
-          {/* {canAccessPage(user.role, "staff", permissionConfig) && (
-            <button className={page === "staff" ? "active" : ""} onClick={() => goPage("staff")}>
-              👥 เจ้าหน้าที่
-            </button>
-          )} */}
 
           {canAccessPage(user.role, "calendar", permissionConfig) && (
             <button className={page === "calendar" ? "active" : ""} onClick={() => goPage("calendar")}>
@@ -187,17 +189,44 @@ export default function App() {
             </button>
           )}
 
+          {canAccessPage(user.role, "driver-unavailable", permissionConfig) && (
+            <button
+              className={page === "driver-unavailable" ? "active" : ""}
+              onClick={() => goPage("driver-unavailable")}
+            >
+              📅 วันไม่รับงาน
+            </button>
+          )}
+
+          {canAccessPage(user.role, "driver-unavailable-logs", permissionConfig) && (
+            <button
+              className={page === "driver-unavailable-logs" ? "active" : ""}
+              onClick={() => goPage("driver-unavailable-logs")}
+            >
+              🕒 ประวัติวันไม่รับงาน
+            </button>
+          )}
+
+          {canAccessPage(user.role, "driver-queue", permissionConfig) && (
+            <button className={page === "driver-queue" ? "active" : ""} onClick={() => goPage("driver-queue")}>
+              🧭 คิวคนขับ
+            </button>
+          )}
+
+          {canAccessPage(user.role, "driver-queue-logs", permissionConfig) && (
+            <button
+              className={page === "driver-queue-logs" ? "active" : ""}
+              onClick={() => goPage("driver-queue-logs")}
+            >
+              📜 ประวัติคิวคนขับ
+            </button>
+          )}
+
           {canAccessPage(user.role, "admin", permissionConfig) && (
             <button className={page === "admin" ? "active" : ""} onClick={() => goPage("admin")}>
               🛠 Admin
             </button>
           )}
-
-          {/* <div className="sidebar-help">
-            <b>ศูนย์ช่วยเหลือ</b>
-            <p>ฝ่ายระบบงาน</p>
-            <p>02-xxx-xxxx</p>
-          </div> */}
         </aside>
 
         <main className="main-content">
@@ -210,6 +239,10 @@ export default function App() {
             {hasPageAccess && page === "calendar" && <CalendarPage />}
             {hasPageAccess && page === "driver-summary" && <DriverSummary />}
             {hasPageAccess && page === "driver-jobs" && <DriverJobs />}
+            {hasPageAccess && page === "driver-unavailable" && <DriverUnavailable />}
+            {hasPageAccess && page === "driver-unavailable-logs" && <DriverUnavailableLogs />}
+            {hasPageAccess && page === "driver-queue" && <DriverQueue />}
+            {hasPageAccess && page === "driver-queue-logs" && <DriverQueueLogs />}
             {hasPageAccess && page === "admin" && <Admin />}
           </Suspense>
         </main>

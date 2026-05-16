@@ -4,7 +4,11 @@ import {
   approveBooking,
   cancelBooking,
   createBooking,
+  confirmDriverQueueAssignment,
+  checkDriverUnavailable,
+  getDriverUnavailable,
   getBookings,
+  recommendDriverForBooking,
   getVehicles,
   getUsers,
   updateBooking,
@@ -364,6 +368,89 @@ function isDriverAvailable(driver, currentBooking, bookingGroups) {
   });
 }
 
+function normalizeUnavailableType(type) {
+  const raw = String(type || "").trim();
+  if (!raw) return "ลา";
+  if (raw.toUpperCase() === "OTHER") return "OTHER";
+  return raw;
+}
+
+function getUnavailableTypeLabel(type) {
+  const normalized = normalizeUnavailableType(type);
+  if (normalized === "OTHER") return "อื่นๆ";
+  return normalized;
+}
+
+function getUnavailableTypeClassName(type) {
+  const normalized = normalizeUnavailableType(type);
+  if (normalized === "ลา") return "red";
+  if (normalized === "หยุด") return "amber";
+  return "purple";
+}
+
+function formatUnavailableRange(startDatetime, endDatetime) {
+  return `${formatThaiDateTime(startDatetime)} - ${formatThaiDateTime(endDatetime)}`;
+}
+
+function groupActiveUnavailable(unavailableRecords) {
+  const byDriverId = new Map();
+  const byDriverName = new Map();
+
+  unavailableRecords.forEach((record) => {
+    const status = normalizeStatus(record.status);
+    const startTime = new Date(record.start_datetime).getTime();
+    const endTime = new Date(record.end_datetime).getTime();
+
+    if (status !== "ACTIVE" || Number.isNaN(startTime) || Number.isNaN(endTime)) {
+      return;
+    }
+
+    const driverId = String(record.driver_user_id || "").trim();
+    const driverName = String(record.driver_name || "").trim();
+
+    if (driverId) {
+      if (!byDriverId.has(driverId)) byDriverId.set(driverId, []);
+      byDriverId.get(driverId).push(record);
+    }
+
+    if (driverName) {
+      if (!byDriverName.has(driverName)) byDriverName.set(driverName, []);
+      byDriverName.get(driverName).push(record);
+    }
+  });
+
+  return { byDriverId, byDriverName };
+}
+
+function getDriverUnavailableConflict(driver, currentBooking, unavailableGroups) {
+  const driverId = String(driver.user_id || "").trim();
+  const driverName = String(driver.name || "").trim();
+  const records = [
+    ...(driverId ? unavailableGroups.byDriverId.get(driverId) || [] : []),
+    ...(driverName ? unavailableGroups.byDriverName.get(driverName) || [] : []),
+  ];
+
+  return records.find((record) => {
+    const sameBooking = String(record.booking_id || "") === String(currentBooking.booking_id || "");
+    if (sameBooking) {
+      return false;
+    }
+
+    return isTimeOverlap(
+      currentBooking.start_datetime,
+      currentBooking.end_datetime,
+      record.start_datetime,
+      record.end_datetime
+    );
+  }) || null;
+}
+
+function getQueueAssignModeLabel(mode) {
+  const normalized = String(mode || "").trim().toUpperCase();
+  if (normalized === "MANUAL_OVERRIDE") return "เลือกคนขับเอง";
+  return "ระบบแนะนำ";
+}
+
 function isEditableBookingStatus(status) {
   return !["IN_USE", "COMPLETED", "CANCELLED"].includes(normalizeStatus(status));
 }
@@ -532,6 +619,7 @@ export default function Booking() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [driverUnavailableRecords, setDriverUnavailableRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -584,10 +672,11 @@ export default function Booking() {
       setLoading(true);
       setError("");
 
-      const [bookingData, vehicleData, driverData] = await Promise.all([
+      const [bookingData, vehicleData, driverData, unavailableData] = await Promise.all([
         getBookings(),
         getVehicles(),
         getUsers(),
+        getDriverUnavailable(),
       ]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
@@ -595,6 +684,11 @@ export default function Booking() {
       setDrivers(
         Array.isArray(driverData)
           ? driverData.filter((user) => normalizeStatus(user.role) === "DRIVER")
+          : []
+      );
+      setDriverUnavailableRecords(
+        Array.isArray(unavailableData)
+          ? unavailableData.filter((record) => normalizeStatus(record.status) === "ACTIVE")
           : []
       );
     } catch (err) {
@@ -609,8 +703,16 @@ export default function Booking() {
   const refreshBookings = useCallback(async () => {
     try {
       setRefreshing(true);
-      const bookingData = await getBookings({ fresh: true });
+      const [bookingData, unavailableData] = await Promise.all([
+        getBookings({ fresh: true }),
+        getDriverUnavailable({ fresh: true }),
+      ]);
       setBookings(Array.isArray(bookingData) ? bookingData : []);
+      setDriverUnavailableRecords(
+        Array.isArray(unavailableData)
+          ? unavailableData.filter((record) => normalizeStatus(record.status) === "ACTIVE")
+          : []
+      );
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
@@ -670,6 +772,11 @@ export default function Booking() {
   const activeDrivers = useMemo(
     () => drivers.filter((driver) => normalizeStatus(driver.status) === "ACTIVE"),
     [drivers]
+  );
+
+  const driverUnavailableGroups = useMemo(
+    () => groupActiveUnavailable(driverUnavailableRecords),
+    [driverUnavailableRecords]
   );
 
   const sortedBookings = useMemo(() => sortLatestFirst(bookings), [bookings]);
@@ -944,10 +1051,43 @@ export default function Booking() {
 
   const handleProcessBooking = useCallback(async (booking) => {
     if (processingAction) return;
+
+    let driverQueueRecommendation = null;
+    let driverQueueRecommendationError = "";
+
+    try {
+      const recommendation = await recommendDriverForBooking({
+        booking_id: booking.booking_id,
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+      });
+      driverQueueRecommendation = recommendation?.data || null;
+      if (!recommendation?.success) {
+        driverQueueRecommendationError = recommendation?.message || "ไม่พบคำแนะนำจากคิวคนขับ";
+      }
+    } catch (err) {
+      driverQueueRecommendationError = err.message || "ไม่พบคำแนะนำจากคิวคนขับ";
+    }
+
+    const recommendedDriverId = driverQueueRecommendation?.recommended_driver_user_id || "";
+    const recommendedDriverName = driverQueueRecommendation?.recommended_driver_name || "";
+    const recommendedReason = driverQueueRecommendation?.reason || "คิวถัดไป / พร้อมรับงาน";
+    const skippedDrivers = Array.isArray(driverQueueRecommendation?.skipped)
+      ? driverQueueRecommendation.skipped
+      : [];
+
     const result = await Swal.fire({
       title: "ดำเนินการจอง",
       html: `
         <div class="swal-form">
+          <div class="form-card" style="margin:0 0 16px;padding:16px;background:#f8fafc;">
+            <b>คนขับที่ระบบแนะนำ:</b>
+            <div style="margin-top:8px;">${escapeHtml(recommendedDriverName || "ยังไม่มีคำแนะนำ")}</div>
+            <div style="margin-top:8px;color:#475569;">เหตุผล: ${escapeHtml(recommendedReason)}</div>
+            ${driverQueueRecommendationError ? `<div style="margin-top:8px;color:#b91c1c;">${escapeHtml(driverQueueRecommendationError)}</div>` : ""}
+            ${skippedDrivers.length > 0 ? `<div style="margin-top:8px;color:#475569;">ข้ามไป ${skippedDrivers.length} รายการ</div>` : ""}
+          </div>
+
           <label>เลือกรถ</label>
           <select id="vehicle_id" class="swal2-select">
             <option value="">-- เลือกรถ --</option>
@@ -976,15 +1116,40 @@ export default function Booking() {
             <option value="">-- เลือกผู้ใช้ --</option>
             ${activeDrivers
               .map((driver) => {
-                const available = isDriverAvailable(driver, booking, bookingGroups);
+                const scheduleAvailable = isDriverAvailable(driver, booking, bookingGroups);
+                const unavailableConflict = getDriverUnavailableConflict(
+                  driver,
+                  booking,
+                  driverUnavailableGroups
+                );
+                const available = scheduleAvailable && !unavailableConflict;
+                const conflictLabel = unavailableConflict
+                  ? `${getUnavailableTypeLabel(unavailableConflict.type)} ${formatUnavailableRange(
+                      unavailableConflict.start_datetime,
+                      unavailableConflict.end_datetime
+                    )}`
+                  : "";
+                const selected = String(driver.user_id || "") === String(recommendedDriverId || "");
                 return `<option value="${escapeHtml(driver.user_id)}" ${
                   available ? "" : "disabled"
-                }>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
-                  available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"
+                } ${selected ? "selected" : ""}>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
+                  available
+                    ? " ✅ ว่าง"
+                    : unavailableConflict
+                      ? ` ❌ ${escapeHtml(conflictLabel)}`
+                      : " ❌ ไม่ว่าง"
                 }</option>`;
               })
               .join("")}
           </select>
+
+          <label>เหตุผลที่เลือกคนขับเอง</label>
+          <textarea
+            id="manual_override_reason"
+            class="swal2-textarea"
+            rows="3"
+            placeholder="ระบุเมื่อเลือกคนขับไม่ตรงกับที่ระบบแนะนำ"
+          ></textarea>
 
           <label>หมายเหตุ</label>
           <input id="staff_note" class="swal2-input" placeholder="-">
@@ -999,6 +1164,7 @@ export default function Booking() {
       preConfirm: () => {
         const vehicle_id = document.getElementById("vehicle_id").value;
         const assigned_user_id = document.getElementById("assigned_user_id").value;
+        const manual_override_reason = document.getElementById("manual_override_reason").value.trim();
         const staff_note = document.getElementById("staff_note").value.trim();
 
         if (!vehicle_id || !assigned_user_id) {
@@ -1014,8 +1180,32 @@ export default function Booking() {
           return false;
         }
 
+        const unavailableConflict = getDriverUnavailableConflict(
+          driver || {},
+          booking,
+          driverUnavailableGroups
+        );
+
         if (!driver || !isDriverAvailable(driver, booking, bookingGroups)) {
           Swal.showValidationMessage("คนขับท่านนี้ไม่ว่าง");
+          return false;
+        }
+
+        if (unavailableConflict) {
+          Swal.showValidationMessage(
+            `คนขับมีช่วงวันไม่รับงาน: ${getUnavailableTypeLabel(unavailableConflict.type)} ${formatUnavailableRange(
+              unavailableConflict.start_datetime,
+              unavailableConflict.end_datetime
+            )}`
+          );
+          return false;
+        }
+
+        const hasRecommendation = Boolean(recommendedDriverId);
+        const isManualOverride =
+          hasRecommendation && String(assigned_user_id || "") !== String(recommendedDriverId || "");
+        if (isManualOverride && !manual_override_reason) {
+          Swal.showValidationMessage("กรุณาระบุเหตุผลที่เลือกคนขับเอง");
           return false;
         }
 
@@ -1026,6 +1216,14 @@ export default function Booking() {
           assigned_user_id,
           assigned_user_name: driver.name,
           staff_note,
+          recommended_driver_user_id: recommendedDriverId,
+          recommended_driver_name: recommendedDriverName,
+          assign_mode: hasRecommendation
+            ? isManualOverride
+              ? "MANUAL_OVERRIDE"
+              : "AUTO_RECOMMENDED"
+            : "MANUAL_OVERRIDE",
+          manual_override_reason,
         };
       },
     });
@@ -1034,15 +1232,50 @@ export default function Booking() {
 
     try {
       setProcessingAction({ bookingId: booking.booking_id, type: "process" });
+      const driverUnavailableCheck = await checkDriverUnavailable({
+        driver_user_id: result.value.assigned_user_id,
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+      });
+
+      if (driverUnavailableCheck && driverUnavailableCheck.available === false) {
+        throw new Error(
+          `คนขับมีช่วงวันไม่รับงาน: ${getUnavailableTypeLabel(driverUnavailableCheck.unavailable?.type)} ${formatUnavailableRange(
+            driverUnavailableCheck.unavailable?.start_datetime,
+            driverUnavailableCheck.unavailable?.end_datetime
+          )}`
+        );
+      }
+
       const approved = await approveBooking(result.value);
       mergeBooking({ ...result.value, ...(approved || {}), status: "APPROVED" });
+
+      try {
+        await confirmDriverQueueAssignment({
+          booking_id: booking.booking_id,
+          booking_no: booking.booking_no || "",
+          recommended_driver_user_id: result.value.recommended_driver_user_id || "",
+          recommended_driver_name: result.value.recommended_driver_name || "",
+          assigned_driver_user_id: result.value.assigned_user_id || "",
+          assigned_driver_name: result.value.assigned_user_name || "",
+          assign_mode: result.value.assign_mode || "AUTO_RECOMMENDED",
+          reason:
+            result.value.assign_mode === "MANUAL_OVERRIDE"
+              ? result.value.manual_override_reason || result.value.staff_note || ""
+              : recommendedReason,
+          created_by: currentUser?.name || currentUser?.email || "",
+        });
+      } catch (queueErr) {
+        console.warn("confirmDriverQueueAssignment failed", queueErr);
+      }
+
       await showSuccess("อนุมัติรายการสำเร็จ");
     } catch (err) {
       showError(err.message || "อนุมัติรายการไม่สำเร็จ");
     } finally {
       setProcessingAction(null);
     }
-  }, [activeDrivers, bookingGroups, drivers, mergeBooking, processingAction, vehicles]);
+  }, [activeDrivers, bookingGroups, currentUser?.email, currentUser?.name, driverUnavailableGroups, drivers, mergeBooking, processingAction, vehicles]);
 
   const handleEditBooking = useCallback(async (booking) => {
     if (processingAction) return;

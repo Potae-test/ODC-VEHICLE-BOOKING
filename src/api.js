@@ -339,6 +339,142 @@ export async function updateBooking(data) {
 }
 
 // ---------------------
+// DRIVER UNAVAILABLE
+// ---------------------
+
+export async function getDriverUnavailable(options = {}) {
+  return apiRequest("getDriverUnavailable", options);
+}
+
+export async function getDriverUnavailableLogs(options = {}) {
+  return apiRequest("getDriverUnavailableLogs", options);
+}
+
+export async function createDriverUnavailable(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/createDriverUnavailable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
+  return json.data;
+}
+
+export async function updateDriverUnavailable(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/updateDriverUnavailable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
+  return json.data;
+}
+
+export async function cancelDriverUnavailable(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/cancelDriverUnavailable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
+  return json.data;
+}
+
+export async function checkDriverUnavailable(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/checkDriverUnavailable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  return json.data;
+}
+
+// ---------------------
+// DRIVER QUEUE
+// ---------------------
+
+export async function getDriverQueue(options = {}) {
+  if (options.fresh) {
+    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue?ts=${Date.now()}`);
+    return {
+      data: json.data || [],
+      state: json.state || null,
+    };
+  }
+
+  return getCachedCollection("getDriverQueue", async () => {
+    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue`);
+    return {
+      data: json.data || [],
+      state: json.state || null,
+    };
+  });
+}
+
+export async function getDriverQueueState(options = {}) {
+  return apiRequest("getDriverQueueState", options);
+}
+
+export async function getDriverQueueLogs(options = {}) {
+  return apiRequest("getDriverQueueLogs", options);
+}
+
+export async function updateDriverQueue(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/updateDriverQueue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
+  return json.data;
+}
+
+export async function resetDriverQueueState(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/resetDriverQueueState`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
+  return json.data;
+}
+
+export async function recommendDriverForBooking(data) {
+  const res = await fetch(`${API_BASE_URL}/api/recommendDriverForBooking`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  return res.json();
+}
+
+export async function confirmDriverQueueAssignment(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/confirmDriverQueueAssignment`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
+  return json.data;
+}
+
+// ---------------------
 // AUTH
 // ---------------------
 

@@ -4,7 +4,10 @@ import {
   approveBooking,
   cancelBooking,
   completeTrip,
+  confirmDriverQueueAssignment,
   getBookings,
+  getDriverUnavailable,
+  recommendDriverForBooking,
   getVehicles,
   getUsers,
   startTrip,
@@ -56,16 +59,18 @@ export default function Staff() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [driverUnavailableRecords, setDriverUnavailableRecords] = useState([]);
   const [selected, setSelected] = useState({});
 
   const [pendingPage, setPendingPage] = useState(1);
   const [activePage, setActivePage] = useState(1);
 
   async function loadData() {
-    const [bookingData, vehicleData, driverData] = await Promise.all([
+    const [bookingData, vehicleData, driverData, unavailableData] = await Promise.all([
       getBookings(),
       getVehicles(),
       getUsers(),
+      getDriverUnavailable(),
     ]);
 
     setBookings(bookingData);
@@ -75,12 +80,30 @@ export default function Staff() {
         ? driverData.filter((user) => String(user.role || "").trim().toUpperCase() === "DRIVER")
         : []
     );
+    setDriverUnavailableRecords(
+      Array.isArray(unavailableData)
+        ? unavailableData.filter((record) => String(record.status || "").trim().toUpperCase() === "ACTIVE")
+        : []
+    );
   }
 
   async function refreshBookings() {
-    const bookingData = await getBookings();
+    const [bookingData, unavailableData] = await Promise.all([
+      getBookings(),
+      getDriverUnavailable(),
+    ]);
     setBookings(bookingData);
+    setDriverUnavailableRecords(
+      Array.isArray(unavailableData)
+        ? unavailableData.filter((record) => String(record.status || "").trim().toUpperCase() === "ACTIVE")
+      : []
+    );
   }
+
+  const driverUnavailableGroups = useMemo(
+    () => groupActiveUnavailable(driverUnavailableRecords),
+    [driverUnavailableRecords]
+  );
 
   function updateSelected(bookingId, field, value) {
     setSelected({
@@ -144,6 +167,53 @@ export default function Staff() {
         );
       });
     }
+
+  function groupActiveUnavailable(unavailableRecords) {
+    const byDriverId = new Map();
+    const byDriverName = new Map();
+
+    unavailableRecords.forEach((record) => {
+      const status = String(record.status || "").trim().toUpperCase();
+      if (status !== "ACTIVE") return;
+
+      const startTime = new Date(record.start_datetime).getTime();
+      const endTime = new Date(record.end_datetime).getTime();
+      if (Number.isNaN(startTime) || Number.isNaN(endTime)) return;
+
+      const driverId = String(record.driver_user_id || "").trim();
+      const driverName = String(record.driver_name || "").trim();
+
+      if (driverId) {
+        if (!byDriverId.has(driverId)) byDriverId.set(driverId, []);
+        byDriverId.get(driverId).push(record);
+      }
+
+      if (driverName) {
+        if (!byDriverName.has(driverName)) byDriverName.set(driverName, []);
+        byDriverName.get(driverName).push(record);
+      }
+    });
+
+    return { byDriverId, byDriverName };
+  }
+
+  function getDriverUnavailableConflict(driver, currentBooking, unavailableGroups) {
+    const driverId = String(driver.user_id || "").trim();
+    const driverName = String(driver.name || "").trim();
+    const records = [
+      ...(driverId ? unavailableGroups.byDriverId.get(driverId) || [] : []),
+      ...(driverName ? unavailableGroups.byDriverName.get(driverName) || [] : []),
+    ];
+
+    return records.find((record) =>
+      isTimeOverlap(
+        currentBooking.start_datetime,
+        currentBooking.end_datetime,
+        record.start_datetime,
+        record.end_datetime
+      )
+    ) || null;
+  }
   async function handleApprove(booking) {
     const data = selected[booking.booking_id] || {};
 
@@ -169,6 +239,38 @@ export default function Staff() {
       return;
     }
 
+    const unavailableConflict = getDriverUnavailableConflict(
+      { user_id: data.assigned_user_id, name: data.assigned_user_name },
+      booking,
+      driverUnavailableGroups
+    );
+
+    if (unavailableConflict) {
+      showError("คนขับมีช่วงวันไม่รับงานทับกับรายการนี้");
+      return;
+    }
+
+    let driverQueueRecommendation = null;
+    try {
+      const recommendation = await recommendDriverForBooking({
+        booking_id: booking.booking_id,
+        start_datetime: booking.start_datetime,
+        end_datetime: booking.end_datetime,
+      });
+      driverQueueRecommendation = recommendation?.data || null;
+    } catch (err) {
+      console.warn("recommendDriverForBooking failed", err);
+    }
+
+    const recommendedDriverId = driverQueueRecommendation?.recommended_driver_user_id || "";
+    const recommendedDriverName = driverQueueRecommendation?.recommended_driver_name || "";
+    const assignMode =
+      recommendedDriverId &&
+      String(recommendedDriverId) === String(data.assigned_user_id || "")
+        ? "AUTO_RECOMMENDED"
+        : "MANUAL_OVERRIDE";
+    const queueReason = driverQueueRecommendation?.reason || "คิวถัดไป / พร้อมรับงาน";
+
     try {
       await approveBooking({
         booking_id: booking.booking_id,
@@ -178,6 +280,22 @@ export default function Staff() {
         assigned_user_name: data.assigned_user_name,
         staff_note: data.staff_note || "",
       });
+
+      try {
+        await confirmDriverQueueAssignment({
+          booking_id: booking.booking_id,
+          booking_no: booking.booking_no || "",
+          recommended_driver_user_id: recommendedDriverId,
+          recommended_driver_name: recommendedDriverName,
+          assigned_driver_user_id: data.assigned_user_id || "",
+          assigned_driver_name: data.assigned_user_name || "",
+          assign_mode: assignMode,
+          reason: assignMode === "MANUAL_OVERRIDE" ? data.staff_note || queueReason : queueReason,
+          created_by: "STAFF",
+        });
+      } catch (queueErr) {
+        console.warn("confirmDriverQueueAssignment failed", queueErr);
+      }
 
       await showSuccess("อนุมัติรายการสำเร็จ");
       await refreshBookings();
@@ -405,12 +523,18 @@ export default function Staff() {
                       .filter((d) => d.status === "ACTIVE")
                       .map((d) => {
                         const available = isDriverAvailable(d, b, bookings);
+                        const unavailableConflict = getDriverUnavailableConflict(
+                          d,
+                          b,
+                          driverUnavailableGroups
+                        );
+                        const disabled = !available || Boolean(unavailableConflict);
 
                         return (
                           <option
                             key={d.user_id}
                             value={d.user_id}
-                            disabled={!available}
+                            disabled={disabled}
                           >
                             {d.name} ({d.phone})
                             {available ? " ✅ ว่าง" : " ❌ ไม่ว่าง"}
