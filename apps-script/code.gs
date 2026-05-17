@@ -61,6 +61,7 @@ function doPost(e) {
     if (action === "approveBooking") return approveBooking(body.data);
     if (action === "startTrip") return startTrip(body.data);
     if (action === "completeTrip") return completeTrip(body.data);
+    if (action === "backdate_complete_booking") return backdateCompleteBooking(body.data);
     if (action === "driverCancelJob") return driverCancelJob(body.data);
     if (action === "cancelBooking") return cancelBooking(body.data);
     if (action === "loginUser") return loginUser(body.data);
@@ -306,7 +307,7 @@ function ensureBookingsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName("Bookings");
 
-  const headers = [
+  const legacyHeaders = [
     "booking_id",
     "booking_no",
     "requester_name",
@@ -325,6 +326,12 @@ function ensureBookingsSheet() {
     "created_at",
     "updated_at",
   ];
+  const headers = [
+    ...legacyHeaders,
+    "is_backdated",
+    "backdated_completed_at",
+    "backdated_completed_by",
+  ];
 
   if (!sheet) {
     sheet = ss.insertSheet("Bookings");
@@ -338,14 +345,28 @@ function ensureBookingsSheet() {
   const firstRow = lastRow >= 1
     ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0]
     : [];
-  const hasHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
+  const hasRequiredHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
+  const hasLegacyHeaderRow = legacyHeaders.every((header, index) => String(firstRow[index] || "").trim() === header);
 
   if (lastRow === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     return sheet;
   }
 
-  if (!hasHeaderRow) {
+  if (hasRequiredHeaderRow) {
+    return sheet;
+  }
+
+  if (hasLegacyHeaderRow) {
+    if (sheet.getMaxColumns() < headers.length) {
+      sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+    }
+
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return sheet;
+  }
+
+  if (!hasRequiredHeaderRow) {
     throw new Error("Bookings sheet header row is invalid");
   }
 
@@ -534,6 +555,9 @@ function createBooking(data) {
     const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
     const createdAtCol = ensureColumn(sheet, headers, "created_at");
     const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
+    const isBackdatedCol = ensureColumn(sheet, headers, "is_backdated");
+    const backdatedCompletedAtCol = ensureColumn(sheet, headers, "backdated_completed_at");
+    const backdatedCompletedByCol = ensureColumn(sheet, headers, "backdated_completed_by");
 
     const bookingNumber = getNextBookingSequence(table, bookingIdCol);
     const bookingId = "BK" + Utilities.formatString("%04d", bookingNumber);
@@ -559,6 +583,9 @@ function createBooking(data) {
     bookingRow[staffNoteCol] = "";
     bookingRow[createdAtCol] = now;
     bookingRow[updatedAtCol] = now;
+    bookingRow[isBackdatedCol] = String(data.is_backdated || "").trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
+    bookingRow[backdatedCompletedAtCol] = "";
+    bookingRow[backdatedCompletedByCol] = "";
 
     const row = appendSheetRow(sheet, bookingRow);
     Logger.log("createBooking final appended row: " + row);
@@ -579,7 +606,8 @@ function createBooking(data) {
         booking_no: bookingNo,
         status: "PENDING",
         assigned_user_id: data.assigned_user_id || "",
-        assigned_user_name: data.assigned_user_name || ""
+        assigned_user_name: data.assigned_user_name || "",
+        is_backdated: bookingRow[isBackdatedCol],
       }
     });
   } catch (err) {
@@ -606,6 +634,7 @@ function updateBooking(data) {
     "vehicle_type_request",
     "assigned_user_id",
     "assigned_user_name",
+    "is_backdated",
   ];
   const updatedAtCol = columnMap.updated_at;
 
@@ -623,7 +652,13 @@ function updateBooking(data) {
   editableFields.forEach((field) => {
     const col = columnMap[field];
     if (col !== undefined && data[field] !== undefined) {
-      rowValues[col] = field === "phone" ? normalizePhone_(data[field]) : data[field];
+      if (field === "phone") {
+        rowValues[col] = normalizePhone_(data[field]);
+      } else if (field === "is_backdated") {
+        rowValues[col] = String(data[field] || "").trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
+      } else {
+        rowValues[col] = data[field];
+      }
     }
   });
 
@@ -953,6 +988,166 @@ function completeTrip(data) {
   }
 
   return jsonOutput({ success: false, message: "Vehicle log not found" });
+}
+
+function appendBookingBypassLog_(payload) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("BookingBypassLogs");
+  if (!sheet) return;
+
+  const headers = [
+    "log_id",
+    "booking_id",
+    "booking_no",
+    "driver_user_id",
+    "driver_name",
+    "vehicle_id",
+    "action",
+    "reason",
+    "created_at",
+    "created_by",
+  ];
+
+  const table = readSheetTable(sheet);
+  if (table.headers.length === 0 && sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+
+  const refreshedTable = readSheetTable(sheet);
+  const logIdCol = ensureColumn(sheet, refreshedTable.headers, "log_id");
+  const bookingIdCol = ensureColumn(sheet, refreshedTable.headers, "booking_id");
+  const bookingNoCol = ensureColumn(sheet, refreshedTable.headers, "booking_no");
+  const driverUserIdCol = ensureColumn(sheet, refreshedTable.headers, "driver_user_id");
+  const driverNameCol = ensureColumn(sheet, refreshedTable.headers, "driver_name");
+  const vehicleIdCol = ensureColumn(sheet, refreshedTable.headers, "vehicle_id");
+  const actionCol = ensureColumn(sheet, refreshedTable.headers, "action");
+  const reasonCol = ensureColumn(sheet, refreshedTable.headers, "reason");
+  const createdAtCol = ensureColumn(sheet, refreshedTable.headers, "created_at");
+  const createdByCol = ensureColumn(sheet, refreshedTable.headers, "created_by");
+
+  const rowValues = Array(refreshedTable.headers.length).fill("");
+  rowValues[logIdCol] = "LOG" + Utilities.formatString("%04d", sheet.getLastRow() + 1);
+  rowValues[bookingIdCol] = payload.booking_id || "";
+  rowValues[bookingNoCol] = payload.booking_no || "";
+  rowValues[driverUserIdCol] = payload.driver_user_id || "";
+  rowValues[driverNameCol] = payload.driver_name || "";
+  rowValues[vehicleIdCol] = payload.vehicle_id || "";
+  rowValues[actionCol] = payload.action || "";
+  rowValues[reasonCol] = payload.reason || "";
+  rowValues[createdAtCol] = payload.created_at || new Date();
+  rowValues[createdByCol] = payload.created_by || "";
+
+  appendSheetRow(sheet, rowValues);
+}
+
+function backdateCompleteBooking(data) {
+  const bookingSheet = ensureBookingsSheet();
+  const table = readSheetTable(bookingSheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const userLookup = buildUserLookup();
+
+  const statusCol = columnMap.status;
+  const assignedUserIdCol = ensureColumn(bookingSheet, headers, "assigned_user_id");
+  const assignedUserNameCol = ensureColumn(bookingSheet, headers, "assigned_user_name");
+  const vehicleIdCol = ensureColumn(bookingSheet, headers, "vehicle_id");
+  const actualStartDatetimeCol = ensureColumn(bookingSheet, headers, "actual_start_datetime");
+  const actualReturnDatetimeCol = ensureColumn(bookingSheet, headers, "actual_return_datetime");
+  const actualStartByCol = ensureColumn(bookingSheet, headers, "actual_start_by");
+  const actualReturnByCol = ensureColumn(bookingSheet, headers, "actual_return_by");
+  const staffNoteCol = ensureColumn(bookingSheet, headers, "staff_note");
+  const isBackdatedCol = ensureColumn(bookingSheet, headers, "is_backdated");
+  const backdatedCompletedAtCol = ensureColumn(bookingSheet, headers, "backdated_completed_at");
+  const backdatedCompletedByCol = ensureColumn(bookingSheet, headers, "backdated_completed_by");
+  const updatedAtCol = ensureColumn(bookingSheet, headers, "updated_at");
+  const updatedByCol = ensureColumn(bookingSheet, headers, "updated_by");
+
+  if (!data.booking_id) {
+    return jsonOutput({ success: false, message: "booking_id is required" });
+  }
+
+  const row = findRowByBookingId(table, data.booking_id);
+  logBookingAction("backdateCompleteBooking", data.booking_id, row);
+  if (row <= 1) {
+    return jsonOutput({ success: false, message: "Booking not found" });
+  }
+
+  const now = new Date();
+  const actor = String(data.actual_start_by || data.actual_return_by || data.updated_by || "").trim();
+  const assignedUserId = String(data.assigned_user_id || "").trim();
+  const assignedUserName = String(data.assigned_user_name || "").trim();
+  const vehicleId = String(data.vehicle_id || "").trim();
+  const note = String(data.staff_note || "").trim();
+
+  const rowValues = table.rows[row - 2].slice();
+  rowValues[assignedUserIdCol] = assignedUserId;
+  rowValues[assignedUserNameCol] = assignedUserName;
+  rowValues[vehicleIdCol] = vehicleId;
+  rowValues[actualStartDatetimeCol] = data.actual_start_datetime || now.toISOString();
+  rowValues[actualReturnDatetimeCol] = data.actual_return_datetime || now.toISOString();
+  rowValues[actualStartByCol] = data.actual_start_by || actor;
+  rowValues[actualReturnByCol] = data.actual_return_by || actor;
+  rowValues[statusCol] = "COMPLETED";
+  rowValues[staffNoteCol] = note;
+  rowValues[isBackdatedCol] = "TRUE";
+  rowValues[backdatedCompletedAtCol] = data.backdated_completed_at || now.toISOString();
+  rowValues[backdatedCompletedByCol] = data.backdated_completed_by || actor;
+  rowValues[updatedAtCol] = now;
+  rowValues[updatedByCol] = data.updated_by || actor;
+  setRowValues(bookingSheet, row, rowValues);
+
+  const currentBooking = applyAssignedUserFallback(rowsToObjects(headers, [rowValues])[0] || {}, userLookup);
+  appendDriverJobLog_(
+    createDriverJobLogPayload_({
+      booking_id: currentBooking.booking_id || data.booking_id,
+      booking_no: currentBooking.booking_no || "",
+      driver_user_id: assignedUserId,
+      driver_name: assignedUserName,
+      vehicle_id: vehicleId,
+      action: "BACKDATE_COMPLETE",
+      reason: note,
+      requester_name: currentBooking.requester_name || "",
+      start_datetime: currentBooking.start_datetime || "",
+      end_datetime: currentBooking.end_datetime || "",
+      destination: currentBooking.destination || "",
+      purpose: currentBooking.purpose || "",
+      created_by: actor || "",
+    })
+  );
+
+  appendBookingBypassLog_({
+    booking_id: currentBooking.booking_id || data.booking_id,
+    booking_no: currentBooking.booking_no || "",
+    driver_user_id: assignedUserId,
+    driver_name: assignedUserName,
+    vehicle_id: vehicleId,
+    action: "BACKDATE_COMPLETE",
+    reason: note,
+    created_at: now,
+    created_by: actor || "",
+  });
+
+  return jsonOutput({
+    success: true,
+    message: "Backdate complete booking success",
+    data: {
+      booking_id: currentBooking.booking_id || data.booking_id,
+      booking_no: currentBooking.booking_no || "",
+      assigned_user_id: assignedUserId,
+      assigned_user_name: assignedUserName,
+      vehicle_id: vehicleId,
+      actual_start_datetime: rowValues[actualStartDatetimeCol] || now.toISOString(),
+      actual_return_datetime: rowValues[actualReturnDatetimeCol] || now.toISOString(),
+      actual_start_by: rowValues[actualStartByCol] || actor,
+      actual_return_by: rowValues[actualReturnByCol] || actor,
+      status: "COMPLETED",
+      staff_note: note,
+      is_backdated: "TRUE",
+      backdated_completed_at: rowValues[backdatedCompletedAtCol] || now.toISOString(),
+      backdated_completed_by: rowValues[backdatedCompletedByCol] || actor,
+      updated_at: now.toISOString(),
+      updated_by: rowValues[updatedByCol] || actor,
+    },
+  });
 }
 
 function driverCancelJob(data) {

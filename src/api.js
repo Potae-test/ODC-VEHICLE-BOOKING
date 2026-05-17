@@ -278,6 +278,22 @@ export async function approveBooking(data) {
   return json.data;
 }
 
+export async function backdateCompleteBooking(payload) {
+  invalidateApiCache(["bookings", "driver_job_logs"]);
+  const json = await fetchJson(`${API_BASE_URL}/api/backdate_complete_booking`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "backdate_complete_booking",
+      data: payload || {},
+    }),
+  });
+
+  return json;
+}
+
 export async function startTrip(data) {
   invalidateApiCache(["bookings", "driver_job_logs"]);
 

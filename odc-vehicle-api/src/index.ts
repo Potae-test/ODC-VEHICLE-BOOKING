@@ -135,6 +135,20 @@ export default {
 
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/backdate_complete_booking" && request.method === "POST") {
+      const body = await request.json();
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          action: "backdate_complete_booking",
+          data: body,
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/bookings/driver-cancel-job" && request.method === "POST") {
       const body = await request.json();
 
@@ -172,7 +186,7 @@ export default {
       return jsonResponse(sheetJson);
     }
     if (url.pathname === "/api/thai_holidays" && request.method === "POST") {
-      const body = await request.json().catch(() => ({}));
+      const body = (await request.json().catch(() => ({}))) as any;
       const action = String(body?.action || "thai_holidays").trim();
       const resolvedAction = action === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
 

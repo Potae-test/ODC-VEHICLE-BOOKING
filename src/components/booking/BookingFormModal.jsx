@@ -8,6 +8,11 @@ import { showError, showSuccess } from "../../utils/alert";
 
 const DEFAULT_VEHICLE_TYPES = ["VAN", "SEDAN", "MOTORCYCLE", "OTHER"];
 
+function isStaffOrAdmin(user) {
+  const role = String(user?.role || "").trim().toUpperCase();
+  return role === "STAFF" || role === "ADMIN";
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -195,9 +200,10 @@ function buildVehicleTypeOptions(vehicleTypes, defaultVehicleType) {
     .join("");
 }
 
-function buildModalHtml(booking, vehicleTypes, defaultStart, defaultEnd) {
+function buildModalHtml(booking, vehicleTypes, defaultStart, defaultEnd, showBackdatedCheckbox) {
   const defaultVehicleType = String(booking?.vehicle_type_request || booking?.vehicle_type || "VAN").trim() || "VAN";
   const vehicleTypeOptions = buildVehicleTypeOptions(vehicleTypes, defaultVehicleType);
+  const isBackdated = String(booking?.is_backdated || "").trim().toUpperCase() === "TRUE";
 
   return `
     <div class="swal-form">
@@ -286,12 +292,28 @@ function buildModalHtml(booking, vehicleTypes, defaultStart, defaultEnd) {
           box-sizing:border-box;
         "
       >${escapeHtml(booking?.purpose || "")}</textarea>
+
+      ${
+        showBackdatedCheckbox
+          ? `
+      <label style="display:flex; align-items:center; gap:10px; margin-top:8px; font-size:20px; font-weight:700; color:#0f2d5c;">
+        <input
+          id="is_backdated"
+          type="checkbox"
+          ${isBackdated ? "checked" : ""}
+          style="width:22px; height:22px;"
+        >
+        <span>รายการจองย้อนหลัง</span>
+      </label>
+      `
+          : ""
+      }
     </div>
   `;
 }
 
 const BookingFormModal = forwardRef(function BookingFormModal(
-  { overlapCandidates = [], vehicleTypes = DEFAULT_VEHICLE_TYPES, onSuccess },
+  { overlapCandidates = [], vehicleTypes = DEFAULT_VEHICLE_TYPES, onSuccess, currentUser },
   ref
 ) {
   const open = useCallback(
@@ -304,7 +326,13 @@ const BookingFormModal = forwardRef(function BookingFormModal(
 
       const result = await Swal.fire({
         title: booking ? "แก้ไขรายการจอง" : "จองรถใหม่",
-        html: buildModalHtml(booking, vehicleTypes, resolvedStart, resolvedEnd),
+        html: buildModalHtml(
+          booking,
+          vehicleTypes,
+          resolvedStart,
+          resolvedEnd,
+          isStaffOrAdmin(currentUser)
+        ),
         width: 780,
         showCancelButton: true,
         confirmButtonText: booking ? "บันทึก" : "ส่งคำขอจองรถ",
@@ -355,6 +383,7 @@ const BookingFormModal = forwardRef(function BookingFormModal(
           const vehicle_type_request = document.getElementById("vehicle_type_request")?.value.trim();
           const destination = document.getElementById("destination")?.value.trim();
           const purpose = document.getElementById("purpose")?.value.trim();
+          const isBackdatedInput = document.getElementById("is_backdated");
 
           if (!requester_name || !phone || !start_datetime || !end_datetime || !destination) {
             Swal.showValidationMessage("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
@@ -377,6 +406,11 @@ const BookingFormModal = forwardRef(function BookingFormModal(
             destination,
             purpose,
             vehicle_id: booking?.vehicle_id || "",
+            is_backdated: isBackdatedInput
+              ? (isBackdatedInput.checked ? "TRUE" : "FALSE")
+              : String(booking?.is_backdated || "").trim().toUpperCase() === "TRUE"
+                ? "TRUE"
+                : "FALSE",
           };
         },
       });
@@ -402,7 +436,7 @@ const BookingFormModal = forwardRef(function BookingFormModal(
         return { success: false, error: err };
       }
     },
-    [onSuccess, overlapCandidates, vehicleTypes]
+    [currentUser, onSuccess, overlapCandidates, vehicleTypes]
   );
 
   useImperativeHandle(ref, () => ({

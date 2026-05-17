@@ -3,6 +3,7 @@ import Swal from "sweetalert2";
 import {
   approveBooking,
   cancelBooking,
+  backdateCompleteBooking,
   confirmDriverQueueAssignment,
   checkDriverUnavailable,
   getDriverUnavailable,
@@ -255,6 +256,15 @@ function getCurrentUser() {
   }
 }
 
+function isBackdatedFlagEnabled(booking) {
+  return String(booking.is_backdated || "").trim().toUpperCase() === "TRUE";
+}
+
+function isStaffOrAdmin(user) {
+  const role = String(user?.role || "").trim().toUpperCase();
+  return role === "STAFF" || role === "ADMIN";
+}
+
 function isTimeOverlap(startA, endA, startB, endB) {
   const aStart = new Date(startA).getTime();
   const aEnd = new Date(endA).getTime();
@@ -501,6 +511,15 @@ function getBookingDriverLabel(booking) {
   return booking.assigned_user_name || booking.driver_name || "-";
 }
 
+function getBookingId(booking) {
+  return String(
+    booking?.booking_id ||
+      booking?.id ||
+      booking?.bookingId ||
+      ""
+  ).trim();
+}
+
 function paginate(items, page) {
   const start = (page - 1) * ROWS_PER_PAGE;
   return items.slice(start, start + ROWS_PER_PAGE);
@@ -543,18 +562,25 @@ const BookingTableRow = memo(function BookingTableRow({
   vehicleMap,
   canViewBookingDetail,
   canProcessBookings,
+  canBackdateComplete,
   canCancelBookings,
   canEditBookings,
   processing,
   onViewDetail,
   onProcess,
+  onBackdateComplete,
   onEdit,
   onCancel,
 }) {
   const status = normalizeStatus(booking.status);
   const statusMeta = getStatusMeta(status);
+  const rowBookingId = getBookingId(booking);
   const disabled = Boolean(processing);
   const canShowDetail = canViewBookingDetail;
+  const canShowBackdateComplete =
+    canBackdateComplete &&
+    isBackdatedFlagEnabled(booking) &&
+    !["COMPLETED", "CANCELLED"].includes(status);
   const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status);
   const canShowEdit = canEditBookings && isEditableBookingStatus(status);
   const canShowCancel =
@@ -583,34 +609,47 @@ const BookingTableRow = memo(function BookingTableRow({
             ดูรายละเอียด
           </button>
         )}
-        {canShowProcess && (
-          <button type="button" disabled={disabled} onClick={() => onProcess(booking)}>
-            {processing === "process"
-              ? "Processing..."
-              : status === "APPROVED"
-                ? "เปลี่ยนคนขับ/รถ"
-                : "อนุมัติ"}
-          </button>
-        )}
-        {canShowEdit && (
+        {canShowBackdateComplete ? (
           <button
             type="button"
             className="warning-button booking-action-button"
             disabled={disabled}
-            onClick={() => onEdit(booking)}
+            onClick={() => onBackdateComplete(booking)}
           >
-            {processing === "edit" ? "Saving..." : "แก้ไข"}
+            {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
           </button>
-        )}
-        {canShowCancel && (
-          <button
-            type="button"
-            className="danger-button"
-            disabled={disabled}
-            onClick={() => onCancel(booking)}
-          >
-            {processing === "cancel" ? "Cancelling..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
-          </button>
+        ) : (
+          <>
+            {canShowProcess && (
+              <button type="button" disabled={disabled} onClick={() => onProcess(booking)}>
+                {processing === "process"
+                  ? "Processing..."
+                  : status === "APPROVED"
+                    ? "เปลี่ยนคนขับ/รถ"
+                    : "อนุมัติ"}
+              </button>
+            )}
+            {canShowEdit && (
+              <button
+                type="button"
+                className="warning-button booking-action-button"
+                disabled={disabled}
+                onClick={() => onEdit(booking)}
+              >
+                {processing === "edit" ? "Saving..." : "แก้ไข"}
+              </button>
+            )}
+            {canShowCancel && (
+              <button
+                type="button"
+                className="danger-button"
+                disabled={disabled}
+                onClick={() => onCancel(booking)}
+              >
+                {processing === "cancel" ? "Cancelling..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
+              </button>
+            )}
+          </>
         )}
       </td>
     </tr>
@@ -648,6 +687,7 @@ export default function Booking() {
   const canCancelBookings = hasPermission(null, "bookings_cancel");
   const canEditBookings = hasPermission(null, "bookings_edit");
   const currentUser = getCurrentUser();
+  const canBackdateComplete = isStaffOrAdmin(currentUser) && canProcessBookings;
 
   const mergeBooking = useCallback((nextBooking) => {
     if (!nextBooking?.booking_id) return;
@@ -1082,6 +1122,138 @@ export default function Booking() {
     setProcessingAction(null);
   }, [processingAction]);
 
+  const handleBackdateComplete = useCallback(
+    async (booking) => {
+      if (processingAction) return;
+
+      const result = await Swal.fire({
+        title: "บันทึกงานย้อนหลัง",
+        html: `
+          <div class="swal-form">
+            <label>คนขับ</label>
+            <select id="backdate_assigned_user_id" class="swal2-select">
+              <option value="">-- เลือกคนขับ --</option>
+              ${activeDrivers
+                .map((driver) => `<option value="${escapeHtml(driver.user_id)}">${escapeHtml(driver.name || "-")}</option>`)
+                .join("")}
+            </select>
+
+            <label>รถ</label>
+            <select id="backdate_vehicle_id" class="swal2-select">
+              <option value="">-- เลือกรถ --</option>
+              ${vehicles
+                .map((vehicle) => {
+                  const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
+                    vehicle.license_plate || vehicle.plate_no || "-"
+                  }`;
+                  return `<option value="${escapeHtml(vehicle.vehicle_id)}">${escapeHtml(label)}</option>`;
+                })
+                .join("")}
+            </select>
+
+            <label>หมายเหตุ</label>
+            <textarea id="backdate_note" class="swal2-textarea" rows="4">บันทึกรายการย้อนหลัง</textarea>
+          </div>
+        `,
+        width: 760,
+        showCancelButton: true,
+        confirmButtonText: "บันทึก",
+        cancelButtonText: "ยกเลิก",
+        confirmButtonColor: "#f59e0b",
+        cancelButtonColor: "#64748b",
+        preConfirm: () => {
+          const assigned_user_id = document.getElementById("backdate_assigned_user_id").value.trim();
+          const vehicle_id = document.getElementById("backdate_vehicle_id").value.trim();
+          const note = document.getElementById("backdate_note").value.trim();
+
+          if (!assigned_user_id) {
+            Swal.showValidationMessage("กรุณาเลือกคนขับ");
+            return false;
+          }
+
+          if (!vehicle_id) {
+            Swal.showValidationMessage("กรุณาเลือกรถ");
+            return false;
+          }
+
+          const driver = activeDrivers.find((item) => String(item.user_id || "").trim() === assigned_user_id);
+          const vehicle = vehicles.find((item) => String(item.vehicle_id || "").trim() === vehicle_id);
+
+          if (!driver) {
+            Swal.showValidationMessage("ไม่พบข้อมูลคนขับ");
+            return false;
+          }
+
+          if (!vehicle) {
+            Swal.showValidationMessage("ไม่พบข้อมูลรถ");
+            return false;
+          }
+
+          return {
+            assigned_user_id,
+            assigned_user_name: driver.name || "",
+            vehicle_id,
+            note,
+          };
+        },
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        const bookingId = getBookingId(booking);
+
+        if (!bookingId) {
+          showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+          return;
+        }
+
+        setProcessingAction({ bookingId, type: "backdate" });
+        const nowIso = new Date().toISOString();
+        const actor = currentUser?.name || currentUser?.email || "";
+        const payload = {
+          booking_id: bookingId,
+          booking_no: booking.booking_no || "",
+          assigned_user_id: result.value.assigned_user_id,
+          assigned_user_name: result.value.assigned_user_name,
+          vehicle_id: result.value.vehicle_id,
+          actual_start_datetime: nowIso,
+          actual_return_datetime: nowIso,
+          actual_start_by: actor,
+          actual_return_by: actor,
+          status: "COMPLETED",
+          staff_note: result.value.note ? `บันทึกรายการย้อนหลัง: ${result.value.note}` : "บันทึกรายการย้อนหลัง",
+          is_backdated: "TRUE",
+          backdated_completed_at: nowIso,
+          backdated_completed_by: actor,
+          updated_by: actor,
+        };
+
+        console.log("backdate payload", payload);
+        const response = await backdateCompleteBooking(payload);
+        if (response?.success === false) {
+          showError(response?.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+          return;
+        }
+
+        mergeBooking({
+          ...(response || {}),
+          ...payload,
+          booking_id: bookingId,
+          status: "COMPLETED",
+          updated_at: nowIso,
+        });
+
+        await showSuccess("บันทึกงานย้อนหลังสำเร็จ");
+      } catch (err) {
+        showError(err.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+      } finally {
+        setProcessingAction(null);
+      }
+    },
+    [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, mergeBooking, processingAction, vehicles]
+  );
+
   const handleViewBookingDetail = useCallback(
     async (booking) => {
       if (processingAction) return;
@@ -1102,6 +1274,9 @@ export default function Booking() {
             <div><span class="booking-detail-label">เหตุผลการใช้รถ</span><span class="booking-detail-value">${escapeHtml(booking.purpose || "-")}</span></div>
             <div><span class="booking-detail-label">รถที่ได้รับ</span><span class="booking-detail-value">${escapeHtml(getBookingVehicleLabel(booking, vehicleMap))}</span></div>
             <div><span class="booking-detail-label">คนขับ</span><span class="booking-detail-value">${escapeHtml(getBookingDriverLabel(booking))}</span></div>
+            <div><span class="booking-detail-label">รายการย้อนหลัง</span><span class="booking-detail-value">${escapeHtml(isBackdatedFlagEnabled(booking) ? "ใช่" : "ไม่ใช่")}</span></div>
+            <div><span class="booking-detail-label">บันทึกย้อนหลังเมื่อ</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_at ? formatThaiDateTime(booking.backdated_completed_at) : "-")}</span></div>
+            <div><span class="booking-detail-label">บันทึกย้อนหลังโดย</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_by || "-")}</span></div>
             <div><span class="booking-detail-label">สถานะ</span><span class="booking-detail-value">${escapeHtml(getStatusMeta(booking.status).label)}</span></div>
             <div><span class="booking-detail-label">หมายเหตุเจ้าหน้าที่</span><span class="booking-detail-value">${escapeHtml(booking.staff_note || "-")}</span></div>
 
@@ -1215,6 +1390,7 @@ export default function Booking() {
         overlapCandidates={bookingGroups.overlapCandidates}
         vehicleTypes={vehicleTypes}
         onSuccess={(savedBooking) => mergeBooking(savedBooking)}
+        currentUser={currentUser}
       />
 
       {visibleLoading && <PageSkeleton />}
@@ -1359,20 +1535,22 @@ export default function Booking() {
                     ) : (
                       pageItems.map((booking) => (
                         <BookingTableRow
-                          key={booking.booking_id}
+                          key={getBookingId(booking) || booking.booking_no}
                           booking={booking}
                           vehicleMap={vehicleMap}
                           canViewBookingDetail={canViewBookingDetail}
                           canProcessBookings={canProcessBookings}
+                          canBackdateComplete={canBackdateComplete}
                           canCancelBookings={canCancelBookings}
                           canEditBookings={canEditBookings}
                           processing={
-                            processingAction?.bookingId === booking.booking_id
+                            processingAction?.bookingId === getBookingId(booking)
                               ? processingAction.type
                               : ""
                           }
                           onViewDetail={handleViewBookingDetail}
                           onProcess={handleProcessBooking}
+                          onBackdateComplete={handleBackdateComplete}
                           onEdit={handleEditBooking}
                           onCancel={handleCancelBooking}
                         />
