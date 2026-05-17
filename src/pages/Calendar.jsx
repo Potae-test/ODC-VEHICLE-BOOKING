@@ -158,11 +158,13 @@ function isTimeOverlap(startA, endA, startB, endB) {
 }
 
 function formatBuddhistMonthLabel(date) {
-  return `${moment(date).locale("th").format("MMMM")} ${date.getFullYear() + 543}`;
+  const safeDate = date instanceof Date ? date : new Date(date);
+  return `${THAI_MONTH_LABELS[safeDate.getMonth()]} ${safeDate.getFullYear() + 543}`;
 }
 
 function formatGregorianMonthLabel(date) {
-  return `${moment(date).locale("en").format("MMMM")} ${date.getFullYear()}`;
+  const safeDate = date instanceof Date ? date : new Date(date);
+  return `${EN_MONTH_LABELS[safeDate.getMonth()]} ${safeDate.getFullYear()}`;
 }
 
 function formatCalendarToolbarLabel(date, calendarLang) {
@@ -171,10 +173,62 @@ function formatCalendarToolbarLabel(date, calendarLang) {
 
 const THAI_WEEKDAY_LABELS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const EN_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const THAI_MONTH_LABELS = [
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
+];
+
+const EN_MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 function getThaiHolidayKey(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function normalizeHolidayDateKey(value) {
+  if (!value) return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return getThaiHolidayKey(value);
+  }
+
+  const raw = String(value).trim();
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${year}-${Number(month)}-${Number(day)}`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return getThaiHolidayKey(parsed);
+  }
+
+  return raw;
 }
 
 function getThaiHoliday(date, holidayMap) {
@@ -363,7 +417,7 @@ export default function CalendarPage() {
   const thaiHolidayMap = useMemo(() => {
     const map = new Map();
     thaiHolidays.forEach((holiday) => {
-      const key = String(holiday.date || "").trim();
+      const key = normalizeHolidayDateKey(holiday.date);
       if (key) {
         map.set(key, holiday);
       }

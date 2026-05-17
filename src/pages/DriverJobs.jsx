@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
 import { completeTrip, driverCancelJob, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
 import { formatThaiDateTime } from "../utils/date";
@@ -111,6 +111,19 @@ function getBookingIdentity(booking) {
   };
 }
 
+function isManagingOnBehalf(booking, currentUser) {
+  const assignedUserId = String(booking.assigned_user_id || "").trim();
+  const currentUserId = String(currentUser?.user_id || "").trim();
+
+  if (!assignedUserId || !currentUserId) return false;
+
+  return assignedUserId !== currentUserId;
+}
+
+function getAssignedUserLabel(booking) {
+  return compactText(booking.assigned_user_name || booking.driver_name || "-");
+}
+
 function matchesCurrentUser(booking, currentUser) {
   const bookingIdentity = getBookingIdentity(booking);
   const currentRole = normalizeRole(currentUser?.role);
@@ -218,12 +231,17 @@ const JobCard = memo(function JobCard({
   canComplete,
   current,
   processing,
+  currentUser,
+  currentRole,
 }) {
   const status = normalizeStatus(booking.status);
   const statusMeta = getStatusMeta(status);
   const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
   const startLabel = formatThaiDateTime(booking.start_datetime);
   const endLabel = formatThaiDateTime(booking.end_datetime);
+  const assignedUserLabel = getAssignedUserLabel(booking);
+  const managingOnBehalf =
+    (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
   const disabled = Boolean(processing);
 
   return (
@@ -233,7 +251,10 @@ const JobCard = memo(function JobCard({
           {/* <h3 title={booking.booking_no || "-"}>{booking.booking_no || "-"}</h3> */}
           <h3 title={booking.destination || "-"}>{compactText(booking.destination)}</h3>
         </div>
-        <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+        <div className="driver-job-head-meta">
+          <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+          {managingOnBehalf && <span className="driver-job-on-behalf-badge">STAFF จัดการแทนคนขับ</span>}
+        </div>
       </div>
 
       <div className="driver-job-grid">
@@ -248,6 +269,10 @@ const JobCard = memo(function JobCard({
         <div>
           <label>รถ / ป้ายทะเบียน</label>
           <b title={vehicleLabel}>{vehicleLabel}</b>
+        </div>
+        <div>
+          <label>มอบหมายให้</label>
+          <b title={assignedUserLabel}>{assignedUserLabel}</b>
         </div>
         <div>
           <label>สถานะ</label>
@@ -390,7 +415,18 @@ export default function DriverJobs() {
 
   const handleStart = useCallback(async (booking) => {
     if (processingAction) return;
+    const managingOnBehalf = (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
+    const assignedUserLabel = getAssignedUserLabel(booking);
     const result = await Swal.fire({
+      html: managingOnBehalf
+        ? `
+          <div class="swal-confirm-copy">
+            <div>\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:</div>
+            <div class="swal-confirm-secondary">\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:</div>
+            <div class="swal-confirm-name">${assignedUserLabel}</div>
+          </div>
+        `
+        : "\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:",
       title: "รับงาน / ออกรถ",
       text: "ยืนยันการรับงานและออกรถใช่หรือไม่",
       showCancelButton: true,
@@ -435,11 +471,22 @@ export default function DriverJobs() {
     } finally {
       setProcessingAction(null);
     }
-  }, [currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
+  }, [currentRole, currentUser, mergeBooking, processingAction]);
 
   const handleComplete = useCallback(async (booking) => {
     if (processingAction) return;
+    const managingOnBehalf = (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
+    const assignedUserLabel = getAssignedUserLabel(booking);
     const result = await Swal.fire({
+      html: managingOnBehalf
+        ? `
+          <div class="swal-confirm-copy">
+            <div>\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:</div>
+            <div class="swal-confirm-secondary">\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:</div>
+            <div class="swal-confirm-name">${assignedUserLabel}</div>
+          </div>
+        `
+        : "\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:",
       title: "จบงาน / คืนรถ",
       showCancelButton: true,
       confirmButtonText: "ตกลง",
@@ -478,7 +525,7 @@ export default function DriverJobs() {
     } finally {
       setProcessingAction(null);
     }
-  }, [currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
+  }, [currentRole, currentUser, mergeBooking, processingAction]);
 
   const handleCancelJob = useCallback(async (booking) => {
     if (processingAction) return;
@@ -573,6 +620,9 @@ export default function DriverJobs() {
           <div><span>ปลายทาง</span><b>${compactText(booking.destination)}</b></div>
           <div><span>เหตุผล</span><b>${compactText(booking.purpose)}</b></div>
           <div><span>รถ / ป้ายทะเบียน</span><b>${compactText(vehicleLabel)}</b></div>
+          <div><span>ผู้รับผิดชอบงาน</span><b>${compactText(booking.assigned_user_name)}</b></div>
+          <div><span>ผู้กดรับงานจริง</span><b>${compactText(booking.actual_start_by)}</b></div>
+          <div><span>ผู้กดคืนรถจริง</span><b>${compactText(booking.actual_return_by)}</b></div>
           <div><span>สถานะ</span><b>${compactText(getStatusLabel(booking.status))}</b></div>
           <div><span>หมายเหตุเจ้าหน้าที่</span><b>${compactText(booking.staff_note)}</b></div>
         </div>
@@ -623,6 +673,8 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    currentUser={currentUser}
+                    currentRole={currentRole}
                     processing={
                       processingAction?.bookingId === booking.booking_id
                         ? processingAction.type
@@ -656,6 +708,8 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    currentUser={currentUser}
+                    currentRole={currentRole}
                     processing={
                       processingAction?.bookingId === booking.booking_id
                         ? processingAction.type
@@ -698,6 +752,8 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
+                    currentUser={currentUser}
+                    currentRole={currentRole}
                     processing={
                       processingAction?.bookingId === booking.booking_id
                         ? processingAction.type
@@ -714,3 +770,5 @@ export default function DriverJobs() {
     </div>
   );
 }
+
+
