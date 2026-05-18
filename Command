@@ -11,6 +11,11 @@ npm install
 ถ้ามี SweetAlert:
 npm install sweetalert2
 npm install flatpickr
+npm install \
+@fullcalendar/react \
+@fullcalendar/daygrid \
+@fullcalendar/interaction \
+@fullcalendar/core
 
 3) Login Cloudflare ใหม่
 npx wrangler login

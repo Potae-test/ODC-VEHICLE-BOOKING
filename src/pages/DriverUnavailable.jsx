@@ -209,9 +209,8 @@ function buildFormHtml(record, options = {}) {
       ${driverDropdown}
       <label>ประเภท</label>
       <select id="unavailable_type" class="swal2-select">
-        <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา</option>
-        <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>หยุด</option>
-        <option value="OTHER" ${type === "OTHER" ? "selected" : ""}>อื่นๆ</option>
+        <option value="ลา / หยุด" ${type === "ลา / หยุด" ? "selected" : ""}>ลา / หยุด</option>
+        <option value="ติดภารกิจ (ชั่วคราว)" ${type === "ติดภารกิจ (ชั่วคราว)" ? "selected" : ""}>ติดภารกิจ (ชั่วคราว)</option>
       </select>
 
       <label>เหตุผล</label>

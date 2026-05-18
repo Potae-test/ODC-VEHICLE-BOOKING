@@ -194,7 +194,7 @@ export default function App() {
 
           {canAccessPage(user.role, "booking", permissionConfig) && (
             <button className={page === "booking" ? "active" : ""} onClick={() => goPage("booking")}>
-              📝 จองรถ
+              📝 รายการจองรถ
             </button>
           )}
 

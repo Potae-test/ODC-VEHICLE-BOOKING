@@ -277,7 +277,7 @@ function buildModalHtml(booking, vehicleTypes, defaultStart, defaultEnd, showBac
         "
       >${escapeHtml(booking?.destination || "")}</textarea>
 
-      <label>เหตุผลการใช้รถ</label>
+      <label>รายละเอียดการใช้รถ</label>
       <textarea
         id="purpose"
         class="swal2-textarea"

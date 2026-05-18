@@ -1,9 +1,5 @@
 ﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, momentLocalizer } from "react-big-calendar";
-import moment from "moment";
 import Swal from "sweetalert2";
-import "react-big-calendar/lib/css/react-big-calendar.css";
-import "moment/locale/th";
 import {
   getBookings,
   getDriverQueue,
@@ -17,10 +13,10 @@ import BookingFormModal from "../components/booking/BookingFormModal";
 import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
 import { formatThaiDateTime } from "../utils/date";
-
-moment.locale("th");
-
-const localizer = momentLocalizer(moment);
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import thLocale from "@fullcalendar/core/locales/th";
 
 const CALENDAR_MESSAGES = {
   today: "วันนี้",
@@ -44,7 +40,7 @@ function normalizeStatus(status) {
 
 function normalizeUnavailableType(type) {
   const raw = String(type || "").trim();
-  if (!raw) return "ลา";
+  if (!raw) return "ลา / หยุด";
   if (raw.toUpperCase() === "OTHER") return "OTHER";
   return raw;
 }
@@ -56,7 +52,7 @@ function getBookingCalendarStatusMeta(status) {
     return {
       label: "รออนุมัติ",
       className: "amber",
-      color: "#92400e",
+      color: "#b45309",
       backgroundColor: "#fef3c7",
       borderColor: "#fcd34d",
     };
@@ -84,9 +80,9 @@ function getBookingCalendarStatusMeta(status) {
 function getUnavailableCalendarStatusMeta(type) {
   const normalized = normalizeUnavailableType(type);
 
-  if (normalized === "ลา") {
+  if (normalized === "ลา / หยุด") {
     return {
-      label: "ลา",
+      label: "ลา / หยุด",
       className: "red",
       backgroundColor: "#fee2e2",
       borderColor: "#fca5a5",
@@ -94,9 +90,9 @@ function getUnavailableCalendarStatusMeta(type) {
     };
   }
 
-  if (normalized === "หยุด") {
+  if (normalized === "ติดภารกิจ (ชั่วคราว)") {
     return {
-      label: "หยุด",
+      label: "ติดภารกิจ (ชั่วคราว)",
       className: "amber",
       backgroundColor: "#fef3c7",
       borderColor: "#fcd34d",
@@ -235,6 +231,73 @@ function getThaiHoliday(date, holidayMap) {
   return holidayMap.get(getThaiHolidayKey(date)) || null;
 }
 
+function toCalendarDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToDateKey(value, days) {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  date.setDate(date.getDate() + days);
+  return toCalendarDateKey(date);
+}
+
+function isMultiDayEvent(start, end) {
+  const startDate = start instanceof Date ? start : new Date(start);
+  const endDate = end instanceof Date ? end : new Date(end);
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return false;
+
+  return (
+    startDate.getFullYear() !== endDate.getFullYear() ||
+    startDate.getMonth() !== endDate.getMonth() ||
+    startDate.getDate() !== endDate.getDate()
+  );
+}
+
+function isWeekend(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return false;
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function isToday(date) {
+  return isSameCalendarDate(date, new Date());
+}
+
+function eventOverlapsDay(event, day) {
+  if (!event?.start || !event?.end) return false;
+
+  const eventStart = event.start instanceof Date ? event.start : new Date(event.start);
+  const eventEnd = event.end instanceof Date ? event.end : new Date(event.end);
+  if (Number.isNaN(eventStart.getTime()) || Number.isNaN(eventEnd.getTime())) return false;
+
+  const dayStart = new Date(day);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(day);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  return eventStart <= dayEnd && eventEnd >= dayStart;
+}
+
+function isSameCalendarDate(a, b) {
+  return (
+    a instanceof Date &&
+    b instanceof Date &&
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 function getHolidayTooltipText(holiday, calendarLang) {
   if (!holiday) return "";
 
@@ -248,53 +311,6 @@ function getHolidayTooltipText(holiday, calendarLang) {
   const type = holiday.type_th || holiday.type_en || "";
   return type ? `${name} (${type})` : name;
 }
-
-const CalendarDateCellWrapper = memo(function CalendarDateCellWrapper({
-  value,
-  children,
-  holidayMap,
-  calendarLang,
-}) {
-  const date = value instanceof Date ? value : new Date(value);
-  const holiday = getThaiHoliday(date, holidayMap);
-  const day = date.getDay();
-  const isWeekend = day === 0 || day === 6;
-  const isHoliday = Boolean(holiday);
-
-  const background = isHoliday ? "#fff7ed" : isWeekend ? "#f8fafc" : "transparent";
-  const borderColor = isHoliday ? "#fcd34d" : isWeekend ? "#e2e8f0" : "transparent";
-
-  return (
-    <div
-      title={getHolidayTooltipText(holiday, calendarLang)}
-      style={{
-        width: "100%",
-        height: "100%",
-        minHeight: "100%",
-        background,
-        border: `1px solid ${borderColor}`,
-        borderRadius: 10,
-        padding: 2,
-        boxSizing: "border-box",
-      }}
-    >
-      {children}
-    </div>
-  );
-});
-
-const CalendarEvent = memo(function CalendarEvent({ event }) {
-  const meta = event.resource.kind === "unavailable"
-    ? getUnavailableCalendarStatusMeta(event.resource.type)
-    : getBookingCalendarStatusMeta(event.resource.status);
-
-  return (
-    <div className="calendar-event">
-      <div className="calendar-event-title">{event.title}</div>
-      <div className={`calendar-event-status ${meta.className}`}>{meta.label}</div>
-    </div>
-  );
-});
 
 const CalendarToolbar = memo(function CalendarToolbar({
   date,
@@ -311,8 +327,8 @@ const CalendarToolbar = memo(function CalendarToolbar({
     color: "#0f172a",
     borderRadius: 10,
     padding: "8px 12px",
-    fontSize: 16,
-    fontWeight: 700,
+    fontSize: 20,
+    fontWeight: "bold",
     cursor: "pointer",
   };
 
@@ -350,7 +366,7 @@ const CalendarToolbar = memo(function CalendarToolbar({
           flex: "1 1 240px",
           textAlign: "center",
           color: "#0f172a",
-          fontSize: 24,
+          fontSize: 30,
           fontWeight: 700,
           lineHeight: 1.2,
         }}
@@ -358,7 +374,6 @@ const CalendarToolbar = memo(function CalendarToolbar({
         {label}
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <button
           type="button"
           style={{
@@ -381,7 +396,6 @@ const CalendarToolbar = memo(function CalendarToolbar({
         >
           EN
         </button>
-      </div>
     </div>
   );
 });
@@ -401,10 +415,35 @@ export default function CalendarPage() {
   const [calendarLang, setCalendarLang] = useState("th");
   const visibleLoading = useMinimumLoading(loading, 350);
   const bookingFormModalRef = useRef(null);
+  const fullCalendarRef = useRef(null);
 
   const handleNavigate = useCallback((nextDate) => {
-    setCalendarDate(nextDate);
+    if (nextDate === "TODAY") {
+      setCalendarDate(new Date());
+      return;
+    }
+
+    if (nextDate === "PREV") {
+      setCalendarDate((currentDate) => new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+      return;
+    }
+
+    if (nextDate === "NEXT") {
+      setCalendarDate((currentDate) => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+      return;
+    }
+
+    if (nextDate instanceof Date) {
+      setCalendarDate(nextDate);
+    }
   }, []);
+
+  useEffect(() => {
+    const calendarApi = fullCalendarRef.current?.getApi?.();
+    if (calendarApi && calendarDate instanceof Date) {
+      calendarApi.gotoDate(calendarDate);
+    }
+  }, [calendarDate]);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -424,17 +463,6 @@ export default function CalendarPage() {
     });
     return map;
   }, [thaiHolidays]);
-
-  const calendarFormats = useMemo(
-    () => ({
-      monthHeaderFormat: (date) => formatCalendarToolbarLabel(date, calendarLang),
-      weekdayFormat: (date) => {
-        const day = date instanceof Date ? date.getDay() : new Date(date).getDay();
-        return calendarLang === "en" ? EN_WEEKDAY_LABELS[day] : THAI_WEEKDAY_LABELS[day];
-      },
-    }),
-    [calendarLang]
-  );
 
   const canViewActiveDriversSummary = hasPermission(null, "calendar_active_drivers_view");
   const canViewNextQueueDriver = hasPermission(null, "calendar_next_queue_driver_view");
@@ -529,12 +557,15 @@ export default function CalendarPage() {
     () =>
       driverUnavailableRecords.map((record) => ({
         id: record.unavailable_id,
-        title: `${record.type || "ลา"}: ${record.driver_name || "-"}`,
+        title: `${record.type || "ลา / หยุด"}: ${record.driver_name || "-"}`,
         start: parseDate(record.start_datetime),
         end: parseDate(record.end_datetime),
+        allDay: true,
         resource: {
           ...record,
           kind: "unavailable",
+          original_start_datetime: record.start_datetime,
+          original_end_datetime: record.end_datetime,
         },
       })),
     [driverUnavailableRecords]
@@ -551,9 +582,12 @@ export default function CalendarPage() {
         }`,
         start: parseDate(booking.start_datetime),
         end: parseDate(booking.end_datetime),
+        allDay: true,
         resource: {
           ...booking,
           kind: "booking",
+          original_start_datetime: booking.start_datetime,
+          original_end_datetime: booking.end_datetime,
         },
       })),
     [activeBookings]
@@ -563,6 +597,31 @@ export default function CalendarPage() {
     () => [...bookingEvents, ...unavailableEvents].filter((event) => event.start && event.end),
     [bookingEvents, unavailableEvents]
   );
+
+  const fullCalendarEvents = useMemo(() => {
+    return calendarEvents.map((event) => {
+      const resource = event.resource || {};
+      const multiDay = isMultiDayEvent(event.start, event.end);
+
+      return {
+        id: event.id,
+        title: event.title,
+        start: toCalendarDateKey(event.start),
+        end: multiDay ? addDaysToDateKey(event.end, 1) : undefined,
+        allDay: true,
+        extendedProps: {
+          originalEvent: event,
+          kind: resource.kind || "booking",
+          status: resource.status || "",
+        },
+        classNames: [
+          resource.kind === "unavailable"
+            ? "fc-unavailable-event"
+            : `fc-booking-${String(resource.status || "").toLowerCase()}`,
+        ],
+      };
+    });
+  }, [calendarEvents]);
 
   const activeDriversNow = useMemo(() => {
     const now = new Date();
@@ -625,23 +684,51 @@ export default function CalendarPage() {
       });
   }, [driverQueueRows]);
 
-  const eventStyleGetter = useCallback((event) => {
-    const meta =
-      event.resource.kind === "unavailable"
-        ? getUnavailableCalendarStatusMeta(event.resource.type)
-        : getBookingCalendarStatusMeta(event.resource.status);
+  const handleShowMoreEvents = useCallback(async (events, date) => {
+    const titleDate = formatThaiDateTime(date).split(" ")[0];
 
-    return {
-      style: {
-        backgroundColor: meta.backgroundColor,
-        border: `1px solid ${meta.borderColor}`,
-        color: meta.color,
-        borderRadius: "8px",
-        padding: "3px 6px",
-        fontSize: "17px",
-        lineHeight: "1.25",
-      },
-    };
+    const rows = [...events]
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      .map((event, index) => {
+        const resource = event.resource || {};
+        const isUnavailable = resource.kind === "unavailable";
+        const displayStart = resource.original_start_datetime || event.start;
+        const displayEnd = resource.original_end_datetime || event.end;
+        const meta = isUnavailable
+          ? getUnavailableCalendarStatusMeta(resource.type)
+          : getBookingCalendarStatusMeta(resource.status);
+
+        return `
+        <div style="padding:12px;border-bottom:1px solid #e2e8f0;text-align:left;">
+          <div style="font-weight:700;color:#0f172a;">
+            ${index + 1}. ${event.title || "-"}
+          </div>
+          <div style="margin-top:6px;color:#475569;">
+            สถานะ: ${meta.label}
+          </div>
+          <div style="margin-top:4px;color:#475569;">
+            เวลา: ${formatThaiDateTime(displayStart)} - ${formatThaiDateTime(displayEnd)}
+          </div>
+          ${
+            isUnavailable
+              ? `<div style="margin-top:4px;color:#475569;">คนขับ: ${resource.driver_name || "-"}</div>`
+              : `
+                <div style="margin-top:4px;color:#475569;">ปลายทาง: ${resource.destination || "-"}</div>
+                <div style="margin-top:4px;color:#475569;">คนขับ: ${getDriverLabel(resource)}</div>
+              `
+          }
+        </div>
+      `;
+      })
+      .join("");
+
+    await Swal.fire({
+      title: `รายการวันที่ ${titleDate}`,
+      html: `<div style="max-height:520px;overflow:auto;">${rows}</div>`,
+      width: 760,
+      confirmButtonText: "ปิด",
+      confirmButtonColor: "#1455c8",
+    });
   }, []);
 
   const handleSelectEvent = useCallback(async (event) => {
@@ -649,6 +736,8 @@ export default function CalendarPage() {
 
     if (resource.kind === "unavailable") {
       const meta = getUnavailableCalendarStatusMeta(resource.type);
+      const displayStart = resource.original_start_datetime || resource.start_datetime;
+      const displayEnd = resource.original_end_datetime || resource.end_datetime;
       await Swal.fire({
         title: "รายละเอียดวันไม่รับงาน",
         html: `
@@ -656,8 +745,8 @@ export default function CalendarPage() {
             <div><b>คนขับ:</b> ${resource.driver_name || "-"}</div>
             <div><b>ประเภท:</b> ${meta.label}</div>
             <div><b>เหตุผล:</b> ${resource.reason || "-"}</div>
-            <div><b>เวลาเริ่ม:</b> ${formatThaiDateTime(resource.start_datetime)}</div>
-            <div><b>เวลาสิ้นสุด:</b> ${formatThaiDateTime(resource.end_datetime)}</div>
+            <div><b>เวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
+            <div><b>เวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
             <div><b>สถานะ:</b> ${normalizeStatus(resource.status)}</div>
           </div>
         `,
@@ -671,14 +760,16 @@ export default function CalendarPage() {
 
     const booking = resource;
     const meta = getBookingCalendarStatusMeta(booking.status);
+    const displayStart = booking.original_start_datetime || booking.start_datetime;
+    const displayEnd = booking.original_end_datetime || booking.end_datetime;
 
     await Swal.fire({
       title: "รายละเอียดการจอง",
       html: `
         <div style="text-align:left;font-size:25px;line-height:1.7;color:#1f2937">
           <div><b>ผู้จอง:</b> ${booking.requester_name || "-"}</div>
-          <div><b>วันเวลาเริ่ม:</b> ${formatThaiDateTime(booking.start_datetime)}</div>
-          <div><b>วันเวลาสิ้นสุด:</b> ${formatThaiDateTime(booking.end_datetime)}</div>
+          <div><b>วันเวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
+          <div><b>วันเวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
           <div><b>ปลายทาง:</b> ${booking.destination || "-"}</div>
           <div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>
           <div><b>คนขับ:</b> ${getDriverLabel(booking)}</div>
@@ -693,12 +784,55 @@ export default function CalendarPage() {
     });
   }, [vehicleMap]);
 
+  const handleFullCalendarEventClick = useCallback(
+    (info) => {
+      const originalEvent = info.event.extendedProps?.originalEvent;
+      if (!originalEvent) return;
+      handleSelectEvent(originalEvent);
+    },
+    [handleSelectEvent]
+  );
+
+  const handleMoreLinkClick = useCallback(
+    (args) => {
+      const dayEvents = calendarEvents
+        .filter((event) => eventOverlapsDay(event, args.date))
+        .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+      handleShowMoreEvents(dayEvents, args.date);
+      return "none";
+    },
+    [calendarEvents, handleShowMoreEvents]
+  );
+
+  const dayCellClassNames = useCallback(
+    (arg) => {
+      const classes = [];
+      const holiday = getThaiHoliday(arg.date, thaiHolidayMap);
+
+      if (isToday(arg.date)) {
+        classes.push("fc-day-today-custom");
+      }
+
+      if (holiday) {
+        classes.push("fc-thai-holiday");
+      }
+
+      if (isWeekend(arg.date)) {
+        classes.push("fc-weekend");
+      }
+
+      return classes;
+    },
+    [thaiHolidayMap]
+  );
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h2>ปฏิทินการจอง</h2>
-          <p>แสดงทั้งรายการจองที่อนุมัติแล้วและช่วงวันไม่รับงานของคนขับ</p>
+          <p>แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. ปฏิบัติงาน</p>
         </div>
 
         <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
@@ -737,19 +871,15 @@ export default function CalendarPage() {
                   กำลังใช้งาน
                 </span>
                 <span className="status red" style={{ fontSize: 16, padding: "6px 12px" }}>
-                  วันไม่รับงาน
+                  พขร. ติดภารกิจอื่นๆ
                 </span>
               </div>
               <div style={{ color: "#475569" }}>
-                แสดงรายการจอง <b>PENDING</b>, <b>APPROVED</b> และ <b>IN_USE</b> พร้อมวันไม่รับงานของคนขับ
+                แสดงรายการจองตามสถานะทั้งหมด
               </div>
             </div>
 
         {error && !visibleLoading && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
-
-        {!visibleLoading && !error && calendarEvents.length === 0 && (
-          <div style={{ marginBottom: 12, color: "#475569" }}>ไม่มีรายการที่ต้องแสดงในช่วงนี้</div>
-        )}
 
         {!visibleLoading && !error && (
           <div
@@ -764,6 +894,11 @@ export default function CalendarPage() {
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
               <button
                 type="button"
+                style={{
+                  backgroundColor: "#1455c8",
+                  color: "#fff",
+                  border: "none",
+                }}
                 className="calendar-create-button"
                 disabled={!canCreateBookings}
                 onClick={() =>
@@ -773,42 +908,51 @@ export default function CalendarPage() {
                   })
                 }
               >
-                + เพิ่มรายการจอง
+                ➕ เพิ่มรายการจองใหม่
               </button>
             </div>
-              <Calendar
-                localizer={localizer}
-              culture={calendarLang}
-              date={calendarDate}
-                events={calendarEvents}
-                startAccessor="start"
-                endAccessor="end"
-              style={{ height: 760, fontSize: 16 }}
-              selectable={canCreateBookings}
-              onNavigate={handleNavigate}
-              eventPropGetter={eventStyleGetter}
-              formats={calendarFormats}
-              components={{
-                toolbar: (toolbarProps) => (
-                  <CalendarToolbar
-                    {...toolbarProps}
-                    calendarLang={calendarLang}
-                    onChangeCalendarLang={setCalendarLang}
-                  />
-                ),
-                event: CalendarEvent,
-                dateCellWrapper: (cellProps) => (
-                  <CalendarDateCellWrapper
-                    {...cellProps}
-                    holidayMap={thaiHolidayMap}
-                    calendarLang={calendarLang}
-                  />
-                ),
+            <div style={{ marginBottom: 12 }}>
+              <CalendarToolbar
+                date={calendarDate}
+                onNavigate={handleNavigate}
+                calendarLang={calendarLang}
+                onChangeCalendarLang={setCalendarLang}
+              />
+            </div>
+
+            <FullCalendar
+              ref={fullCalendarRef}
+              plugins={[dayGridPlugin, interactionPlugin]}
+              initialView="dayGridMonth"
+              height="auto"
+              locale={calendarLang === "th" ? "th" : "en"}
+              locales={[thLocale]}
+              firstDay={0}
+              events={fullCalendarEvents}
+              eventClick={handleFullCalendarEventClick}
+              moreLinkClick={handleMoreLinkClick}
+              dayMaxEvents={3}
+              eventDisplay="block"
+              expandRows={true}
+              stickyHeaderDates={true}
+              moreLinkContent={(args) => ({
+                html: `<div class="calendar-more-pill">+${args.num} เพิ่มเติม</div>`,
+              })}
+              eventOrder={(a, b) => {
+                const aDuration = new Date(a.end || a.start).getTime() - new Date(a.start).getTime();
+                const bDuration = new Date(b.end || b.start).getTime() - new Date(b.start).getTime();
+
+                return bDuration - aDuration;
               }}
-              messages={CALENDAR_MESSAGES}
-              popup
-              onSelectEvent={handleSelectEvent}
+              fixedWeekCount={false}
+              showNonCurrentDates={true}
+              headerToolbar={false}
+              dayCellClassNames={dayCellClassNames}
             />
+
+            {calendarEvents.length === 0 && (
+              <div style={{ marginTop: 12, color: "#475569" }}>ไม่มีรายการที่ต้องแสดงในช่วงนี้</div>
+            )}
           </div>
         )}
           </>
@@ -837,10 +981,10 @@ export default function CalendarPage() {
                   minWidth: 0,
                 }}
               >
-                <h4 style={{ marginTop: 0, marginBottom: 0 }}>คนขับพร้อมรับงาน</h4>
+                <h4 style={{ marginTop: 0, marginBottom: 0 }}>พขร. ปฏิบัติงาน</h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
                   <span className="status green" style={{ fontSize: 23, padding: "6px 12px" }}>
-                    พร้อมรับงาน {activeDriversNow.length} คน
+                    จำนวน {activeDriversNow.length} คน
                   </span>
                   {activeDriversNow.length > 0 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -855,7 +999,7 @@ export default function CalendarPage() {
                   )}
                 </div>
                 <div style={{ fontSize: 20, color: "#475569" }}>
-                  นับจากผู้ใช้งานที่มีสถานะ ACTIVE และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
+                  นับจาก พขร. ที่มีสถานะ พร้อม และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
                 </div>
               </div>
             )}

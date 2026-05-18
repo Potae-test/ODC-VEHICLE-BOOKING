@@ -31,7 +31,7 @@ export default function Login({ onLogin }) {
     <div className="login-page">
       <form className="login-card" onSubmit={handleLogin}>
         <h1>ระบบงานจองรถ</h1>
-        <p>ศูนย์รับบริการจองรถและติดตามงานขับรถ</p>
+        <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
 
         <label>ชื่อผู้ใช้งาน</label>
         <input

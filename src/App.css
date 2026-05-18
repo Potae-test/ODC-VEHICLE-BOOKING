@@ -2353,3 +2353,201 @@ label {
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* ===== Outlook-like Month View ===== */
+.fc {
+  font-family: "TH Sarabun", sans-serif;
+  color: #10233f;
+}
+
+.fc .fc-scrollgrid {
+  border: 1px solid #dbe6f3;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.fc .fc-col-header-cell {
+  background: #eaf2ff;
+  border-color: #dbe6f3;
+}
+
+.fc .fc-col-header-cell-cushion {
+  color: #073b8e;
+  font-weight: 800;
+  font-size: 18px;
+  padding: 10px 4px;
+  text-decoration: none;
+}
+
+.fc .fc-daygrid-day-frame {
+  padding: 8px;
+  min-height: 150px;
+}
+
+.fc .fc-daygrid-day-number {
+  color: #334155;
+  font-weight: 800;
+  font-size: 18px;
+  text-decoration: none;
+  padding: 4px 6px;
+}
+
+.fc .fc-day-today-custom {
+  background: #eef4ff !important;
+}
+
+.fc .fc-day-today-custom .fc-daygrid-day-frame {
+  box-shadow: inset 0 0 0 2px #2563eb;
+  border-radius: 14px;
+}
+
+.fc .fc-thai-holiday {
+  background: #fff7ed !important;
+}
+
+.fc .fc-weekend {
+  background: #f8fafc !important;
+}
+
+.fc .fc-daygrid-day.fc-day-today-custom .fc-daygrid-day-number {
+  color: #1d4ed8;
+}
+
+.fc .fc-daygrid-day.fc-thai-holiday .fc-daygrid-day-number {
+  color: #92400e;
+}
+
+.fc .fc-daygrid-day.fc-weekend .fc-daygrid-day-number {
+  color: #0f172a;
+}
+
+.fc .fc-daygrid-more-link {
+  text-decoration: none !important;
+}
+
+.fc .fc-daygrid-more-link:hover {
+  text-decoration: underline;
+}
+
+.fc .fc-daygrid-event {
+  min-height: 18px;
+  border-radius: 6px !important;
+  border: 1px solid #dbe4f0 !important;
+  padding: 1px 6px !important;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 600;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  background: #fff;
+  cursor: pointer;
+}
+
+.fc .fc-daygrid-event .fc-event-main-frame {
+  position: relative;
+  display: block;
+  padding: 6px 8px 6px 12px;
+}
+
+.fc .fc-daygrid-event .fc-event-main-frame::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 999px;
+}
+
+.fc .fc-daygrid-event .fc-event-title {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc .fc-daygrid-day-events {
+  margin-top: 2px;
+  min-height: 72px;
+}
+
+.fc .fc-daygrid-event-harness {
+  margin-top: 1px !important;
+}
+
+.fc .fc-daygrid-day-events:has(.fc-daygrid-event) {
+  padding-bottom: 2px;
+}
+
+.fc .fc-daygrid-day-bottom {
+  margin-top: 2px;
+}
+
+.calendar-more-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 22px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.fc-h-event {
+  border-width: 1px;
+}
+
+.fc-event-main {
+  padding-left: 2px;
+}
+
+.fc .fc-daygrid-event.fc-booking-pending {
+  background: #fef3c7 !important;
+  border-color: #fcd34d !important;
+}
+
+.fc .fc-daygrid-event.fc-booking-pending .fc-event-main-frame::before {
+  background: #f59e0b;
+}
+
+.fc .fc-daygrid-event.fc-booking-approved {
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+}
+
+.fc .fc-daygrid-event.fc-booking-approved .fc-event-main-frame::before {
+  background: #2563eb;
+}
+
+.fc .fc-daygrid-event.fc-booking-in_use {
+  background: #dcfce7 !important;
+  border-color: #86efac !important;
+}
+
+.fc .fc-daygrid-event.fc-booking-in_use .fc-event-main-frame::before {
+  background: #16a34a;
+}
+
+.fc .fc-daygrid-event.fc-unavailable-event {
+  background: #ede9fe !important;
+  border-color: #c4b5fd !important;
+}
+
+.fc .fc-daygrid-event.fc-unavailable-event .fc-event-main-frame::before {
+  background: #7c3aed;
+}
+
+.fc .fc-daygrid-event .fc-event-time {
+  display: none;
+}
+
+.fc .fc-popover {
+  border-radius: 18px;
+  border: 1px solid #dbe6f3;
+  box-shadow: 0 20px 40px rgba(15, 47, 92, 0.18);
+}
