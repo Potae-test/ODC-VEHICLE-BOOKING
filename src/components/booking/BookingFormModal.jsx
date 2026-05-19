@@ -185,14 +185,14 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       ${
         showBackdatedCheckbox
           ? `
-      <label style="display:flex; align-items:center; gap:10px; margin-top:8px; font-size:20px; font-weight:700; color:#0f2d5c;">
+      <label style="display:flex; align-items:center; gap:10px; margin-top:8px; font-size:25px; font-weight:700; color:#0f2d5c;">
         <input
           id="is_backdated"
           type="checkbox"
           ${isBackdated ? "checked" : ""}
           style="width:22px; height:22px;"
         >
-        <span>รายการจองย้อนหลัง</span>
+        <span>เป็นรายการจองย้อนหลังหรือไม่ (กดเลือกเพื่อบันทึกเป็นรายการย้อนหลัง)</span>
       </label>
       `
           : ""

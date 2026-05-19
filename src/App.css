@@ -1637,6 +1637,28 @@ label {
   text-align: left;
 }
 
+.booking-detail-section {
+  display: grid;
+  gap: 12px;
+}
+
+.booking-detail-section + .booking-detail-section {
+  margin-top: 18px;
+}
+
+.booking-detail-section-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #cddbf0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+  color: #173b69;
+  font-size: 22px;
+  font-weight: 800;
+}
+
 .booking-detail-grid > div {
   border: 1px solid #dbe6f3;
   border-radius: 12px;
@@ -2098,6 +2120,73 @@ label {
 .driver-summary-modal-header p {
   margin: 8px 0 0;
   color: #64748b;
+}
+
+.driver-summary-booking-summary {
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid #dbe4f0;
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.driver-summary-booking-summary h4 {
+  margin: 0 0 14px;
+  color: #073b8e;
+  font-size: 28px;
+}
+
+.driver-summary-booking-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.driver-summary-booking-summary-grid span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.driver-summary-booking-summary-grid b {
+  font-size: 16px;
+  color: #0f172a;
+}
+
+.driver-summary-log-detail-table-wrap {
+  padding: 14px;
+  border: 1px solid #dbe6f3;
+  border-radius: 16px;
+  background: #f8fbff;
+}
+
+.driver-summary-log-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.driver-summary-log-detail-table th,
+.driver-summary-log-detail-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5edf7;
+  text-align: left;
+  vertical-align: top;
+}
+
+.driver-summary-log-detail-table th {
+  background: #e8f1ff;
+  color: #073b8e;
+  font-weight: 800;
+}
+
+.driver-summary-log-detail-table td {
+  color: #10233f;
+  font-weight: 600;
 }
 
 .driver-summary-detail-expand summary {

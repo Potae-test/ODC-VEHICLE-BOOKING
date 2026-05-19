@@ -757,11 +757,11 @@ export default function DriverSummary() {
               <table>
                 <thead>
                   <tr>
-                    <th>ลำดับ</th>
-                    <th>วันที่สร้างการจอง</th>
-                    <th>สถานะ</th>
-                    <th>หมายเหตุ</th>
-                    <th>ผู้บันทึก</th>
+                     <th>ลำดับ</th>
+                    <th>ผู้จอง</th>
+                    <th>เวลาไป</th>
+                    <th>เวลากลับ</th>
+                    <th>ปลายทาง</th>
                     <th>รายละเอียด</th>
                   </tr>
                 </thead>
@@ -774,14 +774,10 @@ export default function DriverSummary() {
                       <Fragment key={detailKey}>
                         <tr>
                           <td>{index + 1}</td>
-                          <td>{formatThaiDateTime(booking.created_at || booking.updated_at || booking.start_datetime)}</td>
-                          <td>
-                            <span className={getDriverJobActionClass(booking)}>
-                              {getDriverJobActionLabel(booking)}
-                            </span>
-                          </td>
-                          <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescription(booking)}</td>
-                          <td>{booking.created_by || "-"}</td>
+                          <td>{booking.requester_name || "-"}</td>
+                          <td>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</td>
+                          <td>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</td>
+                          <td>{booking.destination || "-"}</td>
                           <td>
                             <button
                               type="button"
@@ -792,37 +788,32 @@ export default function DriverSummary() {
                             </button>
                           </td>
                         </tr>
-
                         {expanded && (
                           <tr className="driver-summary-detail-row">
-                            <td colSpan="6">
-                              <div className="driver-summary-detail-expanded-grid">
-                                <div>
-                                  <span>ผู้จอง</span>
-                                  <b>{booking.requester_name || "-"}</b>
-                                </div>
-                                <div>
-                                  <span>เวลาไป</span>
-                                  <b>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</b>
-                                </div>
-                                <div>
-                                  <span>เวลากลับ</span>
-                                  <b>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</b>
-                                </div>
-                                <div>
-                                  <span>ปลายทาง</span>
-                                  <b>{booking.destination || "-"}</b>
-                                </div>
-                              </div>
-
-                              <div style={{ marginTop: 12 }}>
-                                <button
-                                  type="button"
-                                  className="small-button"
-                                  onClick={() => setExpandedDetailKey("")}
-                                >
-                                  ย่อรายละเอียด
-                                </button>
+                            <td colSpan="5">
+                              <div className="driver-summary-log-detail-table-wrap">
+                                <table className="driver-summary-log-detail-table">
+                                  <thead>
+                                    <tr>
+                                      {/* <th>ลำดับ</th> */}
+                                      <th>สถานะ</th>
+                                      <th>หมายเหตุ</th>
+                                      <th>ผู้บันทึก</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      {/* <td>{index + 1}</td> */}
+                                      <td>
+                                        <span className={getDriverJobActionClass(booking)}>
+                                          {getDriverJobActionLabel(booking)}
+                                        </span>
+                                      </td>
+                                      <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescription(booking)}</td>
+                                      <td>{booking.created_by || "-"}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
                               </div>
                             </td>
                           </tr>
@@ -833,7 +824,7 @@ export default function DriverSummary() {
 
                   {detailRow.allDetailBookings.length === 0 && (
                     <tr>
-                      <td colSpan="6">ไม่มีงานของคนขับคนนี้</td>
+                      <td colSpan="5">ไม่มีงานของคนขับคนนี้</td>
                     </tr>
                   )}
                 </tbody>

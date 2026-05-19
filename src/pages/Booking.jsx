@@ -108,6 +108,201 @@ const THAI_SHORT_MONTHS = [
   "ธ.ค.",
 ];
 
+const ALL_DETAIL_ROLES = ["USER", "DRIVER", "STAFF", "ADMIN"];
+const STAFF_DETAIL_ROLES = ["STAFF", "ADMIN"];
+const ADMIN_DETAIL_ROLES = ["ADMIN"];
+
+function getBookingDetailFields({ booking, vehicleMap }) {
+  return [
+    {
+      key: "requester_name",
+      label: "ผู้จอง",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.requester_name || "-",
+    },
+    {
+      key: "department",
+      label: "หน่วยงาน / ฝ่าย",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.department || "-",
+    },
+    {
+      key: "phone",
+      label: "เบอร์โทร",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.phone || "-",
+    },
+    {
+      key: "start_datetime",
+      label: "เวลาไป",
+      roles: ALL_DETAIL_ROLES,
+      value: formatBookingDateTimeDisplay(booking.start_datetime),
+    },
+    {
+      key: "end_datetime",
+      label: "เวลากลับ",
+      roles: ALL_DETAIL_ROLES,
+      value: formatBookingDateTimeDisplay(booking.end_datetime),
+    },
+    {
+      key: "actual_start_datetime",
+      label: "เวลาออกรถจริง",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.actual_start_datetime
+        ? formatBookingDateTimeDisplay(booking.actual_start_datetime)
+        : "-",
+    },
+    {
+      key: "actual_return_datetime",
+      label: "เวลากลับจริง",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.actual_return_datetime
+        ? formatBookingDateTimeDisplay(booking.actual_return_datetime)
+        : "-",
+    },
+    {
+      key: "destination",
+      label: "ปลายทาง",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.destination || "-",
+    },
+    {
+      key: "purpose",
+      label: "รายละเอียดการใช้รถ",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.purpose || "-",
+    },
+    {
+      key: "assigned_user_name",
+      label: "คนขับ",
+      roles: ALL_DETAIL_ROLES,
+      value: getBookingDriverLabel(booking),
+    },
+    {
+      key: "status",
+      label: "สถานะ",
+      roles: ALL_DETAIL_ROLES,
+      value: getStatusMeta(booking.status).label,
+    },
+    {
+      key: "staff_note",
+      label: "หมายเหตุ",
+      roles: ALL_DETAIL_ROLES,
+      value: booking.staff_note || "-",
+    },
+    {
+      key: "is_backdated",
+      label: "รายการย้อนหลัง",
+      roles: STAFF_DETAIL_ROLES,
+      value: isBackdatedFlagEnabled(booking) ? "บันทึกเป็นรายการย้อนหลัง" : "ไม่ได้บันทึกเป็นรายการย้อนหลัง",
+    },
+    {
+      key: "booking_id",
+      label: "booking_id",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.booking_id || "-",
+    },
+    {
+      key: "booking_no",
+      label: "booking_no",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.booking_no || "-",
+    },
+    {
+      key: "vehicle_id",
+      label: "vehicle_id",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.vehicle_id || "-",
+    },
+    {
+      key: "assigned_user_id",
+      label: "assigned_user_id",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.assigned_user_id || "-",
+    },
+    {
+      key: "vehicle_type_request",
+      label: "vehicle_type_request",
+      roles: ADMIN_DETAIL_ROLES,
+      value: getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""),
+    },
+    {
+      key: "actual_start_by",
+      label: "actual_start_by",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.actual_start_by || "-",
+    },
+    {
+      key: "actual_return_by",
+      label: "actual_return_by",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.actual_return_by || "-",
+    },
+    {
+      key: "backdated_completed_at",
+      label: "backdated_completed_at",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.backdated_completed_at
+        ? formatBookingDateTimeDisplay(booking.backdated_completed_at)
+        : "-",
+    },
+    {
+      key: "backdated_completed_by",
+      label: "backdated_completed_by",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.backdated_completed_by || "-",
+    },
+    {
+      key: "created_at",
+      label: "created_at",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.created_at ? formatThaiDateTime(booking.created_at) : "-",
+    },
+    {
+      key: "updated_at",
+      label: "updated_at",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.updated_at ? formatThaiDateTime(booking.updated_at) : "-",
+    },
+    {
+      key: "updated_by",
+      label: "updated_by",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.updated_by || "-",
+    },
+    {
+      key: "vehicle_label",
+      label: "รถที่ได้รับ",
+      roles: ADMIN_DETAIL_ROLES,
+      value: getBookingVehicleLabel(booking, vehicleMap),
+    },
+    {
+      key: "manual_override_reason",
+      label: "manual_override_reason",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.manual_override_reason || "-",
+    },
+    {
+      key: "assign_mode",
+      label: "assign_mode",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.assign_mode || "-",
+    },
+    {
+      key: "recommended_driver_user_id",
+      label: "recommended_driver_user_id",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.recommended_driver_user_id || "-",
+    },
+    {
+      key: "recommended_driver_name",
+      label: "recommended_driver_name",
+      roles: ADMIN_DETAIL_ROLES,
+      value: booking.recommended_driver_name || "-",
+    },
+  ];
+}
+
 function formatBookingDateTimeDisplay(value) {
   if (!value) return "-";
 
@@ -1137,7 +1332,7 @@ export default function Booking() {
           actual_start_by: actor,
           actual_return_by: actor,
           status: "COMPLETED",
-          staff_note: result.value.note ? `บันทึกรายการย้อนหลัง: ${result.value.note}` : "บันทึกรายการย้อนหลัง",
+          staff_note: result.value.note ? `บันทึกรายการย้อนหลัง: ${result.value.note}` : "โปรดระบุหมายเหตุเพิ่มเติม",
           is_backdated: "TRUE",
           backdated_completed_at: nowIso,
           backdated_completed_by: actor,
@@ -1172,29 +1367,25 @@ export default function Booking() {
   const handleViewBookingDetail = useCallback(
     async (booking) => {
       if (processingAction) return;
+      const currentRole = String(currentUser?.role || "").trim().toUpperCase() || "USER";
+      const detailFields = getBookingDetailFields({ booking, vehicleMap }).filter((field) =>
+        field.roles.includes(currentRole)
+      );
+      const detailRows = detailFields
+        .map(
+          (field) => `
+    <div>
+      <span class="booking-detail-label">${escapeHtml(field.label)}</span>
+      <span class="booking-detail-value">${escapeHtml(field.value)}</span>
+    </div>
+  `
+        )
+        .join("");
 
       const detailHtml = `
         <div class="swal-form booking-detail-modal">
           <div class="booking-detail-grid">
-      
-            <div><span class="booking-detail-label">ผู้จอง</span><span class="booking-detail-value">${escapeHtml(booking.requester_name || "-")}</span></div>
-            <div><span class="booking-detail-label">หน่วยงาน / ฝ่าย</span><span class="booking-detail-value">${escapeHtml(booking.department || "-")}</span></div>
-            <div><span class="booking-detail-label">เบอร์โทร</span><span class="booking-detail-value">${escapeHtml(booking.phone || "-")}</span></div>
-            <div><span class="booking-detail-label">เวลาไป</span><span class="booking-detail-value">${escapeHtml(formatBookingDateTimeDisplay(booking.start_datetime))}</span></div>
-            <div><span class="booking-detail-label">เวลากลับ</span><span class="booking-detail-value">${escapeHtml(formatBookingDateTimeDisplay(booking.end_datetime))}</span></div>
-            <div><span class="booking-detail-label">เวลาออกรถจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_start_datetime ? formatBookingDateTimeDisplay(booking.actual_start_datetime) : "-")}</span></div>
-            <div><span class="booking-detail-label">เวลากลับจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_return_datetime ? formatBookingDateTimeDisplay(booking.actual_return_datetime) : "-")}</span></div>
-            <div><span class="booking-detail-label">รถที่ขอ</span><span class="booking-detail-value">${escapeHtml(getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""))}</span></div>
-            <div><span class="booking-detail-label">ปลายทาง</span><span class="booking-detail-value">${escapeHtml(booking.destination || "-")}</span></div>
-            <div><span class="booking-detail-label">รายละเอียดการใช้รถ</span><span class="booking-detail-value">${escapeHtml(booking.purpose || "-")}</span></div>
-            <div><span class="booking-detail-label">รถที่ได้รับ</span><span class="booking-detail-value">${escapeHtml(getBookingVehicleLabel(booking, vehicleMap))}</span></div>
-            <div><span class="booking-detail-label">คนขับ</span><span class="booking-detail-value">${escapeHtml(getBookingDriverLabel(booking))}</span></div>
-            <div><span class="booking-detail-label">รายการย้อนหลัง</span><span class="booking-detail-value">${escapeHtml(isBackdatedFlagEnabled(booking) ? "ใช่" : "ไม่ใช่")}</span></div>
-            <div><span class="booking-detail-label">บันทึกย้อนหลังเมื่อ</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_at ? formatBookingDateTimeDisplay(booking.backdated_completed_at) : "-")}</span></div>
-            <div><span class="booking-detail-label">บันทึกย้อนหลังโดย</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_by || "-")}</span></div>
-            <div><span class="booking-detail-label">สถานะ</span><span class="booking-detail-value">${escapeHtml(getStatusMeta(booking.status).label)}</span></div>
-            <div><span class="booking-detail-label">หมายเหตุ</span><span class="booking-detail-value">${escapeHtml(booking.staff_note || "-")}</span></div>
-
+            ${detailRows}
           </div>
         </div>
       `;
@@ -1209,7 +1400,7 @@ export default function Booking() {
         confirmButtonColor: "#1455c8",
       });
     },
-    [vehicleMap]
+    [currentUser?.role, vehicleMap]
   );
 
   const handleCancelBooking = useCallback(async (booking) => {
