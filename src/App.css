@@ -1480,105 +1480,8 @@ label {
   color: #073b8e;
 }
 
-.booking-flatpickr-calendar .flatpickr-time {
-  display: grid !important;
-  grid-template-columns: 1fr 24px 1fr !important;
-  grid-template-rows: auto 48px !important;
-  align-items: center !important;
-  column-gap: 12px !important;
-  row-gap: 8px !important;
-  height: auto !important;
-  min-height: 96px !important;
-  padding: 12px 22px 16px !important;
-  border-top: 1px solid #e5e7eb !important;
-  background: #ffffff !important;
-}
-
-.booking-flatpickr-calendar .thai-time-grid-labels {
-  grid-column: 1 / 4;
-  display: grid;
-  grid-template-columns: 1fr 24px 1fr;
-  column-gap: 12px;
-  align-items: center;
-  width: 100%;
-  font-size: 15px;
-  font-weight: 800;
-  color: #64748b;
-  line-height: 1;
-}
-
-.booking-flatpickr-calendar .thai-time-grid-labels span:first-child {
-  grid-column: 1;
-  text-align: center;
-}
-
-.booking-flatpickr-calendar .thai-time-grid-labels span:last-child {
-  grid-column: 3;
-  text-align: center;
-}
-
-.booking-flatpickr-calendar .flatpickr-hour {
-  grid-column: 1 !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-time .flatpickr-time-separator {
-  grid-column: 2 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  height: 48px !important;
-  font-size: 26px !important;
-  font-weight: 900 !important;
-  color: #334155 !important;
-  line-height: 1 !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-minute {
-  grid-column: 3 !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-hour,
-.booking-flatpickr-calendar .flatpickr-minute {
-  width: 100% !important;
-  min-height: 48px !important;
-  height: 48px !important;
-  padding: 0 !important;
-  border: 1px solid #dbe6f3 !important;
-  border-radius: 14px !important;
-  background: #f8fbff !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9) !important;
-  text-align: center !important;
-  font-size: 25px !important;
-  font-weight: 900 !important;
-  color: #0f172a !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-hour:focus,
-.booking-flatpickr-calendar .flatpickr-minute:focus {
-  outline: 3px solid #dbeafe !important;
-  border-color: #1455c8 !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-time .numInputWrapper {
-  width: 100% !important;
-  height: 48px !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-time input {
-  padding: 0 !important;
-}
-
-.booking-flatpickr-calendar .flatpickr-time .arrowUp,
-.booking-flatpickr-calendar .flatpickr-time .arrowDown {
-  display: none !important;
-}
-
 .booking-flatpickr-calendar input.cur-year {
   font-weight: 700;
-}
-
-.booking-flatpickr-calendar .flatpickr-am-pm {
-  display: none !important;
 }
 
 .flatpickr-input[type="hidden"] {
@@ -1589,13 +1492,142 @@ label {
   display: none !important;
 }
 
+.thai-datetime-picker-input.flatpickr-input {
+  width: 100%;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .flatpickr-input[readonly].form-control,
 .flatpickr-input[readonly].input {
   cursor: pointer;
 }
 
-.booking-filter-row-3 .flatpickr-input {
+.thai-datetime-field {
+  display: grid;
+  gap: 8px;
   width: 100%;
+}
+
+.thai-datetime-label-row,
+.thai-datetime-input-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 0.85fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.thai-datetime-main-label {
+  font-size: 24px;
+  font-weight: 800;
+  color: #173b69;
+}
+
+.thai-datetime-date-col {
+  min-width: 0;
+}
+
+.thai-datetime-date-col input {
+  width: 100%;
+  min-height: 58px;
+}
+
+.thai-datetime-time-labels {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.thai-datetime-time-row {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.thai-hour-input,
+.thai-minute-input {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #0f172a;
+  font-size: 26px;
+  font-weight: 800;
+  text-align: center;
+  text-align-last: center;
+}
+
+.thai-hour-input:focus,
+.thai-minute-input:focus {
+  outline: 3px solid #dbeafe;
+  border-color: #1455c8;
+}
+
+.thai-time-separator {
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #334155;
+}
+
+.booking-datetime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 8px 0 14px;
+}
+
+.booking-form-full-row {
+  grid-column: 1 / -1;
+}
+
+.booking-datetime-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+  width: 100%;
+}
+
+.booking-datetime-stack .thai-datetime-field {
+  width: 100%;
+}
+
+.booking-datetime-stack .thai-datetime-label-row,
+.booking-datetime-stack .thai-datetime-input-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.75fr) minmax(220px, 0.45fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.booking-filter-row-3 .thai-datetime-field {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .thai-datetime-label-row,
+  .thai-datetime-input-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .booking-detail-grid {

@@ -285,10 +285,7 @@ export async function backdateCompleteBooking(payload) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      action: "backdate_complete_booking",
-      data: payload || {},
-    }),
+    body: JSON.stringify(payload || {}),
   });
 
   return json;

@@ -1082,8 +1082,8 @@ function backdateCompleteBooking(data) {
   rowValues[assignedUserIdCol] = assignedUserId;
   rowValues[assignedUserNameCol] = assignedUserName;
   rowValues[vehicleIdCol] = vehicleId;
-  rowValues[actualStartDatetimeCol] = data.actual_start_datetime || now.toISOString();
-  rowValues[actualReturnDatetimeCol] = data.actual_return_datetime || now.toISOString();
+  rowValues[actualStartDatetimeCol] = data.actual_start_datetime || "-";
+  rowValues[actualReturnDatetimeCol] = data.actual_return_datetime || "-";
   rowValues[actualStartByCol] = data.actual_start_by || actor;
   rowValues[actualReturnByCol] = data.actual_return_by || actor;
   rowValues[statusCol] = "COMPLETED";
@@ -1135,8 +1135,8 @@ function backdateCompleteBooking(data) {
       assigned_user_id: assignedUserId,
       assigned_user_name: assignedUserName,
       vehicle_id: vehicleId,
-      actual_start_datetime: rowValues[actualStartDatetimeCol] || now.toISOString(),
-      actual_return_datetime: rowValues[actualReturnDatetimeCol] || now.toISOString(),
+      actual_start_datetime: rowValues[actualStartDatetimeCol] || "-",
+      actual_return_datetime: rowValues[actualReturnDatetimeCol] || "-",
       actual_start_by: rowValues[actualStartByCol] || actor,
       actual_return_by: rowValues[actualReturnByCol] || actor,
       status: "COMPLETED",

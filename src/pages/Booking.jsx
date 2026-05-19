@@ -1,4 +1,5 @@
 ﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import Swal from "sweetalert2";
 import {
   approveBooking,
@@ -16,7 +17,7 @@ import { formatThaiDateTime } from "../utils/date";
 import { showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
 import BookingFormModal from "../components/booking/BookingFormModal";
-import ThaiDateTimePicker from "../components/common/ThaiDateTimePicker";
+import ThaiDateTimeField from "../components/common/ThaiDateTimeField";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
@@ -86,6 +87,36 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+const THAI_SHORT_MONTHS = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
+function formatBookingDateTimeDisplay(value) {
+  if (!value) return "-";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return `${date.getDate()} ${THAI_SHORT_MONTHS[date.getMonth()]} ${date.getFullYear() + 543} เวลา ${pad2(
+    date.getHours()
+  )}:${pad2(date.getMinutes())} น.`;
 }
 
 function getVehicleTypeText(type) {
@@ -411,6 +442,7 @@ function Pagination({ page, total, onChange }) {
 
 const BookingTableRow = memo(function BookingTableRow({
   booking,
+  rowNumber,
   vehicleMap,
   canViewBookingDetail,
   canProcessBookings,
@@ -440,10 +472,10 @@ const BookingTableRow = memo(function BookingTableRow({
 
   return (
     <tr>
-      <td>{booking.booking_no || "-"}</td>
+      <td>{rowNumber}</td>
       <td>{booking.requester_name || "-"}</td>
-      <td>{formatThaiDateTime(booking.start_datetime)}</td>
-      <td>{formatThaiDateTime(booking.end_datetime)}</td>
+      <td>{formatBookingDateTimeDisplay(booking.start_datetime)}</td>
+      <td>{formatBookingDateTimeDisplay(booking.end_datetime)}</td>
       <td>{booking.destination || "-"}</td>
       <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
       <td>{getBookingDriverLabel(booking)}</td>
@@ -527,8 +559,6 @@ export default function Booking() {
     driver: "",
     vehicle_id: "",
   });
-  const filterStartPickerRef = useRef(null);
-  const filterEndPickerRef = useRef(null);
   const debouncedFilters = useDebouncedValue(filters);
   const visibleLoading = useMinimumLoading(loading, 350);
 
@@ -953,6 +983,10 @@ export default function Booking() {
   const handleBackdateComplete = useCallback(
     async (booking) => {
       if (processingAction) return;
+      let backdateActualStart = "";
+      let backdateActualReturn = "";
+      let actualStartRoot = null;
+      let actualReturnRoot = null;
 
       const result = await Swal.fire({
         title: "บันทึกงานย้อนหลัง",
@@ -977,7 +1011,10 @@ export default function Booking() {
                   return `<option value="${escapeHtml(vehicle.vehicle_id)}">${escapeHtml(label)}</option>`;
                 })
                 .join("")}
-            </select>
+              </select>
+
+            <div id="backdate_actual_start_container"></div>
+            <div id="backdate_actual_return_container"></div>
 
             <label>หมายเหตุ</label>
             <textarea id="backdate_note" class="swal2-textarea" rows="4">บันทึกรายการย้อนหลัง</textarea>
@@ -989,10 +1026,48 @@ export default function Booking() {
         cancelButtonText: "ยกเลิก",
         confirmButtonColor: "#f59e0b",
         cancelButtonColor: "#64748b",
+        didOpen: () => {
+          const startEl = document.getElementById("backdate_actual_start_container");
+          const returnEl = document.getElementById("backdate_actual_return_container");
+
+          if (startEl) {
+            actualStartRoot = createRoot(startEl);
+            actualStartRoot.render(
+              <ThaiDateTimeField
+                label="เวลาออกรถจริง"
+                value={backdateActualStart}
+                onChange={(value) => {
+                  backdateActualStart = value || "";
+                }}
+              />
+            );
+          }
+
+          if (returnEl) {
+            actualReturnRoot = createRoot(returnEl);
+            actualReturnRoot.render(
+              <ThaiDateTimeField
+                label="เวลากลับจริง"
+                value={backdateActualReturn}
+                onChange={(value) => {
+                  backdateActualReturn = value || "";
+                }}
+              />
+            );
+          }
+        },
+        willClose: () => {
+          actualStartRoot?.unmount?.();
+          actualReturnRoot?.unmount?.();
+          actualStartRoot = null;
+          actualReturnRoot = null;
+        },
         preConfirm: () => {
           const assigned_user_id = document.getElementById("backdate_assigned_user_id").value.trim();
           const vehicle_id = document.getElementById("backdate_vehicle_id").value.trim();
           const note = document.getElementById("backdate_note").value.trim();
+          const actual_start_datetime = backdateActualStart || "";
+          const actual_return_datetime = backdateActualReturn || "";
 
           if (!assigned_user_id) {
             Swal.showValidationMessage("กรุณาเลือกคนขับ");
@@ -1017,11 +1092,23 @@ export default function Booking() {
             return false;
           }
 
+          if (actual_start_datetime && actual_return_datetime) {
+            const startTime = new Date(actual_start_datetime).getTime();
+            const returnTime = new Date(actual_return_datetime).getTime();
+
+            if (!Number.isNaN(startTime) && !Number.isNaN(returnTime) && returnTime < startTime) {
+              Swal.showValidationMessage("เวลากลับจริงต้องไม่น้อยกว่าเวลาออกรถจริง");
+              return false;
+            }
+          }
+
           return {
             assigned_user_id,
             assigned_user_name: driver.name || "",
             vehicle_id,
             note,
+            actual_start_datetime,
+            actual_return_datetime,
           };
         },
       });
@@ -1045,8 +1132,8 @@ export default function Booking() {
           assigned_user_id: result.value.assigned_user_id,
           assigned_user_name: result.value.assigned_user_name,
           vehicle_id: result.value.vehicle_id,
-          actual_start_datetime: nowIso,
-          actual_return_datetime: nowIso,
+          actual_start_datetime: result.value.actual_start_datetime || "",
+          actual_return_datetime: result.value.actual_return_datetime || "",
           actual_start_by: actor,
           actual_return_by: actor,
           status: "COMPLETED",
@@ -1093,20 +1180,20 @@ export default function Booking() {
             <div><span class="booking-detail-label">ผู้จอง</span><span class="booking-detail-value">${escapeHtml(booking.requester_name || "-")}</span></div>
             <div><span class="booking-detail-label">หน่วยงาน / ฝ่าย</span><span class="booking-detail-value">${escapeHtml(booking.department || "-")}</span></div>
             <div><span class="booking-detail-label">เบอร์โทร</span><span class="booking-detail-value">${escapeHtml(booking.phone || "-")}</span></div>
-            <div><span class="booking-detail-label">เวลาไป</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.start_datetime) || "-")}</span></div>
-            <div><span class="booking-detail-label">เวลากลับ</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.end_datetime) || "-")}</span></div>
-            <div><span class="booking-detail-label">เวลาออกรถจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_start_datetime ? formatThaiDateTime(booking.actual_start_datetime) : "-")}</span></div>
-            <div><span class="booking-detail-label">เวลากลับจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_return_datetime ? formatThaiDateTime(booking.actual_return_datetime) : "-")}</span></div>
+            <div><span class="booking-detail-label">เวลาไป</span><span class="booking-detail-value">${escapeHtml(formatBookingDateTimeDisplay(booking.start_datetime))}</span></div>
+            <div><span class="booking-detail-label">เวลากลับ</span><span class="booking-detail-value">${escapeHtml(formatBookingDateTimeDisplay(booking.end_datetime))}</span></div>
+            <div><span class="booking-detail-label">เวลาออกรถจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_start_datetime ? formatBookingDateTimeDisplay(booking.actual_start_datetime) : "-")}</span></div>
+            <div><span class="booking-detail-label">เวลากลับจริง</span><span class="booking-detail-value">${escapeHtml(booking.actual_return_datetime ? formatBookingDateTimeDisplay(booking.actual_return_datetime) : "-")}</span></div>
             <div><span class="booking-detail-label">รถที่ขอ</span><span class="booking-detail-value">${escapeHtml(getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""))}</span></div>
             <div><span class="booking-detail-label">ปลายทาง</span><span class="booking-detail-value">${escapeHtml(booking.destination || "-")}</span></div>
-            <div><span class="booking-detail-label">เหตุผลการใช้รถ</span><span class="booking-detail-value">${escapeHtml(booking.purpose || "-")}</span></div>
+            <div><span class="booking-detail-label">รายละเอียดการใช้รถ</span><span class="booking-detail-value">${escapeHtml(booking.purpose || "-")}</span></div>
             <div><span class="booking-detail-label">รถที่ได้รับ</span><span class="booking-detail-value">${escapeHtml(getBookingVehicleLabel(booking, vehicleMap))}</span></div>
             <div><span class="booking-detail-label">คนขับ</span><span class="booking-detail-value">${escapeHtml(getBookingDriverLabel(booking))}</span></div>
             <div><span class="booking-detail-label">รายการย้อนหลัง</span><span class="booking-detail-value">${escapeHtml(isBackdatedFlagEnabled(booking) ? "ใช่" : "ไม่ใช่")}</span></div>
-            <div><span class="booking-detail-label">บันทึกย้อนหลังเมื่อ</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_at ? formatThaiDateTime(booking.backdated_completed_at) : "-")}</span></div>
+            <div><span class="booking-detail-label">บันทึกย้อนหลังเมื่อ</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_at ? formatBookingDateTimeDisplay(booking.backdated_completed_at) : "-")}</span></div>
             <div><span class="booking-detail-label">บันทึกย้อนหลังโดย</span><span class="booking-detail-value">${escapeHtml(booking.backdated_completed_by || "-")}</span></div>
             <div><span class="booking-detail-label">สถานะ</span><span class="booking-detail-value">${escapeHtml(getStatusMeta(booking.status).label)}</span></div>
-            <div><span class="booking-detail-label">หมายเหตุเจ้าหน้าที่</span><span class="booking-detail-value">${escapeHtml(booking.staff_note || "-")}</span></div>
+            <div><span class="booking-detail-label">หมายเหตุ</span><span class="booking-detail-value">${escapeHtml(booking.staff_note || "-")}</span></div>
 
           </div>
         </div>
@@ -1184,7 +1271,7 @@ export default function Booking() {
     }));
   }, []);
 
-    const clearFilters = useCallback(() => {
+  const clearFilters = useCallback(() => {
     setFilters({
       requester: "",
       start_datetime: "",
@@ -1194,9 +1281,6 @@ export default function Booking() {
       driver: "",
       vehicle_id: "",
     });
-
-    filterStartPickerRef.current?.clear?.();
-    filterEndPickerRef.current?.clear?.();
   }, []);
 
   return (
@@ -1293,25 +1377,21 @@ export default function Booking() {
 
           <div className="booking-filter-row-3" style={{ marginTop: 16 }}>
             <div>
-              <label>เวลาไป</label>
-              <ThaiDateTimePicker
-                ref={filterStartPickerRef}
+              <ThaiDateTimeField
                 id="filter_start_datetime"
+                label="เวลาไป"
                 value={filters.start_datetime}
                 placeholder="เลือกเวลาไป"
-                showTodayButton={false}
                 onChange={(value) => setFilter("start_datetime", value || "")}
               />
             </div>
 
             <div>
-              <label>เวลากลับ</label>
-              <ThaiDateTimePicker
-                ref={filterEndPickerRef}
+              <ThaiDateTimeField
                 id="filter_end_datetime"
+                label="เวลากลับ"
                 value={filters.end_datetime}
                 placeholder="เลือกเวลากลับ"
-                showTodayButton={false}
                 onChange={(value) => setFilter("end_datetime", value || "")}
               />
             </div>
@@ -1347,7 +1427,7 @@ export default function Booking() {
                   
                   <thead>
                     <tr>
-                      <th>เลขที่</th>
+                      <th>ลำดับ</th>
                       <th>ผู้จอง</th>
                       <th>เวลาไป</th>
                       <th>เวลากลับ</th>
@@ -1365,10 +1445,11 @@ export default function Booking() {
                         <td colSpan="10">ไม่พบรายการจอง</td>
                       </tr>
                     ) : (
-                      pageItems.map((booking) => (
+                      pageItems.map((booking, rowIndex) => (
                         <BookingTableRow
                           key={getBookingId(booking) || booking.booking_no}
                           booking={booking}
+                          rowNumber={(page - 1) * ROWS_PER_PAGE + rowIndex + 1}
                           vehicleMap={vehicleMap}
                           canViewBookingDetail={canViewBookingDetail}
                           canProcessBookings={canProcessBookings}
