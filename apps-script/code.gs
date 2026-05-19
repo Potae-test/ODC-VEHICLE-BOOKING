@@ -203,6 +203,10 @@ function appendDriverJobLog_(payload) {
 }
 
 function createDriverJobLogPayload_(data) {
+  const createdBy = String(
+    data.created_by || data.updated_by || data.staff_name || ""
+  ).trim();
+
   return {
     log_id: "DJL-" + Date.now(),
     booking_id: data.booking_id || "",
@@ -218,7 +222,7 @@ function createDriverJobLogPayload_(data) {
     destination: data.destination || "",
     purpose: data.purpose || "",
     created_at: new Date().toISOString(),
-    created_by: data.created_by || "",
+    created_by: createdBy,
   };
 }
 
@@ -758,7 +762,9 @@ function approveBooking(data) {
   rowValues[updatedAtCol] = new Date();
   setRowValues(sheet, row, rowValues);
 
-  const currentUserName = String(data.current_user_name || data.created_by || "").trim();
+  const currentUserName = String(
+    data.current_user_name || data.created_by || data.updated_by || data.staff_name || ""
+  ).trim();
   if (String(rowValues[assignedUserIdCol] || "").trim() && String(rowValues[vehicleIdCol] || "").trim()) {
     appendDriverJobLog_(
       createDriverJobLogPayload_({
