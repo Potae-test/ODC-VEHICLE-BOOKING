@@ -12,13 +12,11 @@ import {
   getVehicles,
   getUsers,
 } from "../api";
-import flatpickr from "flatpickr";
-import "flatpickr/dist/flatpickr.min.css";
-import { Thai } from "flatpickr/dist/l10n/th.js";
 import { formatThaiDateTime } from "../utils/date";
 import { showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
 import BookingFormModal from "../components/booking/BookingFormModal";
+import ThaiDateTimePicker from "../components/common/ThaiDateTimePicker";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
@@ -100,152 +98,6 @@ function getVehicleTypeText(type) {
   if (normalized === "MOTORCYCLE") return "จักรยานยนต์";
   if (normalized === "OTHER") return "อื่นๆ";
   return value;
-}
-
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
-function formatThaiDateTimeValue(date) {
-  return `${pad2(date.getDate())}/${pad2(date.getMonth() + 1)}/${date.getFullYear() + 543} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
-}
-
-function parseThaiDateTimeValue(dateStr, formatStr) {
-  const raw = String(dateStr || "").trim();
-  if (!raw) return null;
-
-  const buddhistMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})$/);
-  if (buddhistMatch) {
-    const [, day, month, year, hour, minute] = buddhistMatch;
-    return new Date(
-      Number(year) - 543,
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      0,
-      0
-    );
-  }
-
-  const gregorianMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?$/);
-  if (gregorianMatch) {
-    const [, year, month, day, hour = "0", minute = "0"] = gregorianMatch;
-    return new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute),
-      0,
-      0
-    );
-  }
-
-  const parsed = flatpickr.parseDate(raw, formatStr);
-  if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
-    return parsed;
-  }
-
-  const fallback = new Date(raw);
-  return Number.isNaN(fallback.getTime()) ? null : fallback;
-}
-
-function syncBuddhistYearHeader(instance) {
-  if (!instance?.calendarContainer) return;
-
-  instance.calendarContainer.classList.add("booking-flatpickr-calendar");
-
-  const yearInput = instance.currentYearElement;
-  if (yearInput) {
-    yearInput.value = String(instance.currentYear + 543);
-    yearInput.setAttribute("inputmode", "numeric");
-  }
-}
-
-function initThaiDateTimePicker(inputSelector, defaultValue, options = {}) {
-  const input = document.querySelector(inputSelector);
-  if (!input) return null;
-
-  const { showTodayButton = true, onValueChange, useAltInput = true } = options;
-  const normalizedDefaultDate =
-    defaultValue instanceof Date
-      ? defaultValue
-      : defaultValue
-        ? String(defaultValue).trim().replace("T", " ")
-        : undefined;
-
-  const instance = flatpickr(input, {
-    enableTime: true,
-    noCalendar: false,
-    time_24hr: true,
-    minuteIncrement: 5,
-    locale: {
-      ...Thai,
-      today: "วันนี้",
-    },
-    dateFormat: "Y-m-d H:i",
-    altInput: useAltInput,
-    altFormat: "d/m/Y H:i",
-    allowInput: false,
-    disableMobile: true,
-    defaultDate: normalizedDefaultDate,
-    formatDate: (date, formatStr, locale) => {
-      if (formatStr === "d/m/Y H:i") {
-        return formatThaiDateTimeValue(date);
-      }
-
-      return flatpickr.formatDate(date, formatStr, locale);
-    },
-    parseDate: (dateStr, formatStr) => {
-      const parsed = parseThaiDateTimeValue(dateStr, formatStr);
-      if (parsed) return parsed;
-      return flatpickr.parseDate(dateStr, formatStr);
-    },
-    onMonthChange: [(_, __, instance) => syncBuddhistYearHeader(instance)],
-    onYearChange: [(_, __, instance) => syncBuddhistYearHeader(instance)],
-    onReady: [
-      (selectedDates, dateStr, instance) => {
-        syncBuddhistYearHeader(instance);
-
-        if (showTodayButton) {
-          const footer = document.createElement("div");
-          footer.className = "thai-picker-footer";
-          footer.innerHTML = `
-            <button
-              type="button"
-              class="thai-picker-today"
-            >
-              วันนี้
-            </button>
-          `;
-
-          footer.onclick = () => {
-            instance.setDate(new Date(), true);
-          };
-
-          instance.calendarContainer.appendChild(footer);
-        }
-      },
-    ],
-    onChange: onValueChange
-      ? [
-          (_, __, instance) => {
-            onValueChange(instance.input.value, instance);
-          },
-        ]
-      : undefined,
-    onValueUpdate: onValueChange
-      ? [
-          (_, __, instance) => {
-            onValueChange(instance.input.value, instance);
-          },
-        ]
-      : undefined,
-  });
-
-  syncBuddhistYearHeader(instance);
-  return instance;
 }
 
 function getCurrentUser() {
@@ -768,30 +620,6 @@ export default function Booking() {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  useEffect(() => {
-    if (!canViewBookings) {
-      return undefined;
-    }
-
-    filterStartPickerRef.current = initThaiDateTimePicker("#filter_start_datetime", undefined, {
-      showTodayButton: false,
-      useAltInput: false,
-      onValueChange: (value) => setFilter("start_datetime", value || ""),
-    });
-    filterEndPickerRef.current = initThaiDateTimePicker("#filter_end_datetime", undefined, {
-      showTodayButton: false,
-      useAltInput: false,
-      onValueChange: (value) => setFilter("end_datetime", value || ""),
-    });
-
-    return () => {
-      filterStartPickerRef.current?.destroy?.();
-      filterEndPickerRef.current?.destroy?.();
-      filterStartPickerRef.current = null;
-      filterEndPickerRef.current = null;
-    };
-  }, [canViewBookings]);
 
   useEffect(() => {
     setPage(1);
@@ -1466,21 +1294,25 @@ export default function Booking() {
           <div className="booking-filter-row-3" style={{ marginTop: 16 }}>
             <div>
               <label>เวลาไป</label>
-              <input
+              <ThaiDateTimePicker
+                ref={filterStartPickerRef}
                 id="filter_start_datetime"
-                type="text"
-                lang="en-GB"
+                value={filters.start_datetime}
                 placeholder="เลือกเวลาไป"
+                showTodayButton={false}
+                onChange={(value) => setFilter("start_datetime", value || "")}
               />
             </div>
 
             <div>
               <label>เวลากลับ</label>
-              <input
+              <ThaiDateTimePicker
+                ref={filterEndPickerRef}
                 id="filter_end_datetime"
-                type="text"
-                lang="en-GB"
+                value={filters.end_datetime}
                 placeholder="เลือกเวลากลับ"
+                showTodayButton={false}
+                onChange={(value) => setFilter("end_datetime", value || "")}
               />
             </div>
 

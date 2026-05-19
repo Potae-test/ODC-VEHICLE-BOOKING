@@ -19,9 +19,16 @@ import interactionPlugin from "@fullcalendar/interaction";
 import thLocale from "@fullcalendar/core/locales/th";
 
 const CALENDAR_MESSAGES = {
-  today: "วันนี้",
-  previous: "ก่อนหน้า",
-  next: "ถัดไป",
+ th: {
+    today: "วันนี้",
+    previous: "ก่อนหน้า",
+    next: "ถัดไป",
+  },
+  en: {
+    today: "Today",
+    previous: "Previous",
+    next: "Next",
+  },
   month: "เดือน",
   week: "สัปดาห์",
   day: "วัน",
@@ -107,6 +114,14 @@ function getUnavailableCalendarStatusMeta(type) {
     borderColor: "#c4b5fd",
     color: "#6d28d9",
   };
+}
+
+function getStatusBadgeHtml(meta) {
+  return `
+    <span class="calendar-modal-status-badge ${meta.className || "gray"}">
+      ${meta.label || "-"}
+    </span>
+  `;
 }
 
 function getVehicleTypeText(type) {
@@ -351,13 +366,13 @@ const CalendarToolbar = memo(function CalendarToolbar({
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <button type="button" style={buttonStyle} onClick={() => onNavigate("TODAY")}>
-          {CALENDAR_MESSAGES.today}
+          {CALENDAR_MESSAGES[calendarLang].today}
         </button>
         <button type="button" style={buttonStyle} onClick={() => onNavigate("PREV")}>
-          {CALENDAR_MESSAGES.previous}
+          {CALENDAR_MESSAGES[calendarLang].previous}
         </button>
         <button type="button" style={buttonStyle} onClick={() => onNavigate("NEXT")}>
-          {CALENDAR_MESSAGES.next}
+          {CALENDAR_MESSAGES[calendarLang].next}
         </button>
       </div>
 
@@ -598,16 +613,54 @@ export default function CalendarPage() {
     [bookingEvents, unavailableEvents]
   );
 
+  const visibleCalendarEvents = useMemo(() => {
+    return calendarEvents.filter((event) => {
+      const status = String(event.resource?.status || "").toUpperCase();
+      const kind = String(event.resource?.kind || "").toLowerCase();
+
+      if (kind === "unavailable") return true;
+
+      return ["APPROVED", "IN_USE"].includes(status);
+    });
+  }, [calendarEvents]);
+
+  const pendingCountByDate = useMemo(() => {
+    const map = new Map();
+
+    calendarEvents.forEach((event) => {
+      const status = String(event.resource?.status || "").toUpperCase();
+
+      if (status !== "PENDING") return;
+
+      const key = toCalendarDateKey(event.start);
+
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+
+    return map;
+  }, [calendarEvents]);
+
   const fullCalendarEvents = useMemo(() => {
-    return calendarEvents.map((event) => {
+    return visibleCalendarEvents.map((event) => {
       const resource = event.resource || {};
-      const multiDay = isMultiDayEvent(event.start, event.end);
+      const startDateKey = toCalendarDateKey(event.start);
+
+      const rawEnd = event.end instanceof Date
+        ? new Date(event.end)
+        : new Date(event.end);
+
+      rawEnd.setHours(0, 0, 0, 0);
+
+      const exclusiveEnd = new Date(rawEnd);
+      exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+
+      const endDateKey = toCalendarDateKey(exclusiveEnd);
 
       return {
-        id: event.id,
+        id: `${resource.kind || "event"}-${event.id || event.title}-${toCalendarDateKey(event.start)}-${toCalendarDateKey(event.end)}`,
         title: event.title,
-        start: toCalendarDateKey(event.start),
-        end: multiDay ? addDaysToDateKey(event.end, 1) : undefined,
+        start: startDateKey,
+        end: endDateKey,
         allDay: true,
         extendedProps: {
           originalEvent: event,
@@ -621,7 +674,7 @@ export default function CalendarPage() {
         ],
       };
     });
-  }, [calendarEvents]);
+  }, [visibleCalendarEvents]);
 
   const activeDriversNow = useMemo(() => {
     const now = new Date();
@@ -704,7 +757,7 @@ export default function CalendarPage() {
             ${index + 1}. ${event.title || "-"}
           </div>
           <div style="margin-top:6px;color:#475569;">
-            สถานะ: ${meta.label}
+            สถานะ: ${getStatusBadgeHtml(meta)}
           </div>
           <div style="margin-top:4px;color:#475569;">
             เวลา: ${formatThaiDateTime(displayStart)} - ${formatThaiDateTime(displayEnd)}
@@ -743,7 +796,7 @@ export default function CalendarPage() {
         html: `
           <div style="text-align:left;font-size:25px;line-height:1.7;color:#1f2937">
             <div><b>คนขับ:</b> ${resource.driver_name || "-"}</div>
-            <div><b>ประเภท:</b> ${meta.label}</div>
+            <div><b>ประเภท:</b> ${getStatusBadgeHtml(meta)}</div>
             <div><b>เหตุผล:</b> ${resource.reason || "-"}</div>
             <div><b>เวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
             <div><b>เวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
@@ -773,7 +826,7 @@ export default function CalendarPage() {
           <div><b>ปลายทาง:</b> ${booking.destination || "-"}</div>
           <div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>
           <div><b>คนขับ:</b> ${getDriverLabel(booking)}</div>
-          <div><b>สถานะ:</b> ${meta.label}</div>
+          <div><b>สถานะ:</b> ${getStatusBadgeHtml(meta)}</div>
           ${booking.staff_note ? `<div><b>หมายเหตุเจ้าหน้าที่:</b> ${booking.staff_note}</div>` : ""}
         </div>
       `,
@@ -805,6 +858,21 @@ export default function CalendarPage() {
     [calendarEvents, handleShowMoreEvents]
   );
 
+  const handlePendingBadgeClick = useCallback(
+    (date) => {
+      const dateKey = toCalendarDateKey(date);
+      const pendingEvents = calendarEvents
+        .filter((event) => {
+          const status = String(event.resource?.status || "").toUpperCase();
+          return status === "PENDING" && toCalendarDateKey(event.start) === dateKey;
+        })
+        .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+      handleShowMoreEvents(pendingEvents, date);
+    },
+    [calendarEvents, handleShowMoreEvents]
+  );
+
   const dayCellClassNames = useCallback(
     (arg) => {
       const classes = [];
@@ -825,6 +893,45 @@ export default function CalendarPage() {
       return classes;
     },
     [thaiHolidayMap]
+  );
+
+  const dayCellContent = useCallback(
+    (arg) => {
+      const dateKey = toCalendarDateKey(arg.date);
+      const pendingCount = pendingCountByDate.get(dateKey);
+
+      return (
+        <div style={{ display: "grid", gap: 4 }}>
+          <div className="fc-daygrid-day-number">{arg.dayNumberText}</div>
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                handlePendingBadgeClick(arg.date);
+              }}
+              style={{
+                border: "none",
+                borderRadius: 6,
+                background: "#fef3c7",
+                color: "#000000",
+                padding: "2px 6px",
+                minHeight: 0,
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1.3,
+                textAlign: "left",
+                cursor: "pointer",
+              }}
+            >
+              +{pendingCount} รออนุมัติ
+            </button>
+          )}
+        </div>
+      );
+    },
+    [handlePendingBadgeClick, pendingCountByDate]
   );
 
   return (
@@ -936,17 +1043,15 @@ export default function CalendarPage() {
               expandRows={true}
               stickyHeaderDates={true}
               moreLinkContent={(args) => ({
-                html: `<div class="calendar-more-pill">+${args.num} เพิ่มเติม</div>`,
+                html: `<div class="calendar-more-pill">+${args.num}</div>`,
               })}
-              eventOrder={(a, b) => {
-                const aDuration = new Date(a.end || a.start).getTime() - new Date(a.start).getTime();
-                const bDuration = new Date(b.end || b.start).getTime() - new Date(b.start).getTime();
-
-                return bDuration - aDuration;
+              moreLinkDidMount={(arg) => {
+                arg.el.title = "ดูรายการทั้งหมดของวันนี้";
               }}
               fixedWeekCount={false}
               showNonCurrentDates={true}
               headerToolbar={false}
+              dayCellContent={dayCellContent}
               dayCellClassNames={dayCellClassNames}
             />
 
