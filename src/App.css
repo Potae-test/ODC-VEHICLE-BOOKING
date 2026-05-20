@@ -2323,6 +2323,36 @@ label {
   gap: 12px;
 }
 
+.driver-jobs-table-section {
+  margin-top: 18px;
+}
+
+.driver-jobs-table-section .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.driver-jobs-table-section table td {
+  vertical-align: top;
+}
+
+.driver-jobs-table-section .action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.driver-jobs-table-section .section-counter {
+  font-weight: 800;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
 .driver-job-card {
   background: #ffffff;
   border: 1px solid #dbe6f3;
@@ -2507,6 +2537,10 @@ label {
 
   .driver-job-card-head {
     flex-direction: column;
+  }
+
+  .driver-jobs-table-section .table-wrap {
+    overflow-x: auto;
   }
 
   .driver-job-head-meta {

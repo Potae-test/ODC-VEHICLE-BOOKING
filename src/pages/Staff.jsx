@@ -19,6 +19,7 @@ import {
   showSuccess,
 } from "../utils/alert";
 import { hasPermission } from "../permissions";
+import { FEATURES } from "../config/features";
 
 const ITEMS_PER_PAGE = 2;
 
@@ -68,7 +69,7 @@ export default function Staff() {
   async function loadData() {
     const [bookingData, vehicleData, driverData, unavailableData] = await Promise.all([
       getBookings(),
-      getVehicles(),
+      FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
       getUsers(),
       getDriverUnavailable(),
     ]);
@@ -217,7 +218,7 @@ export default function Staff() {
   async function handleApprove(booking) {
     const data = selected[booking.booking_id] || {};
 
-    if (!data.vehicle_id) {
+    if (FEATURES.vehicleModule && !data.vehicle_id) {
       showError("กรุณาเลือกรถ");
       return;
     }
@@ -227,9 +228,11 @@ export default function Staff() {
       return;
     }
 
-    const vehicle = vehicles.find((v) => v.vehicle_id === data.vehicle_id);
+    const vehicle = FEATURES.vehicleModule
+      ? vehicles.find((v) => v.vehicle_id === data.vehicle_id)
+      : null;
 
-    if (!vehicle || !isVehicleAvailable(vehicle, booking, bookings)) {
+    if (FEATURES.vehicleModule && (!vehicle || !isVehicleAvailable(vehicle, booking, bookings))) {
       showError("รถคันนี้ไม่ว่าง หรือไม่พร้อมใช้งาน กรุณาเลือกรถคันอื่น");
       return;
     }
@@ -275,7 +278,7 @@ export default function Staff() {
       await approveBooking({
         booking_id: booking.booking_id,
         booking_no: booking.booking_no || "",
-        vehicle_id: data.vehicle_id,
+        vehicle_id: FEATURES.vehicleModule ? data.vehicle_id || "" : "",
         assigned_user_id: data.assigned_user_id || "",
         assigned_user_name: data.assigned_user_name,
         staff_note: data.staff_note || "",
@@ -461,7 +464,7 @@ export default function Staff() {
                   {b.purpose || "-"}
                 </div>
 
-                <div className="staff-info-item">
+                {FEATURES.vehicleModule && <div className="staff-info-item">
                   <b>รถว่าง</b>
                   {
                     vehicles.filter((v) =>
@@ -469,12 +472,13 @@ export default function Staff() {
                     ).length
                   }{" "}
                   / {vehicles.length} คัน
-                </div>
+                </div>}
               </div>
 
               {canApproveBookings && (
               <div className="staff-action-grid">
-                <div>
+                {FEATURES.vehicleModule && (
+                  <div>
                   <label>เลือกรถ</label>
                   <select
                     value={selected[b.booking_id]?.vehicle_id || ""}
@@ -499,7 +503,8 @@ export default function Staff() {
                       );
                     })}
                   </select>
-                </div>
+                  </div>
+                )}
 
                 <div>
                   <label>เลือกผู้ใช้</label>
@@ -621,7 +626,7 @@ export default function Staff() {
 
                 <div className="staff-info-item">
                   <b>รถ</b>
-                  {b.vehicle_id || "-"}
+                  {FEATURES.vehicleModule ? (b.vehicle_id || "-") : null}
                 </div>
 
                 <div className="staff-info-item">

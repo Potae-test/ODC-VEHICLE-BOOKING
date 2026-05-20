@@ -21,6 +21,7 @@ import ThaiDateTimeField from "../components/common/ThaiDateTimeField";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
+import { FEATURES } from "../config/features";
 
 const ROWS_PER_PAGE = 5;
 
@@ -215,24 +216,28 @@ function getBookingDetailFields({ booking, vehicleMap }) {
       roles: ADMIN_DETAIL_ROLES,
       value: booking.booking_no || "-",
     },
-    {
-      key: "vehicle_id",
-      label: "vehicle_id",
-      roles: ADMIN_DETAIL_ROLES,
-      value: booking.vehicle_id || "-",
-    },
+    ...(FEATURES.vehicleModule
+      ? [{
+          key: "vehicle_id",
+          label: "vehicle_id",
+          roles: ADMIN_DETAIL_ROLES,
+          value: booking.vehicle_id || "-",
+        }]
+      : []),
     {
       key: "assigned_user_id",
       label: "assigned_user_id",
       roles: ADMIN_DETAIL_ROLES,
       value: booking.assigned_user_id || "-",
     },
-    {
-      key: "vehicle_type_request",
-      label: "vehicle_type_request",
-      roles: ADMIN_DETAIL_ROLES,
-      value: getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""),
-    },
+    ...(FEATURES.vehicleModule
+      ? [{
+          key: "vehicle_type_request",
+          label: "vehicle_type_request",
+          roles: ADMIN_DETAIL_ROLES,
+          value: getVehicleTypeText(booking.vehicle_type_request || booking.vehicle_type || ""),
+        }]
+      : []),
     {
       key: "actual_start_by",
       label: "actual_start_by",
@@ -277,12 +282,14 @@ function getBookingDetailFields({ booking, vehicleMap }) {
       roles: ADMIN_DETAIL_ROLES,
       value: booking.updated_by || "-",
     },
-    {
-      key: "vehicle_label",
-      label: "รถที่ได้รับ",
-      roles: ADMIN_DETAIL_ROLES,
-      value: getBookingVehicleLabel(booking, vehicleMap),
-    },
+    ...(FEATURES.vehicleModule
+      ? [{
+          key: "vehicle_label",
+          label: "รถที่ได้รับ",
+          roles: ADMIN_DETAIL_ROLES,
+          value: getBookingVehicleLabel(booking, vehicleMap),
+        }]
+      : []),
     {
       key: "manual_override_reason",
       label: "manual_override_reason",
@@ -646,6 +653,7 @@ const BookingTableRow = memo(function BookingTableRow({
   booking,
   rowNumber,
   vehicleMap,
+  showVehicleColumn,
   canViewBookingDetail,
   canProcessBookings,
   canBackdateComplete,
@@ -679,7 +687,7 @@ const BookingTableRow = memo(function BookingTableRow({
       <td>{formatBookingDateTimeDisplay(booking.start_datetime)}</td>
       <td>{formatBookingDateTimeDisplay(booking.end_datetime)}</td>
       <td>{booking.destination || "-"}</td>
-      <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
+      {showVehicleColumn && <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>}
       <td>{getBookingDriverLabel(booking)}</td>
       <td>
         <span className={`status ${statusMeta.className}`} title={statusMeta.help}>
@@ -711,7 +719,9 @@ const BookingTableRow = memo(function BookingTableRow({
                 {processing === "process"
                   ? "Processing..."
                   : status === "APPROVED"
-                    ? "เปลี่ยนคนขับ/รถ"
+                    ? FEATURES.vehicleModule
+                      ? "เปลี่ยนคนขับ/รถ"
+                      : "เปลี่ยนคนขับ"
                     : "อนุมัติ"}
               </button>
             )}
@@ -801,7 +811,7 @@ export default function Booking() {
 
       const [bookingData, vehicleData, driverData, unavailableData] = await Promise.all([
         getBookings(),
-        getVehicles(),
+        FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
         getUsers(),
         getDriverUnavailable(),
       ]);
@@ -889,7 +899,9 @@ export default function Booking() {
     const destination = debouncedFilters.destination.trim().toLowerCase();
     const status = normalizeStatus(debouncedFilters.status);
     const driverFilter = String(debouncedFilters.driver || "").trim();
-    const vehicleIdFilter = String(debouncedFilters.vehicle_id || "").trim();
+    const vehicleIdFilter = FEATURES.vehicleModule
+      ? String(debouncedFilters.vehicle_id || "").trim()
+      : "";
     const startFilter = debouncedFilters.start_datetime ? new Date(debouncedFilters.start_datetime).getTime() : null;
     const endFilter = debouncedFilters.end_datetime ? new Date(debouncedFilters.end_datetime).getTime() : null;
     const selectedDriverName = driverFilter
@@ -1004,6 +1016,9 @@ export default function Booking() {
             ${skippedDrivers.length > 0 ? `<div style="margin-top:8px;color:#475569;">ข้ามไป ${skippedDrivers.length} รายการ</div>` : ""}
           </div>
 
+          ${
+            FEATURES.vehicleModule
+              ? `
           <label>เลือกรถ</label>
           <select id="vehicle_id" class="swal2-select">
             <option value="">-- เลือกรถ --</option>
@@ -1026,6 +1041,9 @@ export default function Booking() {
               })
               .join("")}
           </select>
+          `
+              : ""
+          }
 
           <label>เลือกผู้ใช้</label>
           <select id="assigned_user_id" class="swal2-select">
@@ -1078,20 +1096,26 @@ export default function Booking() {
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
       preConfirm: () => {
-        const vehicle_id = document.getElementById("vehicle_id").value;
+        const vehicle_id = FEATURES.vehicleModule
+          ? document.getElementById("vehicle_id")?.value || ""
+          : "";
         const assigned_user_id = document.getElementById("assigned_user_id").value;
         const manual_override_reason = document.getElementById("manual_override_reason").value.trim();
         const staff_note = document.getElementById("staff_note").value.trim();
 
-        if (!vehicle_id || !assigned_user_id) {
-          Swal.showValidationMessage("กรุณาเลือกรถและผู้ใช้");
+        if (!assigned_user_id) {
+          Swal.showValidationMessage(
+            FEATURES.vehicleModule ? "กรุณาเลือกรถและผู้ใช้" : "กรุณาเลือกผู้ใช้"
+          );
           return false;
         }
 
-        const vehicle = vehicles.find((item) => item.vehicle_id === vehicle_id);
+        const vehicle = FEATURES.vehicleModule
+          ? vehicles.find((item) => item.vehicle_id === vehicle_id)
+          : null;
         const driver = drivers.find((item) => item.user_id === assigned_user_id);
 
-        if (!vehicle || !isVehicleAvailable(vehicle, booking, bookingGroups)) {
+        if (FEATURES.vehicleModule && (!vehicle || !isVehicleAvailable(vehicle, booking, bookingGroups))) {
           Swal.showValidationMessage("รถคันนี้ไม่ว่างหรือไม่พร้อมใช้งาน");
           return false;
         }
@@ -1128,7 +1152,7 @@ export default function Booking() {
         return {
           booking_id: booking.booking_id,
           booking_no: booking.booking_no || "",
-          vehicle_id,
+          vehicle_id: FEATURES.vehicleModule ? vehicle_id : "",
           assigned_user_id,
           assigned_user_name: driver.name,
           staff_note,
@@ -1222,6 +1246,9 @@ export default function Booking() {
                 .join("")}
             </select>
 
+            ${
+              FEATURES.vehicleModule
+                ? `
             <label>รถ</label>
             <select id="backdate_vehicle_id" class="swal2-select">
               <option value="">-- เลือกรถ --</option>
@@ -1234,6 +1261,9 @@ export default function Booking() {
                 })
                 .join("")}
               </select>
+              `
+                : ""
+            }
 
             <div id="backdate_actual_start_container"></div>
             <div id="backdate_actual_return_container"></div>
@@ -1286,7 +1316,9 @@ export default function Booking() {
         },
         preConfirm: () => {
           const assigned_user_id = document.getElementById("backdate_assigned_user_id").value.trim();
-          const vehicle_id = document.getElementById("backdate_vehicle_id").value.trim();
+          const vehicle_id = FEATURES.vehicleModule
+            ? document.getElementById("backdate_vehicle_id")?.value.trim() || ""
+            : "";
           const note = document.getElementById("backdate_note").value.trim();
           const actual_start_datetime = backdateActualStart || "";
           const actual_return_datetime = backdateActualReturn || "";
@@ -1296,20 +1328,17 @@ export default function Booking() {
             return false;
           }
 
-          if (!vehicle_id) {
-            Swal.showValidationMessage("กรุณาเลือกรถ");
-            return false;
-          }
-
           const driver = activeDrivers.find((item) => String(item.user_id || "").trim() === assigned_user_id);
-          const vehicle = vehicles.find((item) => String(item.vehicle_id || "").trim() === vehicle_id);
+          const vehicle = FEATURES.vehicleModule
+            ? vehicles.find((item) => String(item.vehicle_id || "").trim() === vehicle_id)
+            : null;
 
           if (!driver) {
             Swal.showValidationMessage("ไม่พบข้อมูลคนขับ");
             return false;
           }
 
-          if (!vehicle) {
+          if (FEATURES.vehicleModule && !vehicle) {
             Swal.showValidationMessage("ไม่พบข้อมูลรถ");
             return false;
           }
@@ -1327,7 +1356,7 @@ export default function Booking() {
           return {
             assigned_user_id,
             assigned_user_name: driver.name || "",
-            vehicle_id,
+            vehicle_id: FEATURES.vehicleModule ? vehicle_id : "",
             note,
             actual_start_datetime,
             actual_return_datetime,
@@ -1541,7 +1570,7 @@ export default function Booking() {
                 ล้างตัวกรอง
               </button>
             </div>
-          <div className="booking-filter-row-4" style={{ marginTop: 16 }}>
+          <div className="booking-filter-row-3" style={{ marginTop: 16 }}>
             <div>
               <label>ผู้จอง</label>
               <input
@@ -1563,22 +1592,24 @@ export default function Booking() {
               </select>
             </div>
 
-            <div>
-              <label>ทะเบียนรถ</label>
-              <select
-                value={filters.vehicle_id}
-                onChange={(e) => setFilter("vehicle_id", e.target.value)}
-              >
-                <option value="">ทั้งหมด</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
-                    {vehicle.vehicle_code
-                      ? `${vehicle.vehicle_code}${vehicle.plate_no || vehicle.license_plate ? ` / ${vehicle.plate_no || vehicle.license_plate}` : ""}`
-                      : vehicle.vehicle_id || "-"}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {FEATURES.vehicleModule && (
+              <div>
+                <label>ทะเบียนรถ</label>
+                <select
+                  value={filters.vehicle_id}
+                  onChange={(e) => setFilter("vehicle_id", e.target.value)}
+                >
+                  <option value="">ทั้งหมด</option>
+                  {vehicles.map((vehicle) => (
+                    <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
+                      {vehicle.vehicle_code
+                        ? `${vehicle.vehicle_code}${vehicle.plate_no || vehicle.license_plate ? ` / ${vehicle.plate_no || vehicle.license_plate}` : ""}`
+                        : vehicle.vehicle_id || "-"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label>สถานะ</label>
@@ -1663,7 +1694,7 @@ export default function Booking() {
                       <th>เวลาไป</th>
                       <th>เวลากลับ</th>
                       <th>ปลายทาง</th>
-                      <th>รถ</th>
+                      {FEATURES.vehicleModule && <th>รถ</th>}
                       <th>คนขับ</th>
                       <th>สถานะ</th>
                       <th>หมายเหตุ</th>
@@ -1673,7 +1704,7 @@ export default function Booking() {
                   <tbody>
                     {pageItems.length === 0 ? (
                       <tr>
-                        <td colSpan="10">ไม่พบรายการจอง</td>
+                        <td colSpan={FEATURES.vehicleModule ? "10" : "9"}>ไม่พบรายการจอง</td>
                       </tr>
                     ) : (
                       pageItems.map((booking, rowIndex) => (
@@ -1682,6 +1713,7 @@ export default function Booking() {
                           booking={booking}
                           rowNumber={(page - 1) * ROWS_PER_PAGE + rowIndex + 1}
                           vehicleMap={vehicleMap}
+                          showVehicleColumn={FEATURES.vehicleModule}
                           canViewBookingDetail={canViewBookingDetail}
                           canProcessBookings={canProcessBookings}
                           canBackdateComplete={canBackdateComplete}

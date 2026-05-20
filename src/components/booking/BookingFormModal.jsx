@@ -5,6 +5,7 @@ import { createBooking, updateBooking } from "../../api";
 import { showError, showSuccess } from "../../utils/alert";
 import ThaiDateTimeField from "../common/ThaiDateTimeField";
 import { parseAppDateTime, toLocalDateTimeString } from "../../utils/datetime";
+import { FEATURES } from "../../config/features";
 
 const DEFAULT_VEHICLE_TYPES = ["VAN", "SEDAN", "MOTORCYCLE", "OTHER"];
 
@@ -146,9 +147,13 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       <div class="booking-form-full-row booking-datetime-stack" id="booking_datetime_mount"></div>
 
       <label>ประเภทรถ</label>
-      <select id="vehicle_type_request" class="swal2-select">
+      ${
+        FEATURES.vehicleModule
+          ? `<select id="vehicle_type_request" class="swal2-select">
         ${vehicleTypeOptions}
-      </select>
+      </select>`
+          : ""
+      }
 
       <label>ปลายทาง</label>
       <textarea
@@ -231,6 +236,13 @@ const BookingFormModal = forwardRef(function BookingFormModal(
           const modal = Swal.getPopup();
           const warningEl = modal?.querySelector("#booking_overlap_warning");
           const datetimeMount = modal?.querySelector("#booking_datetime_mount");
+          if (!FEATURES.vehicleModule) {
+            modal?.querySelectorAll("label").forEach((label) => {
+              if (label.nextElementSibling?.tagName === "LABEL") {
+                label.style.display = "none";
+              }
+            });
+          }
 
           if (!warningEl || !datetimeMount) return;
 
@@ -270,7 +282,9 @@ const BookingFormModal = forwardRef(function BookingFormModal(
           const phone = document.getElementById("phone")?.value.trim();
           const start_datetime = datetimeState.start_datetime;
           const end_datetime = datetimeState.end_datetime;
-          const vehicle_type_request = document.getElementById("vehicle_type_request")?.value.trim();
+          const vehicle_type_request = FEATURES.vehicleModule
+            ? document.getElementById("vehicle_type_request")?.value.trim() || ""
+            : "";
           const destination = document.getElementById("destination")?.value.trim();
           const purpose = document.getElementById("purpose")?.value.trim();
           const isBackdatedInput = document.getElementById("is_backdated");

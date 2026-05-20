@@ -4,6 +4,9 @@ import { completeTrip, driverCancelJob, getBookings, getBookingsFresh, getVehicl
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showError, showSuccess } from "../utils/alert";
+import { FEATURES } from "../config/features";
+
+const DRIVER_JOBS_PAGE_SIZE = 5;
 
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
@@ -85,6 +88,7 @@ function compactText(value) {
 }
 
 function formatVehicleLabel(booking, vehicleMap) {
+  if (!FEATURES.vehicleModule) return "-";
   const vehicle = vehicleMap.get(String(booking.vehicle_id || "").trim());
 
   if (!vehicle) return "-";
@@ -220,6 +224,79 @@ function getStatusMeta(status) {
   return { label: getStatusLabel(status), className: "gray" };
 }
 
+function getTotalPages(items, pageSize = DRIVER_JOBS_PAGE_SIZE) {
+  return Math.max(1, Math.ceil(items.length / pageSize));
+}
+
+function paginateItems(items, page, pageSize = DRIVER_JOBS_PAGE_SIZE) {
+  const start = (page - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}
+
+function renderStatusBadge(status) {
+  const statusMeta = getStatusMeta(status);
+  return <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>;
+}
+
+function PaginationControls({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null;
+
+  return (
+    <div className="pagination">
+      {Array.from({ length: totalPages }).map((_, index) => (
+        <button
+          key={index}
+          type="button"
+          className={page === index + 1 ? "active-page" : ""}
+          onClick={() => onChange(index + 1)}
+        >
+          {index + 1}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DriverJobTableActions({
+  booking,
+  processing,
+  onShowDetails,
+  onCancelJob,
+  onStart,
+  onComplete,
+  canStart,
+  canComplete,
+}) {
+  const status = normalizeStatus(booking.status);
+  const disabled = Boolean(processing);
+
+  return (
+    <div className="action-buttons">
+      <button type="button" className="driver-job-detail-button" disabled={disabled} onClick={() => onShowDetails(booking)}>
+        ดูรายละเอียด
+      </button>
+
+      {status === "APPROVED" && onCancelJob && (
+        <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
+          ยกเลิกงาน
+        </button>
+      )}
+
+      {canStart && status === "APPROVED" && (
+        <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
+          รับงาน / ออกรถ
+        </button>
+      )}
+
+      {canComplete && status === "IN_USE" && (
+        <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
+          จบงาน / คืนรถ
+        </button>
+      )}
+    </div>
+  );
+}
+
 const JobCard = memo(function JobCard({
   booking,
   vehicleMap,
@@ -266,10 +343,12 @@ const JobCard = memo(function JobCard({
           <label>เวลาสิ้นสุด</label>
           <b title={endLabel}>{endLabel}</b>
         </div>
-        <div>
-          <label>รถ / ป้ายทะเบียน</label>
-          <b title={vehicleLabel}>{vehicleLabel}</b>
-        </div>
+        {FEATURES.vehicleModule && (
+          <div>
+            <label>รถ / ป้ายทะเบียน</label>
+            <b title={vehicleLabel}>{vehicleLabel}</b>
+          </div>
+        )}
         <div>
           <label>มอบหมายให้</label>
           <b title={assignedUserLabel}>{assignedUserLabel}</b>
@@ -315,6 +394,8 @@ export default function DriverJobs() {
   const [error, setError] = useState("");
   const [waitingSearch, setWaitingSearch] = useState("");
   const [processingAction, setProcessingAction] = useState(null);
+  const [pendingJobsPage, setPendingJobsPage] = useState(1);
+  const [todayJobsPage, setTodayJobsPage] = useState(1);
   const debouncedWaitingSearch = useDebouncedValue(waitingSearch);
 
   const currentUser = useMemo(() => getCurrentUser(), []);
@@ -347,7 +428,10 @@ export default function DriverJobs() {
       setError("");
 
       const bookingFetcher = options.freshBookings || options.refreshOnly ? getBookingsFresh : getBookings;
-      const [bookingData, vehicleData] = await Promise.all([bookingFetcher(), getVehicles()]);
+      const [bookingData, vehicleData] = await Promise.all([
+        bookingFetcher(),
+        FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
+      ]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
@@ -412,6 +496,20 @@ export default function DriverJobs() {
     () => waitingJobs.filter((booking) => matchesWaitingSearch(booking, debouncedWaitingSearch)),
     [debouncedWaitingSearch, waitingJobs]
   );
+  const pendingJobs = filteredWaitingJobs;
+  const pendingJobsTotalPages = getTotalPages(pendingJobs);
+  const todayJobsTotalPages = getTotalPages(todayJobs);
+  const paginatedPendingJobs = paginateItems(pendingJobs, pendingJobsPage);
+  const paginatedTodayJobs = paginateItems(todayJobs, todayJobsPage);
+  const driverJobTableColSpan = FEATURES.vehicleModule ? 9 : 8;
+
+  useEffect(() => {
+    setPendingJobsPage(1);
+  }, [pendingJobs]);
+
+  useEffect(() => {
+    setTodayJobsPage(1);
+  }, [todayJobs]);
 
   const handleStart = useCallback(async (booking) => {
     if (processingAction) return;
@@ -619,7 +717,7 @@ export default function DriverJobs() {
           <div><span>เวลาสิ้นสุด</span><b>${compactText(formatThaiDateTime(booking.end_datetime))}</b></div>
           <div><span>ปลายทาง</span><b>${compactText(booking.destination)}</b></div>
           <div><span>เหตุผล</span><b>${compactText(booking.purpose)}</b></div>
-          <div><span>รถ / ป้ายทะเบียน</span><b>${compactText(vehicleLabel)}</b></div>
+          ${FEATURES.vehicleModule ? `<div><span>รถ / ป้ายทะเบียน</span><b>${compactText(vehicleLabel)}</b></div>` : ""}
           <div><span>ผู้รับผิดชอบงาน</span><b>${compactText(booking.assigned_user_name)}</b></div>
           <div><span>ผู้กดรับงานจริง</span><b>${compactText(booking.actual_start_by)}</b></div>
           <div><span>ผู้กดคืนรถจริง</span><b>${compactText(booking.actual_return_by)}</b></div>
@@ -688,81 +786,151 @@ export default function DriverJobs() {
           </div>
 
           <div className="form-card">
-            <div className="section-header">
-              <h3>งานวันนี้</h3>
-              <span className="section-counter">{todayJobs.length} งาน</span>
-            </div>
-
-            {todayJobs.length === 0 ? (
-              <div className="driver-empty">ไม่มีงานที่มีกำหนดวันนี้</div>
-            ) : (
-              <div className="driver-job-list">
-                {todayJobs.map((booking) => (
-                  <JobCard
-                    key={booking.booking_id}
-                    booking={booking}
-                    vehicleMap={vehicleMap}
-                    onStart={handleStart}
-                    onComplete={handleComplete}
-                    onCancelJob={handleCancelJob}
-                    onShowDetails={showDetails}
-                    canStart={canStartTrip}
-                    canComplete={canCompleteTrip}
-                    currentUser={currentUser}
-                    currentRole={currentRole}
-                    processing={
-                      processingAction?.bookingId === booking.booking_id
-                        ? processingAction.type
-                        : ""
-                    }
-                  />
-                ))}
+            <div className="driver-jobs-table-section">
+              <div className="section-header">
+                <h3>งานวันนี้</h3>
+                <span className="section-counter">{todayJobs.length} รายการ</span>
               </div>
-            )}
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ลำดับ</th>
+                      <th>ผู้จอง</th>
+                      <th>เวลาไป</th>
+                      <th>เวลากลับ</th>
+                      <th>ปลายทาง</th>
+                      {FEATURES.vehicleModule && <th>รถ</th>}
+                      <th>สถานะ</th>
+                      <th>หมายเหตุ</th>
+                      <th>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTodayJobs.length === 0 ? (
+                      <tr>
+                        <td colSpan={driverJobTableColSpan}>ไม่มีงานวันนี้</td>
+                      </tr>
+                    ) : (
+                      paginatedTodayJobs.map((job, index) => (
+                        <tr key={job.booking_id || index}>
+                          <td>{(todayJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
+                          <td>{job.requester_name || "-"}</td>
+                          <td>{formatThaiDateTime(job.start_datetime)}</td>
+                          <td>{formatThaiDateTime(job.end_datetime)}</td>
+                          <td>{job.destination || "-"}</td>
+                          {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
+                          <td>{renderStatusBadge(job.status)}</td>
+                          <td>{job.staff_note || job.note || "-"}</td>
+                          <td className="action-buttons">
+                            <DriverJobTableActions
+                              booking={job}
+                              processing={
+                                processingAction?.bookingId === job.booking_id
+                                  ? processingAction.type
+                                  : ""
+                              }
+                              onShowDetails={showDetails}
+                              onCancelJob={handleCancelJob}
+                              onStart={handleStart}
+                              onComplete={handleComplete}
+                              canStart={canStartTrip}
+                              canComplete={canCompleteTrip}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <PaginationControls
+                page={todayJobsPage}
+                totalPages={todayJobsTotalPages}
+                onChange={setTodayJobsPage}
+              />
+            </div>
           </div>
 
           <div className="form-card">
-            <div className="section-header">
-              <h3>งานที่รออยู่ทั้งหมด</h3>
-              <span className="section-counter">{filteredWaitingJobs.length} / {waitingJobs.length} งาน</span>
-            </div>
+            <div className="driver-jobs-table-section">
+              <div className="section-header">
+                <h3>งานที่รออยู่ทั้งหมด</h3>
+                <span className="section-counter">{pendingJobs.length} รายการ</span>
+              </div>
 
-            <div className="driver-job-search">
-              <input
-                type="search"
-                value={waitingSearch}
-                onChange={(event) => setWaitingSearch(event.target.value)}
-                placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
-                aria-label="ค้นหางานที่รออยู่ทั้งหมด"
+              <div className="driver-job-search">
+                <input
+                  type="search"
+                  value={waitingSearch}
+                  onChange={(event) => setWaitingSearch(event.target.value)}
+                  placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
+                  aria-label="ค้นหางานที่รออยู่ทั้งหมด"
+                />
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ลำดับ</th>
+                      <th>ผู้จอง</th>
+                      <th>เวลาไป</th>
+                      <th>เวลากลับ</th>
+                      <th>ปลายทาง</th>
+                      {FEATURES.vehicleModule && <th>รถ</th>}
+                      <th>สถานะ</th>
+                      <th>หมายเหตุ</th>
+                      <th>จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedPendingJobs.length === 0 ? (
+                      <tr>
+                        <td colSpan={driverJobTableColSpan}>ไม่มีงานที่รออยู่</td>
+                      </tr>
+                    ) : (
+                      paginatedPendingJobs.map((job, index) => (
+                        <tr key={job.booking_id || index}>
+                          <td>{(pendingJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
+                          <td>{job.requester_name || "-"}</td>
+                          <td>{formatThaiDateTime(job.start_datetime)}</td>
+                          <td>{formatThaiDateTime(job.end_datetime)}</td>
+                          <td>{job.destination || "-"}</td>
+                          {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
+                          <td>{renderStatusBadge(job.status)}</td>
+                          <td>{job.staff_note || job.note || "-"}</td>
+                          <td className="action-buttons">
+                            <DriverJobTableActions
+                              booking={job}
+                              processing={
+                                processingAction?.bookingId === job.booking_id
+                                  ? processingAction.type
+                                  : ""
+                              }
+                              onShowDetails={showDetails}
+                              onCancelJob={handleCancelJob}
+                              onStart={handleStart}
+                              onComplete={handleComplete}
+                              canStart={canStartTrip}
+                              canComplete={canCompleteTrip}
+                            />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <PaginationControls
+                page={pendingJobsPage}
+                totalPages={pendingJobsTotalPages}
+                onChange={setPendingJobsPage}
               />
             </div>
-
-            {filteredWaitingJobs.length === 0 ? (
-              <div className="driver-empty">ไม่มีงานที่รออยู่ตามเงื่อนไขนี้</div>
-            ) : (
-              <div className="driver-job-list">
-                {filteredWaitingJobs.map((booking) => (
-                  <JobCard
-                    key={booking.booking_id}
-                    booking={booking}
-                    vehicleMap={vehicleMap}
-                    onStart={handleStart}
-                    onComplete={handleComplete}
-                    onCancelJob={handleCancelJob}
-                    onShowDetails={showDetails}
-                    canStart={canStartTrip}
-                    canComplete={canCompleteTrip}
-                    currentUser={currentUser}
-                    currentRole={currentRole}
-                    processing={
-                      processingAction?.bookingId === booking.booking_id
-                        ? processingAction.type
-                        : ""
-                    }
-                  />
-                ))}
-              </div>
-            )}
           </div>
 
         </>

@@ -13,6 +13,7 @@ import BookingFormModal from "../components/booking/BookingFormModal";
 import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
 import { formatThaiDateTime } from "../utils/date";
+import { FEATURES } from "../config/features";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -511,7 +512,7 @@ export default function CalendarPage() {
 
       const [bookingData, vehicleData, userData, holidayData, unavailableData, queueData] = await Promise.all([
         getBookings(options.refreshOnly ? { fresh: true } : {}),
-        getVehicles(),
+        FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
         getUsers(),
         getThaiHolidays(options.refreshOnly ? { fresh: true } : {}),
         getDriverUnavailable(options.refreshOnly ? { fresh: true } : {}),
@@ -824,7 +825,7 @@ export default function CalendarPage() {
           <div><b>วันเวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
           <div><b>วันเวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
           <div><b>ปลายทาง:</b> ${booking.destination || "-"}</div>
-          <div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>
+          ${FEATURES.vehicleModule ? `<div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>` : ""}
           <div><b>คนขับ:</b> ${getDriverLabel(booking)}</div>
           <div><b>สถานะ:</b> ${getStatusBadgeHtml(meta)}</div>
           ${booking.staff_note ? `<div><b>หมายเหตุเจ้าหน้าที่:</b> ${booking.staff_note}</div>` : ""}

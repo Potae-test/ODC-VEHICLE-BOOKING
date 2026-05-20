@@ -718,13 +718,6 @@ function approveBooking(data) {
       message: "booking_id is required"
     });
   }
-  if (!data.vehicle_id) {
-    return jsonOutput({
-      success: false,
-      message: "vehicle_id is required"
-    });
-  }
-
   const row = findRowByBookingId(table, data.booking_id);
   logBookingAction("approveBooking", data.booking_id, row);
   if (row <= 1) {
@@ -738,19 +731,21 @@ function approveBooking(data) {
   const currentBooking = {
     booking_id: values[currentRow][bookingIdCol],
     booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
-    vehicle_id: data.vehicle_id,
+    vehicle_id: data.vehicle_id || "",
     start_datetime: values[currentRow][startCol],
     end_datetime: values[currentRow][endCol]
   };
 
-  const availability = checkVehicleAvailability(currentBooking, table);
+  if (String(currentBooking.vehicle_id || "").trim()) {
+    const availability = checkVehicleAvailability(currentBooking, table);
 
-  if (!availability.available) {
-    return jsonOutput({
-      success: false,
-      message: availability.message,
-      conflict_booking_no: availability.conflict_booking_no
-    });
+    if (!availability.available) {
+      return jsonOutput({
+        success: false,
+        message: availability.message,
+        conflict_booking_no: availability.conflict_booking_no
+      });
+    }
   }
 
   const driverUnavailableConflict = getDriverUnavailableConflict(
@@ -779,7 +774,7 @@ function approveBooking(data) {
   const currentUserName = String(
     data.current_user_name || data.created_by || data.updated_by || data.staff_name || ""
   ).trim();
-  if (String(rowValues[assignedUserIdCol] || "").trim() && String(rowValues[vehicleIdCol] || "").trim()) {
+  if (String(rowValues[assignedUserIdCol] || "").trim()) {
     appendDriverJobLog_(
       createDriverJobLogPayload_({
         booking_id: values[currentRow][bookingIdCol],
@@ -1275,7 +1270,7 @@ function driverCancelJob(data) {
   rowValues[updatedAtCol] = now;
   setRowValues(sheet, row, rowValues);
 
-  if (vehicleSheet) {
+  if (vehicleSheet && currentVehicleId) {
     const vehicleTable = readSheetTable(vehicleSheet);
     const vehicleColumnMap = vehicleTable.columnMap;
     const vehicleIdLookupCol = vehicleColumnMap.vehicle_id;

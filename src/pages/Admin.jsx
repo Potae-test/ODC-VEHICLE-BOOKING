@@ -40,6 +40,7 @@ import {
   savePermissionConfig,
 } from "../permissions";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
+import { FEATURES } from "../config/features";
 import useMinimumLoading from "../hooks/useMinimumLoading";
 import Swal from "sweetalert2";
 
@@ -668,7 +669,7 @@ async function handleDeleteUser(u) {
 
   const summaryCards = useMemo(
     () => [
-      { title: "รถทั้งหมด", value: vehicles.length },
+      ...(FEATURES.vehicleModule ? [{ title: "รถทั้งหมด", value: vehicles.length }] : []),
       { title: "รายการจองทั้งหมด", value: bookings.length },
       { title: "รออนุมัติ", value: bookingStatusCounts.PENDING, className: "amber-box" },
       { title: "อนุมัติแล้ว", value: bookingStatusCounts.APPROVED, className: "blue-box" },
@@ -684,10 +685,10 @@ async function handleDeleteUser(u) {
   const canCreateDrivers = hasPermission(null, "drivers_create");
   const canEditDrivers = hasPermission(null, "drivers_edit");
   const canDeleteDrivers = hasPermission(null, "drivers_delete");
-  const canViewVehicles = hasPermission(null, "vehicles_view");
-  const canCreateVehicles = hasPermission(null, "vehicles_create");
-  const canEditVehicles = hasPermission(null, "vehicles_edit");
-  const canDeleteVehicles = hasPermission(null, "vehicles_delete");
+  const canViewVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_view");
+  const canCreateVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_create");
+  const canEditVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_edit");
+  const canDeleteVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_delete");
   const canViewUsers = hasPermission(null, "users_view");
   const canCreateUsers = hasPermission(null, "users_create");
   const canEditUsers = hasPermission(null, "users_edit");

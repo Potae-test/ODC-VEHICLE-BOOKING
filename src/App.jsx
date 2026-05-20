@@ -7,6 +7,7 @@ import {
   normalizeRole,
 } from "./permissions";
 import PageSkeleton from "./components/skeletons/PageSkeleton";
+import { FEATURES } from "./config/features";
 import "./App.css";
 
 const Cars = lazy(() => import("./pages/Cars"));
@@ -31,6 +32,11 @@ function getDefaultPageByRole(role) {
   if (normalizedRole === "USER") return "calendar";
 
   return "booking";
+}
+
+function isPageFeatureEnabled(page) {
+  if (page === "cars") return FEATURES.vehicleModule;
+  return true;
 }
 
 function getPathByPage(page) {
@@ -65,7 +71,7 @@ function getPageFromPath(pathname) {
 }
 
 export default function App() {
-  const [page, setPage] = useState("cars");
+  const [page, setPage] = useState(FEATURES.vehicleModule ? "cars" : "booking");
   const [user, setUser] = useState(null);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
 
@@ -78,9 +84,15 @@ export default function App() {
       const pathPage = getPageFromPath(window.location.pathname);
       const defaultPage = getDefaultPageByRole(savedUser.role);
       const nextPage = pathPage || defaultPage;
-      const nextPageAllowed = canAccessPage(savedUser.role, nextPage, permissionConfig);
+      const nextPageAllowed =
+        isPageFeatureEnabled(nextPage) && canAccessPage(savedUser.role, nextPage, permissionConfig);
       const firstAllowedPage = getFirstAllowedPage(savedUser.role, permissionConfig);
-      const finalPage = nextPageAllowed ? nextPage : firstAllowedPage || defaultPage;
+      const finalPage =
+        nextPageAllowed
+          ? nextPage
+          : [firstAllowedPage, defaultPage, "booking"].find(
+              (candidate) => candidate && isPageFeatureEnabled(candidate)
+            ) || "booking";
 
       setPage(finalPage);
       window.history.replaceState({}, "", getPathByPage(finalPage));
@@ -122,13 +134,17 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    if (canAccessPage(user.role, page, permissionConfig)) return;
+    if (isPageFeatureEnabled(page) && canAccessPage(user.role, page, permissionConfig)) return;
 
     const firstAllowedPage = getFirstAllowedPage(user.role, permissionConfig);
-    if (firstAllowedPage) setPage(firstAllowedPage);
+    const fallbackPage = [firstAllowedPage, getDefaultPageByRole(user.role), "booking"].find(
+      (candidate) => candidate && isPageFeatureEnabled(candidate)
+    );
+    if (fallbackPage) setPage(fallbackPage);
   }, [page, permissionConfig, user]);
 
   function goPage(nextPage) {
+    if (!isPageFeatureEnabled(nextPage)) return;
     if (!canAccessPage(user.role, nextPage, permissionConfig)) {
       alert("คุณไม่มีสิทธิ์เข้าถึงเมนูนี้");
       return;
@@ -139,7 +155,7 @@ export default function App() {
   function logout() {
     localStorage.removeItem("odc_user");
     setUser(null);
-    setPage("cars");
+    setPage(FEATURES.vehicleModule ? "cars" : "booking");
   }
 
   if (!user) {
@@ -148,9 +164,15 @@ export default function App() {
         onLogin={(loggedInUser) => {
           setUser(loggedInUser);
           const defaultPage = getDefaultPageByRole(loggedInUser.role);
-          const defaultPageAllowed = canAccessPage(loggedInUser.role, defaultPage, permissionConfig);
+          const defaultPageAllowed =
+            isPageFeatureEnabled(defaultPage) && canAccessPage(loggedInUser.role, defaultPage, permissionConfig);
           const firstAllowedPage = getFirstAllowedPage(loggedInUser.role, permissionConfig);
-          const nextPage = defaultPageAllowed ? defaultPage : firstAllowedPage || defaultPage;
+          const nextPage =
+            defaultPageAllowed
+              ? defaultPage
+              : [firstAllowedPage, defaultPage, "booking"].find(
+                  (candidate) => candidate && isPageFeatureEnabled(candidate)
+                ) || "booking";
 
           setPage(nextPage);
           window.history.replaceState({}, "", getPathByPage(nextPage));
@@ -159,7 +181,7 @@ export default function App() {
     );
   }
 
-  const hasPageAccess = canAccessPage(user.role, page, permissionConfig);
+  const hasPageAccess = isPageFeatureEnabled(page) && canAccessPage(user.role, page, permissionConfig);
 
   return (
     <div className="app-shell">
@@ -186,7 +208,7 @@ export default function App() {
 
       <div className="layout">
         <aside className="sidebar">
-          {canAccessPage(user.role, "cars", permissionConfig) && (
+          {FEATURES.vehicleModule && canAccessPage(user.role, "cars", permissionConfig) && (
             <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
               🚐 จัดการรถ
             </button>
@@ -268,7 +290,7 @@ export default function App() {
         <main className="main-content">
           <Suspense fallback={<PageSkeleton />}>
             {!hasPageAccess && <div className="form-card">คุณไม่มีสิทธิ์เข้าถึง</div>}
-            {hasPageAccess && page === "cars" && <Cars />}
+            {FEATURES.vehicleModule && hasPageAccess && page === "cars" && <Cars />}
             {hasPageAccess && page === "booking" && <Booking />}
             {hasPageAccess && page === "booking-cancellation-history" && <BookingCancellationHistory />}
             {hasPageAccess && page === "staff" && <Staff />}
