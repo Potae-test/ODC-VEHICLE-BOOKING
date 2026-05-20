@@ -52,6 +52,13 @@ const STATUS_META = {
   // },
 };
 
+const BOOKING_STATUS_COUNT_ITEMS = [
+  { status: "PENDING", label: "รอการอนุมัติ", className: "amber" },
+  { status: "APPROVED", label: "อนุมัติแล้ว", className: "blue" },
+  { status: "IN_USE", label: "กำลังใช้งาน", className: "green" },
+  { status: "COMPLETED", label: "เสร็จสิ้น", className: "gray" },
+];
+
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
@@ -922,6 +929,24 @@ export default function Booking() {
     });
   }, [activeDrivers, debouncedFilters, sortedBookings]);
 
+  const bookingStatusCounts = useMemo(() => {
+    const counts = {
+      PENDING: 0,
+      APPROVED: 0,
+      IN_USE: 0,
+      COMPLETED: 0,
+    };
+
+    filteredBookings.forEach((booking) => {
+      const status = normalizeStatus(booking.status);
+      if (Object.prototype.hasOwnProperty.call(counts, status)) {
+        counts[status] += 1;
+      }
+    });
+
+    return counts;
+  }, [filteredBookings]);
+
   const bookingPages = useMemo(() => totalPages(filteredBookings), [filteredBookings]);
   const pageItems = useMemo(() => paginate(filteredBookings, page), [filteredBookings, page]);
 
@@ -1107,6 +1132,7 @@ export default function Booking() {
           assigned_user_id,
           assigned_user_name: driver.name,
           staff_note,
+          current_user_name: currentUser?.name || currentUser?.email || "",
           recommended_driver_user_id: recommendedDriverId,
           recommended_driver_name: recommendedDriverName,
           assign_mode: hasRecommendation
@@ -1155,6 +1181,7 @@ export default function Booking() {
               ? result.value.manual_override_reason || result.value.staff_note || ""
               : recommendedReason,
           created_by: currentUser?.name || currentUser?.email || "",
+          assigned_by_name: currentUser?.name || currentUser?.email || "",
         });
       } catch (queueErr) {
         console.warn("confirmDriverQueueAssignment failed", queueErr);
@@ -1597,16 +1624,29 @@ export default function Booking() {
             </div>
           </div>
 
-          <div className="booking-create-wrapper">
-            {canCreateBookings && (
-              <button
-                type="button"
-                disabled={Boolean(processingAction)}
-                onClick={handleCreateBooking}
-              >
-                ➕ เพิ่มรายการจองใหม่
-              </button>
-            )}
+          <div className="booking-table-toolbar">
+            <div className="booking-status-counts">
+              {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
+                <span
+                  key={item.status}
+                  className={`booking-status-count ${item.className}`}
+                >
+                  +{bookingStatusCounts[item.status] || 0} {item.label}
+                </span>
+              ))}
+            </div>
+
+            <div className="booking-create-wrapper">
+              {canCreateBookings && (
+                <button
+                  type="button"
+                  disabled={Boolean(processingAction)}
+                  onClick={handleCreateBooking}
+                >
+                  ➕ เพิ่มรายการจองใหม่
+                </button>
+              )}
+            </div>
           </div>
           {visibleLoading ? (
             <TableSkeleton rows={5} columns={10} />

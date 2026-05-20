@@ -198,13 +198,25 @@ function appendDriverJobLog_(payload) {
   if (!sheet) return;
 
   const headers = getHeaders_(sheet);
+  ensureColumn(sheet, headers, "assigned_by_name");
+  ensureColumn(sheet, headers, "assigned_by");
   const row = headers.map((header) => payload[header] ?? "");
   sheet.appendRow(row);
 }
 
 function createDriverJobLogPayload_(data) {
-  const createdBy = String(
-    data.created_by || data.updated_by || data.staff_name || ""
+  const actor = String(
+    data.assigned_by_name ||
+    data.created_by ||
+    data.updated_by ||
+    data.staff_name ||
+    ""
+  ).trim();
+  const assignedByName = String(
+    data.assigned_by_name || actor
+  ).trim();
+  const assignedBy = String(
+    data.assigned_by || assignedByName
   ).trim();
 
   return {
@@ -222,7 +234,9 @@ function createDriverJobLogPayload_(data) {
     destination: data.destination || "",
     purpose: data.purpose || "",
     created_at: new Date().toISOString(),
-    created_by: createdBy,
+    created_by: actor,
+    assigned_by_name: assignedByName,
+    assigned_by: assignedBy,
   };
 }
 
@@ -780,7 +794,9 @@ function approveBooking(data) {
         end_datetime: rowValues[endCol] || "",
         destination: rowValues[columnMap.destination] || "",
         purpose: rowValues[columnMap.purpose] || "",
-        created_by: currentUserName || "STAFF",
+        staff_name: currentUserName || "",
+        created_by: currentUserName || "",
+        assigned_by_name: currentUserName || "",
       })
     );
   }
@@ -2883,7 +2899,9 @@ function confirmDriverQueueAssignment(data) {
   const assignedDriverName = String(data && data.assigned_driver_name || "").trim();
   const assignMode = String(data && data.assign_mode || "").trim().toUpperCase() || "AUTO_RECOMMENDED";
   const reason = String(data && data.reason || "").trim();
-  const createdBy = String(data && data.created_by || "").trim();
+  const actor = String(
+    data && (data.assigned_by_name || data.created_by || data.updated_by || data.staff_name) || ""
+  ).trim();
 
   if (!bookingId || !assignedDriverUserId || !assignedDriverName) {
     return jsonOutput({
@@ -2905,10 +2923,10 @@ function confirmDriverQueueAssignment(data) {
     row[queueTable.columnMap.last_assigned_at] = now;
     row[queueTable.columnMap.last_booking_id] = bookingId;
     row[queueTable.columnMap.updated_at] = now;
-    row[queueTable.columnMap.updated_by] = createdBy;
+    row[queueTable.columnMap.updated_by] = actor;
     setRowValues(ensureDriverQueueSheet(), queueRowNumber, row);
     queueAfter = String(queueOrder);
-    setDriverQueueStateValue_(queueOrder, createdBy);
+    setDriverQueueStateValue_(queueOrder, actor);
   }
 
   const logSheet = ensureDriverQueueLogsSheet();
@@ -2928,7 +2946,7 @@ function confirmDriverQueueAssignment(data) {
   logRow[logHeaders.indexOf("queue_before")] = queueBefore;
   logRow[logHeaders.indexOf("queue_after")] = queueAfter;
   logRow[logHeaders.indexOf("created_at")] = now;
-  logRow[logHeaders.indexOf("created_by")] = createdBy;
+  logRow[logHeaders.indexOf("created_by")] = actor;
   appendSheetRow(logSheet, logRow);
 
   return jsonOutput({

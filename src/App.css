@@ -2521,6 +2521,58 @@ label {
   justify-content: end;
   justify-items: end;
 }
+.booking-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.booking-status-counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.booking-status-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.booking-status-count.amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.booking-status-count.blue {
+  background: #dbeafe;
+  color: #1455c8;
+}
+
+.booking-status-count.green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.booking-status-count.gray {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.booking-table-toolbar .booking-create-wrapper {
+  margin-top: 0;
+  margin-left: auto;
+}
+
 .booking-create-wrapper{
   display:flex;
   justify-content:flex-end;

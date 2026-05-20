@@ -147,13 +147,12 @@ function getDetailKey(booking, index) {
   return booking.log_id || `${booking.booking_id || "log"}-${index}`;
 }
 
-function getLogCreatedBy(log) {
+function getDriverSummaryCreatedBy(log) {
   return (
+    log.assigned_by_name ||
     log.created_by ||
     log.updated_by ||
-    log.approved_by ||
-    log.assigned_by ||
-    log.actual_start_by ||
+    log.staff_name ||
     "-"
   );
 }
@@ -821,7 +820,7 @@ export default function DriverSummary() {
                                         </span>
                                       </td>
                                       <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescription(booking)}</td>
-                                      <td>{getLogCreatedBy(booking)}</td>
+                                      <td>{getDriverSummaryCreatedBy(booking)}</td>
                                     </tr>
                                   </tbody>
                                 </table>
