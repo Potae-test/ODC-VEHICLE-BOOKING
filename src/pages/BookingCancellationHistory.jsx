@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { deleteBookingCancellationHistory, getBookingCancellationHistory } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
@@ -152,6 +153,29 @@ export default function BookingCancellationHistory() {
     });
   }
 
+  function handleExportExcel() {
+    const rows = filteredHistory.map((item, index) => ({
+      ลำดับ: index + 1,
+      เลขที่รายการ: item.booking_no || item.cancellation_id || "-",
+      ผู้จอง: item.requester_name || "-",
+      ปลายทาง: item.destination || "-",
+      เหตุผลการยกเลิก: item.reason || "-",
+      ผู้ยกเลิก: item.cancelled_by || "-",
+      ยกเลิกเมื่อ: item.cancelled_at ? formatThaiDateTime(item.cancelled_at) : "-",
+      สถานะ: "ยกเลิกแล้ว",
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "ประวัติการยกเลิก");
+
+    XLSX.writeFile(
+      workbook,
+      `booking-cancellation-history-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  }
+
   async function handleDelete(item) {
     if (!canManageHistory) {
       return;
@@ -230,13 +254,24 @@ export default function BookingCancellationHistory() {
           <div className="section-header">
             <h3>รายการยกเลิกล่าสุด</h3>
 
-            <button
-              type="button"
-              className="warning-button booking-filter-clear-button"
-              onClick={clearFilters}
-            >
-              ล้างตัวกรอง
-            </button>
+            <div className="section-toolbar">
+              <button
+                type="button"
+                className="success-button"
+                disabled={filteredHistory.length === 0}
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </button>
+
+              <button
+                type="button"
+                className="warning-button booking-filter-clear-button"
+                onClick={clearFilters}
+              >
+                ล้างตัวกรอง
+              </button>
+            </div>
           </div>
 
           <div className="form-grid booking-filter-grid" style={{ marginTop: 16 }}>
@@ -338,3 +373,5 @@ export default function BookingCancellationHistory() {
     </div>
   );
 }
+
+

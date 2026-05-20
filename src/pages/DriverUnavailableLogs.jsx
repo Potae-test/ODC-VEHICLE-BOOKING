@@ -87,8 +87,8 @@ export default function DriverUnavailableLogs() {
     <div>
       <div className="page-header">
         <div>
-          <h2>ประวัติวันไม่รับงาน</h2>
-          <p>บันทึกการสร้าง แก้ไข และยกเลิกวันไม่รับงาน</p>
+          <h2>ประวัติการปฏิบัติงาน</h2>
+          <p>บันทึกการสร้าง แก้ไข และยกเลิกวันที่ไม่ปฏิบัติงาน</p>
         </div>
 
         <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>

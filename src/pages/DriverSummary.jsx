@@ -1,4 +1,5 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { getDriverJobLogs, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
@@ -102,7 +103,10 @@ function getDriverJobActionCategory(booking) {
   if (action === "ASSIGNED") return "approved";
   if (action === "STARTED") return "in_use";
   if (action === "COMPLETED") return "completed";
-  if (action === "DRIVER_CANCELLED") return "cancelled";
+  if (action === "DRIVER_CANCELLED") return "rejected";
+  if (action === "DRIVER_CANCEL_REQUESTED") return "requested";
+  if (action === "DRIVER_CANCEL_APPROVED") return "approved";
+  if (action === "DRIVER_CANCEL_REJECTED") return "rejected";
 
   return null;
 }
@@ -138,6 +142,71 @@ function getDriverJobActionClass(booking) {
   if (action === "COMPLETED") return "status gray";
   if (action === "STARTED") return "status green";
   if (action === "ASSIGNED") return "status blue";
+  if (action === "DRIVER_CANCELLED") return "status red";
+
+  return "status";
+}
+
+function getDriverJobActionCategoryV2(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "ASSIGNED") return "approved";
+  if (action === "STARTED") return "in_use";
+  if (action === "COMPLETED") return "completed";
+  if (action === "DRIVER_CANCEL_REQUESTED") return "requested";
+  if (action === "DRIVER_CANCEL_APPROVED") return "approved";
+  if (action === "DRIVER_CANCEL_REJECTED") return "rejected";
+  if (action === "DRIVER_CANCELLED") return "rejected";
+
+  return null;
+}
+
+function getDriverJobActionLabelV2(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "ASSIGNED") return "ได้มอบหมาย";
+  if (action === "STARTED") return "เริ่มใช้งาน";
+  if (action === "COMPLETED") return "เสร็จสิ้น";
+  if (action === "DRIVER_CANCEL_REQUESTED") return "ขอยกเลิกงาน";
+  if (action === "DRIVER_CANCEL_APPROVED") return "STAFF อนุมัติยกเลิก";
+  if (action === "DRIVER_CANCEL_REJECTED") return "STAFF ไม่อนุมัติยกเลิก";
+  if (action === "DRIVER_CANCELLED") return "คนขับยกเลิก";
+
+  return action || "-";
+}
+
+function getDriverJobActionDescriptionV2(booking) {
+  const action = normalizeAction(booking.action);
+  const reason = String(booking.reason || "").trim();
+
+  if (action === "ASSIGNED") return "ได้รับมอบหมายงาน";
+  if (action === "STARTED") return "เริ่มใช้งานรถ";
+  if (action === "COMPLETED") return "จบงาน / คืนรถ";
+  if (action === "DRIVER_CANCEL_REQUESTED") {
+    return reason ? `ขอยกเลิกงาน: ${reason}` : "ขอยกเลิกงาน";
+  }
+  if (action === "DRIVER_CANCEL_APPROVED") {
+    return reason ? `STAFF อนุมัติยกเลิก: ${reason}` : "STAFF อนุมัติยกเลิก";
+  }
+  if (action === "DRIVER_CANCEL_REJECTED") {
+    return reason ? `STAFF ไม่อนุมัติยกเลิก: ${reason}` : "STAFF ไม่อนุมัติยกเลิก";
+  }
+  if (action === "DRIVER_CANCELLED") {
+    return reason ? `คนขับยกเลิกงาน: ${reason}` : "คนขับยกเลิกงาน";
+  }
+
+  return reason || booking.action || "-";
+}
+
+function getDriverJobActionClassV2(booking) {
+  const action = normalizeAction(booking.action);
+
+  if (action === "COMPLETED") return "status gray";
+  if (action === "STARTED") return "status green";
+  if (action === "ASSIGNED") return "status blue";
+  if (action === "DRIVER_CANCEL_REQUESTED") return "status amber";
+  if (action === "DRIVER_CANCEL_APPROVED") return "status blue";
+  if (action === "DRIVER_CANCEL_REJECTED") return "status red";
   if (action === "DRIVER_CANCELLED") return "status red";
 
   return "status";
@@ -211,7 +280,7 @@ function isCountedStatus(booking) {
 }
 
 function isSummaryStatus(booking) {
-  return Boolean(getDriverJobActionCategory(booking));
+  return Boolean(getDriverJobActionCategoryV2(booking));
 }
 
 function isInRange(booking, range) {
@@ -250,7 +319,7 @@ function sortLatestFirst(bookings) {
 }
 
 function countByCategory(bookings, category) {
-  return bookings.filter((booking) => getDriverJobActionCategory(booking) === category).length;
+  return bookings.filter((booking) => getDriverJobActionCategoryV2(booking) === category).length;
 }
 
 function compareDriverUserIds(a, b) {
@@ -463,7 +532,10 @@ export default function DriverSummary() {
           completedCount: countByCategory(summaryBookings, "completed"),
           approvedCount: countByCategory(summaryBookings, "approved"),
           inUseCount: countByCategory(summaryBookings, "in_use"),
-          cancelledCount: countByCategory(summaryBookings, "cancelled"),
+          cancelledCount: countByCategory(summaryBookings, "rejected"),
+          requestedCount: countByCategory(summaryBookings, "requested"),
+          approvedCancelCount: countByCategory(summaryBookings, "approved"),
+          rejectedCancelCount: countByCategory(summaryBookings, "rejected"),
         };
       })
       .filter((row) => selectedDriver === "ALL" || row.key === selectedDriver)
@@ -501,6 +573,36 @@ export default function DriverSummary() {
     [visibleDriverRows, tablePage]
   );
   const handleOpenDetail = useCallback((driverKey) => setDetailDriver(driverKey), []);
+  const handleExportExcel = useCallback(() => {
+    const summaryRows = visibleDriverRows.map((row) => ({
+      คนขับ: row.name,
+      วันนี้: row.todayCount,
+      สัปดาห์นี้: row.weekCount,
+      เดือนนี้: row.monthCount,
+      รวมตามช่วงที่เลือก: row.selectedCount,
+    }));
+
+    const detailRows = visibleDriverRows.flatMap((row) =>
+      (row.allDetailBookings || []).map((booking) => ({
+        คนขับ: row.name,
+        ผู้จอง: booking.requester_name || "-",
+        เวลาไป: booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-",
+        เวลากลับ: booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-",
+        ปลายทาง: booking.destination || "-",
+        สถานะ: getDriverJobActionLabelV2(booking),
+        หมายเหตุ: getDriverJobActionDescriptionV2(booking),
+      }))
+    );
+
+    const workbook = XLSX.utils.book_new();
+    const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+    const detailSheet = XLSX.utils.json_to_sheet(detailRows);
+
+    XLSX.utils.book_append_sheet(workbook, summarySheet, "สรุปงานคนขับ");
+    XLSX.utils.book_append_sheet(workbook, detailSheet, "รายละเอียดงาน");
+
+    XLSX.writeFile(workbook, `driver-summary-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [visibleDriverRows]);
 
   if (!canViewDriverSummary) {
     return <div className="form-card">ไม่มีสิทธิ์เข้าถึงสรุปงานคนขับ</div>;
@@ -514,7 +616,19 @@ export default function DriverSummary() {
           <p>นับจำนวนงานจากรายการจองที่อนุมัติแล้ว กำลังใช้งาน หรือเสร็จสิ้น</p>
         </div>
 
-        <button disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>รีเฟรชข้อมูล</button>
+        <div className="section-toolbar">
+          <button
+            type="button"
+            className="warning-button"
+            disabled={visibleDriverRows.length === 0}
+            onClick={handleExportExcel}
+          >
+            Export Excel
+          </button>
+          <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
+            รีเฟรชข้อมูล
+          </button>
+        </div>
       </div>
 
       {!loading && !error && cardScope !== "NONE" && (
@@ -555,7 +669,7 @@ export default function DriverSummary() {
                 <b>งานล่าสุด</b>
                 <span>
                   {row.latest
-                    ? `${row.latest.booking_no || "-"} / ${getDriverJobActionLabel(row.latest)} / ${formatThaiDateTime(
+                    ? `${row.latest.booking_no || "-"} / ${getDriverJobActionLabelV2(row.latest)} / ${formatThaiDateTime(
                         row.latest.created_at || row.latest.updated_at || row.latest.start_datetime
                       )}`
                     : "-"}
@@ -645,6 +759,16 @@ export default function DriverSummary() {
           {selectedRange.label}: {formatThaiDateTime(selectedRange.start)} -{" "}
           {formatThaiDateTime(selectedRange.end)}
         </div>
+              
+          <button
+            type="button"
+            className="success-button"
+            disabled={visibleDriverRows.length === 0}
+            onClick={handleExportExcel}
+          >
+            Export Excel
+          </button>
+       
 
         {visibleLoading && <PageSkeleton />}
         {error && !visibleLoading && <p className="driver-summary-error">{error}</p>}
@@ -815,11 +939,11 @@ export default function DriverSummary() {
                                     <tr>
                                       {/* <td>{index + 1}</td> */}
                                       <td>
-                                        <span className={getDriverJobActionClass(booking)}>
-                                          {getDriverJobActionLabel(booking)}
+                                        <span className={getDriverJobActionClassV2(booking)}>
+                                          {getDriverJobActionLabelV2(booking)}
                                         </span>
                                       </td>
-                                      <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescription(booking)}</td>
+                                      <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescriptionV2(booking)}</td>
                                       <td>{getDriverSummaryCreatedBy(booking)}</td>
                                     </tr>
                                   </tbody>

@@ -294,6 +294,7 @@ export default function Staff() {
           assigned_driver_name: data.assigned_user_name || "",
           assign_mode: assignMode,
           reason: assignMode === "MANUAL_OVERRIDE" ? data.staff_note || queueReason : queueReason,
+          skipped_drivers_json: JSON.stringify(driverQueueRecommendation?.skipped || []),
           created_by: "STAFF",
         });
       } catch (queueErr) {

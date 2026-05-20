@@ -252,7 +252,7 @@ export default function App() {
               className={page === "driver-unavailable" ? "active" : ""}
               onClick={() => goPage("driver-unavailable")}
             >
-              📅 วันไม่รับงาน
+              📅 ปฏิบัติงาน
             </button>
           )}
 
@@ -261,7 +261,7 @@ export default function App() {
               className={page === "driver-unavailable-logs" ? "active" : ""}
               onClick={() => goPage("driver-unavailable-logs")}
             >
-              🕒 ประวัติวันไม่รับงาน
+              🕒 ประวัติปฏิบัติงาน
             </button>
           )}
 

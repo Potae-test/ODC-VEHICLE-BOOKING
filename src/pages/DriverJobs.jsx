@@ -1,6 +1,13 @@
 ﻿import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import Swal from "sweetalert2";
-import { completeTrip, driverCancelJob, getBookings, getBookingsFresh, getVehicles, startTrip } from "../api";
+import {
+  completeTrip,
+  getBookings,
+  getBookingsFresh,
+  getVehicles,
+  requestDriverCancelJob,
+  startTrip,
+} from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showError, showSuccess } from "../utils/alert";
@@ -224,6 +231,18 @@ function getStatusMeta(status) {
   return { label: getStatusLabel(status), className: "gray" };
 }
 
+function getDriverCancelRequestStatus(booking) {
+  return normalizeStatus(booking.driver_cancel_request_status);
+}
+
+function getDriverCancelRequestStateLabel(booking) {
+  const status = getDriverCancelRequestStatus(booking);
+  if (status === "PENDING") return "รอ STAFF อนุมัติยกเลิก";
+  if (status === "REJECTED") return "ไม่อนุมัติการยกเลิก";
+  if (status === "APPROVED") return "อนุมัติยกเลิกแล้ว";
+  return "";
+}
+
 function getTotalPages(items, pageSize = DRIVER_JOBS_PAGE_SIZE) {
   return Math.max(1, Math.ceil(items.length / pageSize));
 }
@@ -268,6 +287,8 @@ function DriverJobTableActions({
   canComplete,
 }) {
   const status = normalizeStatus(booking.status);
+  const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
   const disabled = Boolean(processing);
 
   return (
@@ -276,19 +297,19 @@ function DriverJobTableActions({
         ดูรายละเอียด
       </button>
 
-      {status === "APPROVED" && onCancelJob && (
+      {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
         <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
           ยกเลิกงาน
         </button>
       )}
 
-      {canStart && status === "APPROVED" && (
+      {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
         <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
           รับงาน / ออกรถ
         </button>
       )}
 
-      {canComplete && status === "IN_USE" && (
+      {canComplete && status === "IN_USE" && !hasPendingDriverCancelRequest && (
         <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
           จบงาน / คืนรถ
         </button>
@@ -317,6 +338,9 @@ const JobCard = memo(function JobCard({
   const startLabel = formatThaiDateTime(booking.start_datetime);
   const endLabel = formatThaiDateTime(booking.end_datetime);
   const assignedUserLabel = getAssignedUserLabel(booking);
+  const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
+  const hasRejectedDriverCancelRequest = driverCancelRequestStatus === "REJECTED";
   const managingOnBehalf =
     (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
   const disabled = Boolean(processing);
@@ -331,6 +355,16 @@ const JobCard = memo(function JobCard({
         <div className="driver-job-head-meta">
           <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
           {managingOnBehalf && <span className="driver-job-on-behalf-badge">STAFF จัดการแทนคนขับ</span>}
+          {hasPendingDriverCancelRequest && (
+            <span className="driver-job-cancel-request-badge amber">
+              {getDriverCancelRequestStateLabel(booking)}
+            </span>
+          )}
+          {hasRejectedDriverCancelRequest && (
+            <span className="driver-job-cancel-request-badge red">
+              {getDriverCancelRequestStateLabel(booking)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -357,6 +391,18 @@ const JobCard = memo(function JobCard({
           <label>สถานะ</label>
           <b title={getStatusLabel(status)}>{getStatusLabel(status)}</b>
         </div>
+        {hasPendingDriverCancelRequest && booking.driver_cancel_request_reason && (
+          <div className="driver-job-cancel-note">
+            <label>เหตุผลที่ขอยกเลิก</label>
+            <b title={booking.driver_cancel_request_reason}>{booking.driver_cancel_request_reason}</b>
+          </div>
+        )}
+        {hasRejectedDriverCancelRequest && booking.driver_cancel_review_reason && (
+          <div className="driver-job-cancel-note">
+            <label>เหตุผลจาก STAFF</label>
+            <b title={booking.driver_cancel_review_reason}>{booking.driver_cancel_review_reason}</b>
+          </div>
+        )}
       </div>
 
       <div className="driver-job-actions">
@@ -364,23 +410,29 @@ const JobCard = memo(function JobCard({
           ดูรายละเอียด
         </button>
 
-        {status === "APPROVED" && onCancelJob && (
+        {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
           <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
             ยกเลิกงาน
           </button>
         )}
 
-        {canStart && status === "APPROVED" && (
+        {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
           <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
             รับงาน / ออกรถ
           </button>
         )}
 
-        {canComplete && status === "IN_USE" && (
+        {canComplete && status === "IN_USE" && !hasPendingDriverCancelRequest && (
           <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
             จบงาน / คืนรถ
           </button>
         )}
+
+          {hasPendingDriverCancelRequest && (
+            <span className="driver-job-cancel-request-inline amber">
+              {getDriverCancelRequestStateLabel(booking)}
+            </span>
+          )}
       </div>
     </div>
   );
@@ -665,35 +717,28 @@ export default function DriverJobs() {
     if (!result.isConfirmed) return;
 
     try {
-      setProcessingAction({ bookingId: booking.booking_id, type: "cancel" });
-      const response = await driverCancelJob({
+      setProcessingAction({ bookingId: booking.booking_id, type: "cancel-request" });
+      const response = await requestDriverCancelJob({
         booking_id: booking.booking_id,
         reason: result.value,
-        cancelled_by: currentUser?.name || currentUser?.email || "",
-        cancelled_user_id: currentUser?.user_id || "",
+        requested_by: currentUser?.name || currentUser?.email || "",
       });
 
       if (response?.success === false) {
-        showError(response?.message || "ยกเลิกงานไม่สำเร็จ");
+        showError(response?.message || "ส่งคำขอยกเลิกงานไม่สำเร็จ");
         return;
       }
 
-      await showSuccess("ยกเลิกงานสำเร็จ");
-      const staffNote =
-        response?.staff_note ||
-        `ยกเลิกงานโดย ${currentUser?.name || currentUser?.email || ""}: ${result.value}`;
+      await showSuccess("ส่งคำขอยกเลิกงานแล้ว");
       mergeBooking(booking.booking_id, {
-        assigned_user_id: "",
-        assigned_user_name: "",
-        vehicle_id: "",
-        vehicle_name: "",
-        vehicle_code: "",
-        vehicle_plate: "",
-        status: "PENDING",
-        staff_note: staffNote,
+        ...(response || {}),
+        booking_id: booking.booking_id,
+        driver_cancel_request_status: "PENDING",
+        driver_cancel_request_reason: result.value,
+        driver_cancel_requested_by: currentUser?.name || currentUser?.email || "",
       });
     } catch (err) {
-      showError(err.message || "ยกเลิกงานไม่สำเร็จ");
+      showError(err.message || "ส่งคำขอยกเลิกงานไม่สำเร็จ");
     } finally {
       setProcessingAction(null);
     }
@@ -821,8 +866,32 @@ export default function DriverJobs() {
                           <td>{formatThaiDateTime(job.end_datetime)}</td>
                           <td>{job.destination || "-"}</td>
                           {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
-                          <td>{renderStatusBadge(job.status)}</td>
-                          <td>{job.staff_note || job.note || "-"}</td>
+                          <td>
+                            {renderStatusBadge(job.status)}
+                            {getDriverCancelRequestStatus(job) === "PENDING" && (
+                              <div style={{ marginTop: 6 }}>
+                                <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                              </div>
+                            )}
+                            {getDriverCancelRequestStatus(job) === "REJECTED" && (
+                              <div style={{ marginTop: 6 }}>
+                                <span className="status red">ไม่อนุมัติการยกเลิก</span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {job.staff_note || job.note || "-"}
+                            {getDriverCancelRequestStatus(job) === "PENDING" && job.driver_cancel_request_reason && (
+                              <div className="driver-job-cancel-note">
+                                เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
+                              </div>
+                            )}
+                            {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
+                              <div className="driver-job-cancel-note">
+                                เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
+                              </div>
+                            )}
+                          </td>
                           <td className="action-buttons">
                             <DriverJobTableActions
                               booking={job}
@@ -900,8 +969,32 @@ export default function DriverJobs() {
                           <td>{formatThaiDateTime(job.end_datetime)}</td>
                           <td>{job.destination || "-"}</td>
                           {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
-                          <td>{renderStatusBadge(job.status)}</td>
-                          <td>{job.staff_note || job.note || "-"}</td>
+                          <td>
+                            {renderStatusBadge(job.status)}
+                            {getDriverCancelRequestStatus(job) === "PENDING" && (
+                              <div style={{ marginTop: 6 }}>
+                                <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                              </div>
+                            )}
+                            {getDriverCancelRequestStatus(job) === "REJECTED" && (
+                              <div style={{ marginTop: 6 }}>
+                                <span className="status red">ไม่อนุมัติการยกเลิก</span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            {job.staff_note || job.note || "-"}
+                            {getDriverCancelRequestStatus(job) === "PENDING" && job.driver_cancel_request_reason && (
+                              <div className="driver-job-cancel-note">
+                                เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
+                              </div>
+                            )}
+                            {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
+                              <div className="driver-job-cancel-note">
+                                เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
+                              </div>
+                            )}
+                          </td>
                           <td className="action-buttons">
                             <DriverJobTableActions
                               booking={job}

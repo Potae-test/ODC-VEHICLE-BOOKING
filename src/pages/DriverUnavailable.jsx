@@ -1,6 +1,7 @@
-import { createRoot } from "react-dom/client";
+﻿import { createRoot } from "react-dom/client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Swal from "sweetalert2";
+import * as XLSX from "xlsx";
 import {
   cancelDriverUnavailable,
   createDriverUnavailable,
@@ -38,14 +39,17 @@ function normalizeStatus(status) {
 function normalizeType(type) {
   const raw = String(type || "").trim();
   if (!raw) return "ลา";
+  if (raw.toLowerCase() === "holiday") return "ลา";
+  if (raw.toLowerCase() === "unable to complete a task.") return "หยุด";
   if (raw.toUpperCase() === "OTHER") return "OTHER";
   return raw;
 }
 
 function getTypeLabel(type) {
   const normalized = normalizeType(type);
+  if (normalized === "ลา") return "ลา / หยุด";
+  if (normalized === "หยุด") return "ติดภารกิจ (ชั่วคราว)";
   if (normalized === "OTHER") return "อื่นๆ";
-  return normalized || "-";
 }
 
 function getTypeClassName(type) {
@@ -92,7 +96,7 @@ function UnavailableDateTimeFields({ initialStart, initialEnd, onChange }) {
   }, [endValue, onChange, startValue]);
 
   return (
-    <div className="booking-datetime-grid">
+    <div className="booking-datetime-stack">
       <ThaiDateTimeField
         id="start_datetime"
         label="เวลาเริ่ม"
@@ -140,8 +144,8 @@ function buildFormHtml(record, options = {}) {
       ${driverDropdown}
       <label>ประเภท</label>
       <select id="unavailable_type" class="swal2-select">
-        <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา</option>
-        <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>หยุด</option>
+        <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา / หยุด</option>
+        <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>ติดภารกิจ (ชั่วคราว)</option>
         <option value="OTHER" ${type === "OTHER" ? "selected" : ""}>อื่นๆ</option>
       </select>
 
@@ -161,6 +165,12 @@ function buildFormHtml(record, options = {}) {
 export default function DriverUnavailable() {
   const [items, setItems] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [filters, setFilters] = useState({
+    keyword: "",
+    driver: "",
+    type: "",
+    status: "",
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -170,6 +180,13 @@ export default function DriverUnavailable() {
   const canEdit = hasPermission(null, "driver_unavailable_edit");
   const canCancel = hasPermission(null, "driver_unavailable_cancel");
   const canManageAllDrivers = currentRole === "ADMIN" || currentRole === "STAFF";
+
+  function setFilter(field, value) {
+    setFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
 
   const visibleItems = useMemo(() => {
     const rows = Array.isArray(items) ? items : [];
@@ -192,6 +209,56 @@ export default function DriverUnavailable() {
       })
     );
   }, [currentRole, currentUser?.name, currentUser?.user_id, items]);
+
+  const filteredItems = useMemo(() => {
+    const keyword = filters.keyword.trim().toLowerCase();
+    const driver = filters.driver.trim();
+    const type = filters.type.trim();
+    const status = normalizeStatus(filters.status);
+
+    return visibleItems.filter((record) => {
+      const text = [
+        record.driver_name,
+        record.reason,
+        getTypeLabel(record.type),
+        normalizeStatus(record.status),
+        formatThaiDateTime(record.start_datetime),
+        formatThaiDateTime(record.end_datetime),
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      if (keyword && !text.includes(keyword)) return false;
+      if (driver && String(record.driver_user_id || "") !== driver) return false;
+      if (type && normalizeType(record.type) !== type) return false;
+      if (status && normalizeStatus(record.status) !== status) return false;
+
+      return true;
+    });
+  }, [filters, visibleItems]);
+
+  function handleExportExcel() {
+    const rows = filteredItems.map((record, index) => ({
+      ลำดับ: index + 1,
+      คนขับ: record.driver_name || "-",
+      ประเภท: getTypeLabel(record.type),
+      เหตุผล: record.reason || "-",
+      เวลาเริ่ม: record.start_datetime ? formatThaiDateTime(record.start_datetime) : "-",
+      เวลาสิ้นสุด: record.end_datetime ? formatThaiDateTime(record.end_datetime) : "-",
+      สถานะ: normalizeStatus(record.status) || "-",
+      ผู้สร้าง: record.created_by || "-",
+      สร้างเมื่อ: record.created_at ? formatThaiDateTime(record.created_at) : "-",
+      ผู้แก้ไข: record.updated_by || "-",
+      แก้ไขเมื่อ: record.updated_at ? formatThaiDateTime(record.updated_at) : "-",
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "วันไม่รับงาน");
+
+    XLSX.writeFile(workbook, `driver-unavailable-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
 
   async function loadData(options = {}) {
     try {
@@ -378,7 +445,7 @@ export default function DriverUnavailable() {
     <div>
       <div className="page-header">
         <div>
-          <h2>วันไม่รับงาน</h2>
+          <h2>แจ้งข้อมูลการปฏิบัติงานของคนขับ</h2>
           <p>กำหนดช่วงเวลาที่คนขับไม่สามารถรับงานได้</p>
         </div>
 
@@ -387,7 +454,7 @@ export default function DriverUnavailable() {
             {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
           </button>
           {canCreate && (
-            <button type="button" onClick={() => openForm()}>
+            <button type="button" className="success-button" onClick={() => openForm()}>
               เพิ่มวันไม่รับงาน
             </button>
           )}
@@ -399,6 +466,63 @@ export default function DriverUnavailable() {
 
       {!loading && !error && (
         <div className="form-card">
+          <div className="driver-unavailable-toolbar">
+            <div className="driver-unavailable-filters">
+              <input
+                value={filters.keyword}
+                onChange={(e) => setFilter("keyword", e.target.value)}
+                placeholder="ค้นหา คนขับ / เหตุผล / สถานะ"
+              />
+
+              <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
+                <option value="">คนขับทั้งหมด</option>
+                {drivers.map((driver) => (
+                  <option key={driver.user_id} value={driver.user_id}>
+                    {driver.name || "-"}
+                  </option>
+                ))}
+              </select>
+
+              <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
+                <option value="">ทุกประเภท</option>
+                <option value="ลา">ลา</option>
+                <option value="หยุด">หยุด</option>
+                <option value="OTHER">อื่นๆ</option>
+              </select>
+
+              <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+                <option value="">ทุกสถานะ</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="CANCELLED">CANCELLED</option>
+              </select>
+            </div>
+
+            <div className="driver-unavailable-actions">
+              <button
+                type="button"
+                className="small-button"
+                onClick={() =>
+                  setFilters({
+                    keyword: "",
+                    driver: "",
+                    type: "",
+                    status: "",
+                  })
+                }
+              >
+                ล้างตัวกรอง
+              </button>
+              <button
+                type="button"
+                className="warning-button"
+                disabled={filteredItems.length === 0}
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </button>
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table>
               <thead>
@@ -413,12 +537,12 @@ export default function DriverUnavailable() {
                 </tr>
               </thead>
               <tbody>
-                {visibleItems.length === 0 ? (
+                {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7">ไม่พบรายการวันไม่รับงาน</td>
+                    <td colSpan="7">ไม่พบรายการตามเงื่อนไขที่ค้นหา</td>
                   </tr>
                 ) : (
-                  visibleItems.map((record) => (
+                  filteredItems.map((record) => (
                     <tr key={record.unavailable_id}>
                       <td>{record.driver_name || "-"}</td>
                       <td>

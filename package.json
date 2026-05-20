@@ -17,7 +17,8 @@
     "flatpickr": "^4.6.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "sweetalert2": "^11.26.24"
+    "sweetalert2": "^11.26.24",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

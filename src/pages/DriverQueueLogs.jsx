@@ -15,9 +15,23 @@ function getAssignModeLabel(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
   if (normalized === "AUTO_RECOMMENDED") return "ระบบแนะนำ";
   if (normalized === "MANUAL_OVERRIDE") return "เจ้าหน้าที่เลือกเอง";
-  if (normalized === "SKIPPED_UNAVAILABLE") return "ข้ามเพราะไม่รับงาน";
+  if (normalized === "SKIPPED_UNAVAILABLE") return "ข้ามเพราะไม่ว่าง";
   if (normalized === "SKIPPED_BUSY") return "ข้ามเพราะมีงานทับ";
   return mode || "-";
+}
+
+function safeJsonSummary(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return raw;
+    if (parsed.length === 0) return "ไม่มีรายการที่ข้าม";
+    return parsed.map((item) => `${item.driver_name || "-"}: ${item.reason || "-"}`).join(" | ");
+  } catch {
+    return raw;
+  }
 }
 
 export default function DriverQueueLogs() {
@@ -58,7 +72,7 @@ export default function DriverQueueLogs() {
       <div className="page-header">
         <div>
           <h2>ประวัติคิวคนขับ</h2>
-          <p>บันทึกการมอบหมายงานและการเลือกคนขับแบบ manual override</p>
+          <p>บันทึกการมอบหมายงานและการเลื่อนคิวแบบ circular master queue</p>
         </div>
 
         <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
@@ -83,13 +97,14 @@ export default function DriverQueueLogs() {
                   <th>เหตุผล</th>
                   <th>คิวก่อน</th>
                   <th>คิวหลัง</th>
+                  <th>ข้ามเพราะไม่ว่าง/ติดภารกิจ</th>
                   <th>ผู้บันทึก</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedLogs.length === 0 ? (
                   <tr>
-                    <td colSpan="9">ไม่พบประวัติ</td>
+                    <td colSpan="10">ไม่พบประวัติ</td>
                   </tr>
                 ) : (
                   sortedLogs.map((log) => (
@@ -100,8 +115,11 @@ export default function DriverQueueLogs() {
                       <td>{log.assigned_driver_name || "-"}</td>
                       <td>{getAssignModeLabel(log.assign_mode)}</td>
                       <td>{log.reason || "-"}</td>
+                      <td>{log.queue_before_index || "-"}</td>
                       <td>{log.queue_before || "-"}</td>
+                      <td>{log.queue_after_index || "-"}</td>
                       <td>{log.queue_after || "-"}</td>
+                      <td style={{ whiteSpace: "pre-wrap" }}>{safeJsonSummary(log.skipped_drivers_json)}</td>
                       <td>{log.created_by || "-"}</td>
                     </tr>
                   ))

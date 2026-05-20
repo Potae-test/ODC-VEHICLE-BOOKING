@@ -705,7 +705,6 @@ export default function CalendarPage() {
   }, [driverUnavailableRecords, users]);
 
   const nextQueueDriver = useMemo(() => {
-    const pointer = Number(driverQueueState?.state_value || 0);
     const activeRows = [...driverQueueRows]
       .filter(
         (row) =>
@@ -720,7 +719,34 @@ export default function CalendarPage() {
       });
 
     if (activeRows.length === 0) return null;
-    return activeRows.find((row) => Number(row.queue_order || 0) > pointer) || activeRows[0] || null;
+    const currentIndex = activeRows.findIndex(
+      (row) => String(row.driver_user_id || "") === String(driverQueueState?.current_driver_user_id || "")
+    );
+    const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+    return activeRows[(baseIndex + 1) % activeRows.length] || activeRows[0] || null;
+  }, [driverQueueRows, driverQueueState]);
+
+  const currentQueueDriver = useMemo(() => {
+    const activeRows = [...driverQueueRows]
+      .filter(
+        (row) =>
+          String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
+          String(row.driver_status || "").trim().toUpperCase() === "ACTIVE"
+      )
+      .sort((a, b) => {
+        const orderA = Number(a.queue_order || 0);
+        const orderB = Number(b.queue_order || 0);
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
+      });
+
+    if (activeRows.length === 0) return null;
+
+    const currentIndex = activeRows.findIndex(
+      (row) => String(row.driver_user_id || "") === String(driverQueueState?.current_driver_user_id || "")
+    );
+
+    return activeRows[currentIndex >= 0 ? currentIndex : 0] || null;
   }, [driverQueueRows, driverQueueState]);
 
   const activeQueueRows = useMemo(() => {
@@ -1128,14 +1154,20 @@ export default function CalendarPage() {
                   {nextQueueDriver ? nextQueueDriver.driver_name : "-"}
                 </strong> */}
 
-                <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
+              <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
                   <div style={{ color: "#334155", fontWeight: 700 }}>ลำดับคิวทั้งหมด</div>
                 <div style={{ fontSize: 20, color: "#475569" }}>
-                  ตัวชี้คิว: {driverQueueState?.state_value || "0"}
+                  คิวปัจจุบัน: {currentQueueDriver ? currentQueueDriver.driver_name : "-"}
+                </div>
+                <div style={{ fontSize: 20, color: "#475569" }}>
+                  คิวถัดไป: {nextQueueDriver ? nextQueueDriver.driver_name : "-"}
                 </div>
                   {activeQueueRows.length > 0 ? (
                     <div style={{ display: "grid", gap: 8 }}>
                       {activeQueueRows.map((row) => {
+                        const isCurrent =
+                          currentQueueDriver &&
+                          String(row.driver_user_id || "") === String(currentQueueDriver.driver_user_id || "");
                         const isNext =
                           nextQueueDriver &&
                           String(row.driver_user_id || "") === String(nextQueueDriver.driver_user_id || "");
@@ -1150,7 +1182,7 @@ export default function CalendarPage() {
                               gap: 10,
                               padding: "10px 12px",
                               background: "#fff",
-                              border: `1px solid ${isNext ? "#60a5fa" : "#e2e8f0"}`,
+                              border: `1px solid ${isCurrent ? "#16a34a" : isNext ? "#60a5fa" : "#e2e8f0"}`,
                               borderRadius: 12,
                             }}
                           >
@@ -1168,6 +1200,17 @@ export default function CalendarPage() {
                             <span style={{ color: "#0f172a", fontWeight: 700, flex: "1 1 auto" }}>
                               {row.driver_name}
                             </span>
+                            {isCurrent && (
+                              <span
+                                className="status green"
+                                style={{
+                                  fontSize: 15,
+                                  padding: "4px 10px",
+                                }}
+                              >
+                                คิวปัจจุบัน
+                              </span>
+                            )}
                             {isNext && (
                               <span
                                 className="status green"
