@@ -559,6 +559,28 @@ function getDriverUnavailableConflict(driver, currentBooking, unavailableGroups)
   }) || null;
 }
 
+function getDriverActiveAssignmentConflict(driver, currentBooking, bookings) {
+  const driverId = String(driver.user_id || "").trim();
+  const driverName = String(driver.name || "").trim();
+
+  return (
+    bookings.find((booking) => {
+      if (String(booking.booking_id) === String(currentBooking.booking_id)) return false;
+
+      const status = normalizeStatus(booking.status);
+      if (!["APPROVED", "IN_USE"].includes(status)) return false;
+
+      const assignedId = String(booking.assigned_user_id || "").trim();
+      const assignedName = String(booking.assigned_user_name || booking.driver_name || "").trim();
+
+      return (
+        (driverId && assignedId === driverId) ||
+        (!driverId && driverName && assignedName === driverName)
+      );
+    }) || null
+  );
+}
+
 function getQueueAssignModeLabel(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
   if (normalized === "MANUAL_OVERRIDE") return "เลือกคนขับเอง";
@@ -1160,10 +1182,18 @@ export default function Booking() {
       resolveDriverName(recommendedDriverId, driverQueueRecommendation?.recommended_driver_name || "") ||
       currentQueueDriverName ||
       "ยังไม่มีคำแนะนำ";
+    const skippedDriverSummary = skippedDrivers.length > 0
+      ? `ข้าม: ${skippedDrivers
+          .map(
+            (item) =>
+              `${resolveDriverName(item.driver_user_id || item.user_id || item.driver_id, item.driver_name || "")} (${item.reason || "-"})`
+          )
+          .join(", ")}`
+      : "";
     const queueNoteLines = [
       recommendedReason,
       driverQueueRecommendationError,
-      skippedDrivers.length > 0 ? `ข้ามไป ${skippedDrivers.length} รายการ` : "",
+      skippedDriverSummary,
     ].filter(Boolean);
     const nextQueueDriverId =
       driverQueueRecommendation?.next_queue_driver_user_id ||
@@ -1245,22 +1275,30 @@ export default function Booking() {
                   booking,
                   driverUnavailableGroups
                 );
-                const available = scheduleAvailable && !unavailableConflict;
+                const activeAssignmentConflict = getDriverActiveAssignmentConflict(driver, booking, bookings);
+                const available = scheduleAvailable && !unavailableConflict && !activeAssignmentConflict;
                 const conflictLabel = unavailableConflict
                   ? `${getUnavailableTypeLabel(unavailableConflict.type)} ${formatUnavailableRange(
                       unavailableConflict.start_datetime,
                       unavailableConflict.end_datetime
                     )}`
-                  : "";
-                const selected = String(driver.user_id || "") === String(recommendedDriverId || "");
+                  : activeAssignmentConflict
+                    ? "มีงานที่มอบหมายแล้ว"
+                    : !scheduleAvailable
+                      ? "ติดงาน"
+                      : "";
+                const selected =
+                  available && String(driver.user_id || "") === String(recommendedDriverId || "");
                 return `<option value="${escapeHtml(driver.user_id)}" ${
                   available ? "" : "disabled"
                 } ${selected ? "selected" : ""}>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
                   available
                     ? " ✅ ว่าง"
-                    : unavailableConflict
+                    : activeAssignmentConflict
+                      ? " ❌ มีงานที่มอบหมายแล้ว"
+                      : unavailableConflict
                       ? ` ❌ ${escapeHtml(conflictLabel)}`
-                      : " ❌ ไม่ว่าง"
+                      : " ❌ ติดงาน"
                 }</option>`;
               })
               .join("")}
@@ -1278,7 +1316,7 @@ export default function Booking() {
             skippedDrivers.length > 0
               ? `
           <div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
-            <div style="font-weight:800;margin-bottom:8px;">ข้ามเพราะไม่ว่าง/ติดภารกิจ</div>
+            <div style="font-weight:800;margin-bottom:8px;">รายการที่ข้าม</div>
             <div style="display:grid;gap:6px;text-align:left;">
               ${skippedDrivers
                 .map(
@@ -1331,11 +1369,21 @@ export default function Booking() {
           return false;
         }
 
+        const activeAssignmentConflict = getDriverActiveAssignmentConflict(
+          driver || {},
+          booking,
+          bookings
+        );
         const unavailableConflict = getDriverUnavailableConflict(
           driver || {},
           booking,
           driverUnavailableGroups
         );
+
+        if (activeAssignmentConflict) {
+          Swal.showValidationMessage("คนขับท่านนี้มีงานที่มอบหมายแล้ว");
+          return false;
+        }
 
         if (!driver || !isDriverAvailable(driver, booking, bookingGroups)) {
           Swal.showValidationMessage("คนขับท่านนี้ไม่ว่าง");
@@ -1369,10 +1417,7 @@ export default function Booking() {
           staff_note,
           current_user_name: currentUser?.name || currentUser?.email || "",
           recommended_driver_user_id: recommendedDriverId,
-          recommended_driver_name: resolveDriverName(
-            result.value.recommended_driver_user_id,
-            result.value.recommended_driver_name || ""
-          ),
+          recommended_driver_name: recommendedDriverName,
           skipped_drivers_json: JSON.stringify(skippedDrivers),
           assign_mode: hasRecommendation
             ? isManualOverride

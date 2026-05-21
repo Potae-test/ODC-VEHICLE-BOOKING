@@ -1,4 +1,4 @@
-function doGet(e) {
+﻿function doGet(e) {
   const action = e && e.parameter ? e.parameter.action || "vehicles" : "vehicles";
 
   if (action === "vehicles") {
@@ -2257,6 +2257,40 @@ function getDriverUnavailableConflict(driverUserId, startDatetime, endDatetime, 
   return null;
 }
 
+function hasDriverActiveAssignment(driverUserId, bookingIdToIgnore) {
+  const sheet = ensureBookingsSheet();
+  const table = readSheetTable(sheet);
+  const bookings = rowsToObjects(table.headers, table.rows);
+  const normalizedDriverUserId = String(driverUserId || "").trim();
+  const ignoredBookingId = String(bookingIdToIgnore || "").trim();
+
+  if (!normalizedDriverUserId) {
+    return false;
+  }
+
+  for (let i = 0; i < bookings.length; i++) {
+    const booking = bookings[i];
+    const status = String(booking.status || "").trim().toUpperCase();
+    if (status !== "APPROVED" && status !== "IN_USE") {
+      continue;
+    }
+
+    if (
+      ignoredBookingId &&
+      String(booking.booking_id || "").trim() === ignoredBookingId
+    ) {
+      continue;
+    }
+
+    const assignedUserId = String(booking.assigned_user_id || booking.driver_id || "").trim();
+    if (assignedUserId === normalizedDriverUserId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function getDriverUnavailableResponse_(conflict) {
   if (!conflict) {
     return {
@@ -2773,6 +2807,35 @@ function getDriverQueueUserStatusLookup_() {
   });
 
   return { byId, byName };
+}
+
+function getActiveDriverLookup_() {
+  const userLookup = getDriverQueueUserStatusLookup_();
+  const byId = new Map();
+  const byName = new Map();
+
+  userLookup.byId.forEach((user) => {
+    if (String(user.role || "").trim().toUpperCase() !== "DRIVER") return;
+    if (String(user.status || "").trim().toUpperCase() !== "ACTIVE") return;
+
+    const userId = String(user.user_id || "").trim();
+    const name = String(user.name || "").trim();
+
+    if (userId) {
+      byId.set(userId, user);
+    }
+    if (name) {
+      byName.set(name.toLowerCase(), user);
+    }
+  });
+
+  return { byId, byName };
+}
+
+function resolveActiveDriverName_(activeDriverLookup, driverUserId, fallbackName) {
+  const normalizedDriverUserId = String(driverUserId || "").trim();
+  const activeDriver = normalizedDriverUserId ? activeDriverLookup.byId.get(normalizedDriverUserId) || null : null;
+  return activeDriver ? String(activeDriver.name || "").trim() || String(fallbackName || "").trim() : String(fallbackName || "").trim();
 }
 
 function getDriverQueueStateValue_() {
@@ -3873,18 +3936,18 @@ function buildDriverQueueRows_() {
       const driverUserId = String(row.driver_user_id || "").trim();
       const storedDriverName = String(row.driver_name || "").trim();
       const driverUser = driverUserId ? userLookup.byId.get(driverUserId) || null : null;
-      const displayDriverName =
-        driverUser && driverUser.role === "DRIVER" && driverUser.status === "ACTIVE"
-          ? String(driverUser.name || "").trim() || storedDriverName
-          : storedDriverName;
       const driverStatus = driverUser ||
         userLookup.byName.get(storedDriverName.toLowerCase()) ||
         null;
+      const resolvedDriverName =
+        driverStatus && String(driverStatus.role || "").trim().toUpperCase() === "DRIVER"
+          ? String(driverStatus.name || "").trim() || storedDriverName
+          : storedDriverName;
       return {
         row_number: index + 2,
         queue_id: row.queue_id || `DQ-${queueOrder}`,
         driver_user_id: driverUserId,
-        driver_name: displayDriverName || storedDriverName,
+        driver_name: resolvedDriverName || storedDriverName,
         stored_driver_name: storedDriverName,
         queue_order: queueOrder,
         status: isActive ? "ACTIVE" : "INACTIVE",
@@ -3896,7 +3959,10 @@ function buildDriverQueueRows_() {
         updated_by: row.updated_by || "",
         driver_status: driverStatus ? driverStatus.status : "",
         driver_user_status: driverStatus ? driverStatus.status : "",
-        driver_active: !driverStatus || driverStatus.status === "ACTIVE",
+        driver_active:
+          Boolean(driverStatus) &&
+          String(driverStatus.role || "").trim().toUpperCase() === "DRIVER" &&
+          String(driverStatus.status || "").trim().toUpperCase() === "ACTIVE",
       };
     })
     .sort((a, b) => {
@@ -5043,7 +5109,7 @@ function recommendDriverForBooking(data) {
   if (!startDatetime || !endDatetime) {
     return jsonOutput({
       success: false,
-      message: "วันเวลาไม่ถูกต้อง",
+      message: "เธงเธฑเธเน€เธงเธฅเธฒเนเธกเนเธ–เธนเธเธ•เนเธญเธ",
       data: { skipped: [] },
     });
   }
@@ -5051,77 +5117,102 @@ function recommendDriverForBooking(data) {
   if (new Date(endDatetime).getTime() <= new Date(startDatetime).getTime()) {
     return jsonOutput({
       success: false,
-      message: "เวลาเริ่มต้องน้อยกว่าเวลาสิ้นสุด",
+      message: "เน€เธงเธฅเธฒเน€เธฃเธดเนเธกเธ•เนเธญเธเธเนเธญเธขเธเธงเนเธฒเน€เธงเธฅเธฒเธชเธดเนเธเธชเธธเธ”",
       data: { skipped: [] },
     });
   }
 
   const queueRows = getActiveMasterQueue();
   const state = getCurrentQueueState();
+  const activeDriverLookup = getActiveDriverLookup_();
+
   if (queueRows.length === 0) {
     return jsonOutput({
       success: false,
-      message: "ไม่พบคนขับในคิว",
+      message: "ไม่พบคนขับที่พร้อมรับงาน",
       data: { skipped: [] },
     });
   }
 
-  const startIndex = queueRows.length > 0 ? ((Number(state.current_index || 0) % queueRows.length) + queueRows.length) % queueRows.length : 0;
+  const startIndex = queueRows.length > 0
+    ? ((Number(state.current_index || 0) % queueRows.length) + queueRows.length) % queueRows.length
+    : 0;
   const orderedRows = buildQueueScanRows_(queueRows, startIndex);
   const skipped = [];
+  const currentQueueDriverUserId = String(state.current_driver_user_id || "").trim();
+  const currentQueueDriverName = resolveActiveDriverName_(
+    activeDriverLookup,
+    currentQueueDriverUserId,
+    state.current_driver_name || ""
+  );
 
   for (let i = 0; i < orderedRows.length; i++) {
     const row = orderedRows[i];
-    if (!row.driver_active) {
-      skipped.push({ driver_user_id: row.driver_user_id || "", driver_name: row.driver_name || "", reason: "ผู้ใช้ไม่ ACTIVE" });
+    const driverUserId = String(row.driver_user_id || "").trim();
+    const activeDriver = driverUserId ? activeDriverLookup.byId.get(driverUserId) || null : null;
+    const driverName = activeDriver
+      ? resolveActiveDriverName_(activeDriverLookup, driverUserId, row.driver_name || "")
+      : String(row.driver_name || "").trim();
+
+    if (!activeDriver) {
+      skipped.push({
+        driver_user_id: driverUserId,
+        driver_name: driverName || "-",
+        reason: "ผู้ใช้ไม่ ACTIVE",
+      });
       continue;
     }
 
-    const bookingConflict = getDriverUnavailableBookingsConflict(row.driver_user_id, startDatetime, endDatetime, bookingId);
-    if (bookingConflict) {
-      skipped.push({ driver_user_id: row.driver_user_id || "", driver_name: row.driver_name || "", reason: "มีงานทับช่วงเวลา" });
+    if (hasDriverActiveAssignment(driverUserId, bookingId)) {
+      skipped.push({
+        driver_user_id: driverUserId,
+        driver_name: driverName || "-",
+        reason: "มีงานที่มอบหมายแล้ว",
+      });
       continue;
     }
 
-    const unavailableConflict = getDriverUnavailableConflict(row.driver_user_id, startDatetime, endDatetime, "");
+    const unavailableConflict = getDriverUnavailableConflict(driverUserId, startDatetime, endDatetime, "");
     if (unavailableConflict) {
-      skipped.push({ driver_user_id: row.driver_user_id || "", driver_name: row.driver_name || "", reason: "ข้ามเพราะไม่ว่าง/ติดภารกิจ" });
+      skipped.push({
+        driver_user_id: driverUserId,
+        driver_name: driverName || "-",
+        reason: "ไม่พร้อม / ติดภารกิจ",
+      });
       continue;
     }
+
+    const recommendedIndex = queueRows.findIndex((item) => String(item.driver_user_id || "").trim() === driverUserId);
+    const nextDriver = recommendedIndex >= 0 ? queueRows[(recommendedIndex + 1) % queueRows.length] || null : null;
+    const nextDriverUserId = nextDriver ? String(nextDriver.driver_user_id || "").trim() : "";
+    const nextDriverName = nextDriver
+      ? resolveActiveDriverName_(activeDriverLookup, nextDriverUserId, nextDriver.driver_name || "")
+      : "";
 
     return jsonOutput({
       success: true,
       data: {
-        ...getNextQueuePreview_(
-          queueRows,
-          row.driver_user_id,
-          state.current_driver_user_id
-            ? {
-                driver_user_id: state.current_driver_user_id || "",
-                driver_name: state.current_driver_name || "",
-              }
-            : (queueRows[0] || null)
-        ),
-        current_index: state.current_index || 0,
-        current_queue_driver_user_id: state.current_driver_user_id || "",
-        current_queue_driver_name: state.current_driver_name || "",
-        recommended_driver_user_id: row.driver_user_id || "",
-        recommended_driver_name: row.driver_name || "",
-        queue_order: row.queue_order || 0,
+        current_queue_driver_user_id: currentQueueDriverUserId,
+        current_queue_driver_name: currentQueueDriverName,
+        recommended_driver_user_id: driverUserId,
+        recommended_driver_name: driverName || resolveActiveDriverName_(activeDriverLookup, driverUserId, ""),
         reason: "คิวถัดไป / พร้อมรับงาน",
         skipped,
+        next_queue_driver_user_id: nextDriverUserId,
+        next_queue_driver_name: nextDriverName,
       },
     });
   }
 
   return jsonOutput({
     success: false,
-    message: "ไม่พบคนขับที่พร้อมรับงานในช่วงเวลานี้",
+    message: "ไม่พบคนขับที่พร้อมรับงาน",
     data: {
-      current_index: state.current_index || 0,
-      current_queue_driver_user_id: state.current_driver_user_id || "",
-      current_queue_driver_name: state.current_driver_name || "",
+      current_queue_driver_user_id: currentQueueDriverUserId,
+      current_queue_driver_name: currentQueueDriverName,
       skipped,
+      next_queue_driver_user_id: "",
+      next_queue_driver_name: "",
     },
   });
 }
@@ -5146,41 +5237,40 @@ function confirmDriverQueueAssignment(data) {
   }
 
   const queueRows = getActiveMasterQueue();
+  const activeDriverLookup = getActiveDriverLookup_();
   const stateBefore = getCurrentQueueState();
   const queueBeforeIndex = Number(stateBefore.current_index || 0) || 0;
-  const queueBeforeDriver = queueRows[queueBeforeIndex] || null;
+  const queueBeforeDriver = queueRows.find((row) => String(row.driver_user_id || "").trim() === String(stateBefore.current_driver_user_id || "").trim())
+    || queueRows[queueBeforeIndex]
+    || null;
+  const resolvedRecommendedDriverName = recommendedDriverUserId
+    ? resolveActiveDriverName_(activeDriverLookup, recommendedDriverUserId, recommendedDriverName)
+    : recommendedDriverName;
+  const resolvedAssignedDriverName = resolveActiveDriverName_(activeDriverLookup, assignedDriverUserId, assignedDriverName);
   let queueAfterIndex = queueBeforeIndex;
   let queueAfterDriver = queueBeforeDriver;
   let warning = "";
+  let state = stateBefore;
 
   const assignedIndex = queueRows.findIndex((row) => String(row.driver_user_id || "").trim() === assignedDriverUserId);
   if (assignedIndex >= 0) {
     queueAfterIndex = getNextCircularIndex(assignedIndex, queueRows.length);
     queueAfterDriver = queueRows[queueAfterIndex] || null;
+    const resolvedNextDriverName = queueAfterDriver
+      ? resolveActiveDriverName_(activeDriverLookup, queueAfterDriver.driver_user_id, queueAfterDriver.driver_name || "")
+      : "";
+
+    state = setCurrentQueueState_({
+      current_index: queueAfterIndex,
+      current_driver_user_id: queueAfterDriver ? queueAfterDriver.driver_user_id || "" : "",
+      current_driver_name: resolvedNextDriverName,
+      last_assigned_driver_user_id: assignedDriverUserId,
+      last_assigned_driver_name: resolvedAssignedDriverName,
+      last_assigned_booking_id: bookingId,
+    }, createdBy || "");
   } else {
     warning = "Assigned driver not found in master queue";
   }
-
-  const masterSheet = ensureDriverQueueMasterSheet();
-  const masterTable = readSheetTable(masterSheet);
-  if (assignedIndex >= 0) {
-    const assignedRowNumber = queueRows[assignedIndex].row_number;
-    const row = masterTable.rows[assignedRowNumber - 2].slice();
-    row[masterTable.columnMap.last_assigned_at] = new Date().toISOString();
-    row[masterTable.columnMap.last_booking_id] = bookingId;
-    row[masterTable.columnMap.updated_at] = new Date().toISOString();
-    row[masterTable.columnMap.updated_by] = createdBy || "";
-    setRowValues(masterSheet, assignedRowNumber, row);
-  }
-
-  const state = setCurrentQueueState_({
-    current_index: queueAfterDriver ? queueAfterIndex : queueBeforeIndex,
-    current_driver_user_id: queueAfterDriver ? queueAfterDriver.driver_user_id || "" : queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "",
-    current_driver_name: queueAfterDriver ? queueAfterDriver.driver_name || "" : queueBeforeDriver ? queueBeforeDriver.driver_name || "" : "",
-    last_assigned_driver_user_id: assignedDriverUserId,
-    last_assigned_driver_name: assignedDriverName,
-    last_assigned_booking_id: bookingId,
-  }, createdBy || "");
 
   const logSheet = ensureDriverQueueLogsSheet();
   const logTable = readSheetTable(logSheet);
@@ -5191,18 +5281,24 @@ function confirmDriverQueueAssignment(data) {
   logRow[logTable.columnMap.booking_id] = bookingId;
   logRow[logTable.columnMap.booking_no] = bookingNo;
   logRow[logTable.columnMap.recommended_driver_user_id] = recommendedDriverUserId;
-  logRow[logTable.columnMap.recommended_driver_name] = recommendedDriverName;
+  logRow[logTable.columnMap.recommended_driver_name] = resolvedRecommendedDriverName;
   logRow[logTable.columnMap.assigned_driver_user_id] = assignedDriverUserId;
-  logRow[logTable.columnMap.assigned_driver_name] = assignedDriverName;
+  logRow[logTable.columnMap.assigned_driver_name] = resolvedAssignedDriverName;
   logRow[logTable.columnMap.assign_mode] = assignMode;
   logRow[logTable.columnMap.queue_before_index] = queueBeforeIndex;
   logRow[logTable.columnMap.queue_before_driver_user_id] = queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "";
-  logRow[logTable.columnMap.queue_after_index] = queueAfterDriver ? queueAfterIndex : queueBeforeIndex;
-  logRow[logTable.columnMap.queue_after_driver_user_id] = queueAfterDriver ? queueAfterDriver.driver_user_id || "" : queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "";
+  logRow[logTable.columnMap.queue_after_index] = assignedIndex >= 0 ? queueAfterIndex : queueBeforeIndex;
+  logRow[logTable.columnMap.queue_after_driver_user_id] = assignedIndex >= 0
+    ? (queueAfterDriver ? queueAfterDriver.driver_user_id || "" : "")
+    : (queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "");
   logRow[logTable.columnMap.skipped_drivers_json] = Array.isArray(skippedDrivers) ? JSON.stringify(skippedDrivers) : String(skippedDrivers || "");
   logRow[logTable.columnMap.reason] = warning ? `${reason}${reason ? " | " : ""}${warning}` : reason;
-  logRow[logTable.columnMap.queue_before] = queueBeforeDriver ? `${queueBeforeDriver.driver_name || ""} (#${queueBeforeDriver.queue_order || 0})` : "";
-  logRow[logTable.columnMap.queue_after] = queueAfterDriver ? `${queueAfterDriver.driver_name || ""} (#${queueAfterDriver.queue_order || 0})` : "";
+  logRow[logTable.columnMap.queue_before] = queueBeforeDriver ? `${resolveActiveDriverName_(activeDriverLookup, queueBeforeDriver.driver_user_id, queueBeforeDriver.driver_name || "")} (#${queueBeforeDriver.queue_order || 0})` : "";
+  logRow[logTable.columnMap.queue_after] = assignedIndex >= 0 && queueAfterDriver
+    ? `${resolveActiveDriverName_(activeDriverLookup, queueAfterDriver.driver_user_id, queueAfterDriver.driver_name || "")} (#${queueAfterDriver.queue_order || 0})`
+    : queueBeforeDriver
+      ? `${resolveActiveDriverName_(activeDriverLookup, queueBeforeDriver.driver_user_id, queueBeforeDriver.driver_name || "")} (#${queueBeforeDriver.queue_order || 0})`
+      : "";
   logRow[logTable.columnMap.created_at] = now;
   logRow[logTable.columnMap.created_by] = createdBy || "";
   appendSheetRow(logSheet, logRow);
@@ -5214,21 +5310,22 @@ function confirmDriverQueueAssignment(data) {
       booking_id: bookingId,
       booking_no: bookingNo,
       recommended_driver_user_id: recommendedDriverUserId,
-      recommended_driver_name: recommendedDriverName,
+      recommended_driver_name: resolvedRecommendedDriverName,
       assigned_driver_user_id: assignedDriverUserId,
-      assigned_driver_name: assignedDriverName,
+      assigned_driver_name: resolvedAssignedDriverName,
       assign_mode: assignMode,
       reason,
       queue_before_index: queueBeforeIndex,
       queue_before_driver_user_id: queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "",
-      queue_after_index: queueAfterDriver ? queueAfterIndex : queueBeforeIndex,
-      queue_after_driver_user_id: queueAfterDriver ? queueAfterDriver.driver_user_id || "" : queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : "",
+      queue_after_index: assignedIndex >= 0 ? queueAfterIndex : queueBeforeIndex,
+      queue_after_driver_user_id: assignedIndex >= 0
+        ? (queueAfterDriver ? queueAfterDriver.driver_user_id || "" : "")
+        : (queueBeforeDriver ? queueBeforeDriver.driver_user_id || "" : ""),
       warning,
       state,
     },
   });
 }
-
 function updateDriverQueue(data) {
   return updateDriverQueueMaster(data);
 }
