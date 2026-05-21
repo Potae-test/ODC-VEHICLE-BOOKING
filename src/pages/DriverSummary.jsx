@@ -117,6 +117,7 @@ function getDriverJobActionLabel(booking) {
   if (action === "ASSIGNED") return "ได้รับมอบหมาย";
   if (action === "STARTED") return "เริ่มใช้งาน";
   if (action === "COMPLETED") return "เสร็จสิ้น";
+  if (action === "UNASSIGNED") return "STAFF ดึงงานกลับ";
   if (action === "DRIVER_CANCELLED") return "คนขับยกเลิก";
 
   return action || "-";
@@ -129,6 +130,9 @@ function getDriverJobActionDescription(booking) {
   if (action === "ASSIGNED") return "ได้รับมอบหมายงาน";
   if (action === "STARTED") return "เริ่มใช้งานรถ";
   if (action === "COMPLETED") return "จบงาน / คืนรถ";
+  if (action === "UNASSIGNED") {
+    return reason ? `STAFF ดึงงานกลับ: ${reason}` : "STAFF ดึงงานกลับ";
+  }
   if (action === "DRIVER_CANCELLED") {
     return reason ? `คนขับยกเลิกงาน: ${reason}` : "คนขับยกเลิกงาน";
   }
@@ -142,6 +146,7 @@ function getDriverJobActionClass(booking) {
   if (action === "COMPLETED") return "status gray";
   if (action === "STARTED") return "status green";
   if (action === "ASSIGNED") return "status blue";
+  if (action === "UNASSIGNED") return "status amber";
   if (action === "DRIVER_CANCELLED") return "status red";
 
   return "status";
@@ -167,6 +172,7 @@ function getDriverJobActionLabelV2(booking) {
   if (action === "ASSIGNED") return "ได้มอบหมาย";
   if (action === "STARTED") return "เริ่มใช้งาน";
   if (action === "COMPLETED") return "เสร็จสิ้น";
+  if (action === "UNASSIGNED") return "STAFF ดึงงานกลับ";
   if (action === "DRIVER_CANCEL_REQUESTED") return "ขอยกเลิกงาน";
   if (action === "DRIVER_CANCEL_APPROVED") return "STAFF อนุมัติยกเลิก";
   if (action === "DRIVER_CANCEL_REJECTED") return "STAFF ไม่อนุมัติยกเลิก";
@@ -182,6 +188,9 @@ function getDriverJobActionDescriptionV2(booking) {
   if (action === "ASSIGNED") return "ได้รับมอบหมายงาน";
   if (action === "STARTED") return "เริ่มใช้งานรถ";
   if (action === "COMPLETED") return "จบงาน / คืนรถ";
+  if (action === "UNASSIGNED") {
+    return reason ? `STAFF ดึงงานกลับ: ${reason}` : "STAFF ดึงงานกลับ";
+  }
   if (action === "DRIVER_CANCEL_REQUESTED") {
     return reason ? `ขอยกเลิกงาน: ${reason}` : "ขอยกเลิกงาน";
   }
@@ -204,6 +213,7 @@ function getDriverJobActionClassV2(booking) {
   if (action === "COMPLETED") return "status gray";
   if (action === "STARTED") return "status green";
   if (action === "ASSIGNED") return "status blue";
+  if (action === "UNASSIGNED") return "status amber";
   if (action === "DRIVER_CANCEL_REQUESTED") return "status amber";
   if (action === "DRIVER_CANCEL_APPROVED") return "status blue";
   if (action === "DRIVER_CANCEL_REJECTED") return "status red";

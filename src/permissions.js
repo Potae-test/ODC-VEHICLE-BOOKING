@@ -48,6 +48,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "vehicle-management",
     "driver-jobs",
     "driver-unavailable",
+    "booking-approval",
   ],
 };
 
@@ -214,6 +215,7 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_unavailable_create",
     "driver_unavailable_edit",
     "driver_unavailable_cancel",
+    "bookings_approve",
   ],
 };
 

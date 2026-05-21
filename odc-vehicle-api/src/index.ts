@@ -106,6 +106,22 @@ export default {
 
       return jsonResponse(sheetJson);
     }
+    if (url.pathname === "/api/unassign_booking_driver" && request.method === "POST") {
+      const body = await request.json();
+
+      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain;charset=utf-8",
+        },
+        body: JSON.stringify({
+          action: "unassign_booking_driver",
+          data: body,
+        }),
+      });
+
+      return jsonResponse(sheetJson);
+    }
     if (url.pathname === "/api/bookings/start-trip" && request.method === "POST") {
       const body = await request.json();
 

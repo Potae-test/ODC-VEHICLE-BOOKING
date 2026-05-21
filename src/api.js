@@ -360,6 +360,17 @@ export async function cancelBooking(data) {
   return json.data;
 }
 
+export async function unassignBookingDriver(payload) {
+  const json = await fetchJson(`${API_BASE_URL}/api/unassign_booking_driver`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+
+  invalidateApiCache(["bookings", "driver_job_logs"]);
+  return json.data || json;
+}
+
 export async function updateBooking(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/update`, {
     method: "POST",
@@ -532,7 +543,8 @@ export async function recommendDriverForBooking(data) {
     body: JSON.stringify(data),
   });
 
-  return res.json();
+  const json = await res.json();
+  return json.success ? json.data : json;
 }
 
 export async function confirmDriverQueueAssignment(data) {
