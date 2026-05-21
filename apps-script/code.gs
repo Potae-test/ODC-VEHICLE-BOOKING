@@ -3923,6 +3923,34 @@ function getNextCircularIndex(index, queueLength) {
   return (pointer + 1) % length;
 }
 
+function getNextQueuePreview_(queueRows, recommendedDriverUserId, currentDriver) {
+  const queue = Array.isArray(queueRows) ? [...queueRows] : [];
+  const normalizedRecommendedDriverUserId = String(recommendedDriverUserId || "").trim();
+  const currentQueueDriverUserId = String(currentDriver?.driver_user_id || "").trim();
+  const currentQueueDriverName = String(currentDriver?.driver_name || "").trim();
+
+  if (queue.length === 0) {
+    return {
+      current_queue_driver_user_id: currentQueueDriverUserId,
+      current_queue_driver_name: currentQueueDriverName,
+      next_queue_driver_user_id: "",
+      next_queue_driver_name: "",
+    };
+  }
+
+  const recommendedIndex = normalizedRecommendedDriverUserId
+    ? queue.findIndex((row) => String(row.driver_user_id || "").trim() === normalizedRecommendedDriverUserId)
+    : -1;
+  const nextDriver = recommendedIndex >= 0 ? queue[(recommendedIndex + 1) % queue.length] || null : null;
+
+  return {
+    current_queue_driver_user_id: currentQueueDriverUserId,
+    current_queue_driver_name: currentQueueDriverName,
+    next_queue_driver_user_id: nextDriver ? nextDriver.driver_user_id || "" : "",
+    next_queue_driver_name: nextDriver ? nextDriver.driver_name || "" : "",
+  };
+}
+
 function getCurrentQueueState() {
   const queue = getActiveMasterQueue();
   const stateRow = readDriverQueueStateRow_();
@@ -4305,6 +4333,12 @@ function recommendDriverForBooking(data) {
   const startIndex = queueRows.length > 0 ? ((Number(state.current_index || 0) % queueRows.length) + queueRows.length) % queueRows.length : 0;
   const orderedRows = buildQueueScanRows_(queueRows, startIndex);
   const skipped = [];
+  const currentDriver = state.current_driver_user_id
+    ? {
+        driver_user_id: state.current_driver_user_id || "",
+        driver_name: state.current_driver_name || "",
+      }
+    : (queueRows[0] || null);
 
   for (let i = 0; i < orderedRows.length; i++) {
     const row = orderedRows[i];
@@ -4328,6 +4362,16 @@ function recommendDriverForBooking(data) {
     return jsonOutput({
       success: true,
       data: {
+        ...getNextQueuePreview_(
+          queueRows,
+          row.driver_user_id,
+          state.current_driver_user_id
+            ? {
+                driver_user_id: state.current_driver_user_id || "",
+                driver_name: state.current_driver_name || "",
+              }
+            : (queueRows[0] || null)
+        ),
         current_index: state.current_index || 0,
         current_queue_driver_user_id: state.current_driver_user_id || "",
         current_queue_driver_name: state.current_driver_name || "",
@@ -5048,6 +5092,16 @@ function recommendDriverForBooking(data) {
     return jsonOutput({
       success: true,
       data: {
+        ...getNextQueuePreview_(
+          queueRows,
+          row.driver_user_id,
+          state.current_driver_user_id
+            ? {
+                driver_user_id: state.current_driver_user_id || "",
+                driver_name: state.current_driver_name || "",
+              }
+            : (queueRows[0] || null)
+        ),
         current_index: state.current_index || 0,
         current_queue_driver_user_id: state.current_driver_user_id || "",
         current_queue_driver_name: state.current_driver_name || "",

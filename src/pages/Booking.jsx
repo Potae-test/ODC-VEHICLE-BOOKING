@@ -1170,13 +1170,19 @@ export default function Booking() {
       driverQueueRecommendation?.queue_after_driver_user_id ||
       driverQueueRecommendation?.next_driver_user_id ||
       "";
-    const nextQueueDriverName = resolveDriverName(
-      nextQueueDriverId,
+    const nextQueueDriverBackendName =
       driverQueueRecommendation?.next_queue_driver_name ||
-        driverQueueRecommendation?.queue_after_driver_name ||
-        driverQueueRecommendation?.next_driver_name ||
-        ""
+      driverQueueRecommendation?.queue_after_driver_name ||
+      driverQueueRecommendation?.next_driver_name ||
+      "";
+    const nextQueueDriverResolvedName = resolveDriverName(
+      nextQueueDriverId,
+      nextQueueDriverBackendName
     );
+    const nextQueueDriverName =
+      nextQueueDriverResolvedName && nextQueueDriverResolvedName !== "-"
+        ? nextQueueDriverResolvedName
+        : nextQueueDriverBackendName || "ระบบจะคำนวณหลังบันทึก";
 
     const result = await Swal.fire({
       title: "ดำเนินการมอบหมายงาน",
