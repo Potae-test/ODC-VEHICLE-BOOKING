@@ -757,12 +757,12 @@ const BookingTableRow = memo(function BookingTableRow({
             {canShowProcess && (
               <button type="button" disabled={disabled} onClick={() => onProcess(booking)}>
                 {processing === "process"
-                  ? "Processing..."
+                  ? "กำลังดำเนินการ..."
                   : status === "APPROVED"
                     ? FEATURES.vehicleModule
                       ? "เปลี่ยนคนขับ/รถ"
                       : "เปลี่ยนคนขับ"
-                    : "อนุมัติ"}
+                    : "อนุมัติรายการ"}
               </button>
             )}
             {canShowEdit && (
@@ -772,7 +772,7 @@ const BookingTableRow = memo(function BookingTableRow({
                 disabled={disabled}
                 onClick={() => onEdit(booking)}
               >
-                {processing === "edit" ? "Saving..." : "แก้ไข"}
+                {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
               </button>
             )}
             {canShowCancel && (
@@ -782,7 +782,7 @@ const BookingTableRow = memo(function BookingTableRow({
                 disabled={disabled}
                 onClick={() => onCancel(booking)}
               >
-                {processing === "cancel" ? "Cancelling..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
+                {processing === "cancel" ? "กำยังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
               </button>
             )}
             {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
@@ -1179,7 +1179,7 @@ export default function Booking() {
     );
 
     const result = await Swal.fire({
-      title: "ดำเนินการจอง",
+      title: "ดำเนินการมอบหมายงาน",
       html: `
         <div class="swal-form">
           <div class="booking-queue-recommendation-card">
@@ -1677,7 +1677,7 @@ export default function Booking() {
   const handleCancelBooking = useCallback(async (booking) => {
     if (processingAction) return;
     const result = await Swal.fire({
-      title: normalizeStatus(booking.status) === "PENDING" ? "Cancel Booking" : "Delete Booking",
+      title: normalizeStatus(booking.status) === "PENDING" ? "ยกเลิกรายการจอง" : "Delete Booking",
       html: `
         <div class="swal-form">
           <label>เหตุผลการยกเลิก</label>

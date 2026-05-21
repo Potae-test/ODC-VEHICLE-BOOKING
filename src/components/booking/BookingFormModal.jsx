@@ -4,7 +4,7 @@ import Swal from "sweetalert2";
 import { createBooking, updateBooking } from "../../api";
 import { showError, showSuccess } from "../../utils/alert";
 import ThaiDateTimeField from "../common/ThaiDateTimeField";
-import { parseAppDateTime, toLocalDateTimeString } from "../../utils/datetime";
+import { parseAppDateTime } from "../../utils/datetime";
 import { FEATURES } from "../../config/features";
 
 const DEFAULT_VEHICLE_TYPES = ["VAN", "SEDAN", "MOTORCYCLE", "OTHER"];
@@ -54,6 +54,17 @@ function buildVehicleTypeOptions(vehicleTypes, defaultVehicleType) {
 
 function getBookingId(booking) {
   return String(booking?.booking_id || booking?.id || booking?.bookingId || "").trim();
+}
+
+function createEmptyThaiDateTime() {
+  const now = new Date();
+
+  now.setHours(0);
+  now.setMinutes(0);
+  now.setSeconds(0);
+  now.setMilliseconds(0);
+
+  return now.toISOString();
 }
 
 function getOverlapBookings(bookings, currentBookingId, startDatetime, endDatetime) {
@@ -139,7 +150,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
         value="${escapeHtml(booking?.phone || "")}"
       >
 
-      <label>เวลาไป</label>
+      
       <div id="booking_overlap_warning" class="booking-overlap-warning">
         แจ้งเตือน: คุณมีรายการจองอื่นในช่วงวันเวลาใกล้เคียงกัน !!
       </div>
@@ -197,7 +208,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
           ${isBackdated ? "checked" : ""}
           style="width:22px; height:22px;"
         >
-        <span>เป็นรายการจองย้อนหลังหรือไม่ (กดเลือกเพื่อบันทึกเป็นรายการย้อนหลัง)</span>
+        <span>บันทึกรายการย้อนหลัง</span>
       </label>
       `
           : ""
@@ -211,18 +222,15 @@ const BookingFormModal = forwardRef(function BookingFormModal(
   ref
 ) {
   const open = useCallback(
-    async ({ booking = null, defaultStart, defaultEnd } = {}) => {
-      const now = new Date();
-      const resolvedStart = booking?.start_datetime || defaultStart || now;
-      const resolvedEnd = booking?.end_datetime || defaultEnd || new Date(now.getTime() + 60 * 60 * 1000);
+    async ({ booking = null } = {}) => {
       const datetimeState = {
-        start_datetime: booking?.start_datetime || toLocalDateTimeString(resolvedStart),
-        end_datetime: booking?.end_datetime || toLocalDateTimeString(resolvedEnd),
+        start_datetime: booking?.start_datetime || createEmptyThaiDateTime(),
+        end_datetime: booking?.end_datetime || createEmptyThaiDateTime(),
       };
       let datetimeRoot = null;
 
       const result = await Swal.fire({
-        title: booking ? "แก้ไขรายการจอง" : "จองรถใหม่",
+        title: booking ? "แก้ไขรายการจอง" : "เพิ่มรายการจอง",
         html: buildModalHtml(booking, vehicleTypes, isStaffOrAdmin(currentUser)),
         width: 780,
         showCancelButton: true,

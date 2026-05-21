@@ -656,7 +656,7 @@ td {
 .login-card button {
   width: 100%;
   padding: 16px;
-  font-size: 20px;
+  font-size: 25px;
 }
 
 .login-help {
@@ -1208,7 +1208,7 @@ td {
 }
 
 label {
-  font-size: 28px;
+  font-size: 25px;
 }
 
 .status {
@@ -1528,9 +1528,9 @@ label {
 }
 
 .thai-datetime-main-label {
-  font-size: 24px;
-  font-weight: 800;
-  color: #173b69;
+  font-size: 25px;
+  /* font-weight: 800; */
+  color: #10233f;
 }
 
 .thai-datetime-date-col {
@@ -1548,9 +1548,8 @@ label {
   gap: 8px;
   align-items: center;
   text-align: center;
-  font-size: 18px;
-  font-weight: 800;
-  color: #64748b;
+  font-size: 25px;
+  color: #10233f;
 }
 
 .thai-datetime-time-row {
@@ -2323,7 +2322,7 @@ label {
 
 .booking-filter-clear-button {
   padding: 8px 14px !important;
-  font-size: 20px !important;
+  font-size: 25px !important;
   min-height: auto !important;
 }
 .booking-overlap-warning{
@@ -2332,8 +2331,8 @@ label {
   padding:8px 10px;
   border:1px solid #f0d98c;
   border-radius:6px;
-  background:#f86262;
-  color:#ffffff;
+  background:#ffecd4;
+  color:#000000;
   font-size: 20px;
   line-height:1.4;
   font-weight: bold;
