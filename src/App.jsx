@@ -6,6 +6,7 @@ import {
   loadPermissionConfig,
   normalizeRole,
 } from "./permissions";
+import NotificationBell from "./components/notifications/NotificationBell";
 import PageSkeleton from "./components/skeletons/PageSkeleton";
 import { FEATURES } from "./config/features";
 import "./App.css";
@@ -152,6 +153,18 @@ export default function App() {
     setPage(nextPage);
   }
 
+  function navigateToPath(targetUrl) {
+    const resolvedUrl = new URL(String(targetUrl || "/"), window.location.origin);
+    const nextPage = getPageFromPath(resolvedUrl.pathname);
+
+    if (!nextPage) return;
+    if (!isPageFeatureEnabled(nextPage)) return;
+    if (!canAccessPage(user.role, nextPage, permissionConfig)) return;
+
+    setPage(nextPage);
+    window.history.replaceState({}, "", resolvedUrl.pathname);
+  }
+
   function logout() {
     localStorage.removeItem("odc_user");
     setUser(null);
@@ -194,7 +207,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="profile-box">
+        <div className="header-actions">
+          <NotificationBell currentUser={user} onNavigate={navigateToPath} />
+          <div className="profile-box">
           <div className="profile-icon">👤</div>
           <div>
             <b>{user.name}</b>
@@ -203,6 +218,7 @@ export default function App() {
           <button className="logout-btn" onClick={logout}>
             ออกจากระบบ
           </button>
+          </div>
         </div>
       </header>
 

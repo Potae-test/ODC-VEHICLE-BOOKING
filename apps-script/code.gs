@@ -9,6 +9,12 @@
   if (action === "bookings") {
     return getBookings();
   }
+  if (action === "getNotifications") {
+    return getNotifications({
+      user_id: e && e.parameter ? e.parameter.user_id : "",
+      role: e && e.parameter ? e.parameter.role : "",
+    });
+  }
   if (action === "drivers") {
     return getDrivers();
   }
@@ -58,6 +64,7 @@ function doPost(e) {
     const action = body.action;
 
     if (action === "createVehicle") return createVehicle(body.data);
+    if (action === "createNotification") return createNotification(body.data);
     if (action === "createBooking") return createBooking(body.data);
     if (action === "updateBooking") return updateBooking(body.data);
     if (action === "approveBooking") return approveBooking(body.data);
@@ -97,6 +104,8 @@ function doPost(e) {
     if (action === "setCurrentDriverQueuePointer") return setCurrentDriverQueuePointer(body.data);
     if (action === "recommendDriverForBooking") return recommendDriverForBooking(body.data);
     if (action === "confirmDriverQueueAssignment") return confirmDriverQueueAssignment(body.data);
+    if (action === "markNotificationRead") return markNotificationRead(body.data);
+    if (action === "markAllNotificationsRead") return markAllNotificationsRead(body.data);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
@@ -477,6 +486,349 @@ function ensureBookingsSheet() {
   return sheet;
 }
 
+function ensureNotificationsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Notifications");
+  const headers = [
+    "notification_id",
+    "target_user_id",
+    "target_role",
+    "title",
+    "message",
+    "type",
+    "booking_id",
+    "url",
+    "is_read",
+    "created_at",
+    "read_at",
+    "created_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("Notifications");
+  }
+
+  if (sheet.getMaxColumns() < headers.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return sheet;
+  }
+
+  const firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0] || [];
+  const hasRequiredHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
+
+  if (!hasRequiredHeaderRow) {
+    throw new Error("Notifications sheet header row is invalid");
+  }
+
+  return sheet;
+}
+
+function normalizeRoleValue_(role) {
+  return String(role || "").trim().toUpperCase();
+}
+
+function normalizeNotificationReadValue_(value) {
+  if (value === true) return true;
+  return String(value || "").trim().toUpperCase() === "TRUE";
+}
+
+function buildNotificationRecord_(data) {
+  const nowIso = new Date().toISOString();
+
+  return {
+    notification_id: "NTF-" + Utilities.getUuid(),
+    target_user_id: String(data && data.target_user_id || "").trim(),
+    target_role: normalizeRoleValue_(data && data.target_role || ""),
+    title: String(data && data.title || "").trim(),
+    message: String(data && data.message || "").trim(),
+    type: String(data && data.type || "").trim(),
+    booking_id: String(data && data.booking_id || "").trim(),
+    url: String(data && data.url || "").trim(),
+    is_read: false,
+    created_at: nowIso,
+    read_at: "",
+    created_by: String(data && data.created_by || "").trim(),
+  };
+}
+
+function appendNotificationRecord_(data) {
+  const record = buildNotificationRecord_(data);
+
+  if (!record.target_user_id && !record.target_role) {
+    throw new Error("target_user_id or target_role is required");
+  }
+
+  if (!record.title) {
+    throw new Error("title is required");
+  }
+
+  if (!record.message) {
+    throw new Error("message is required");
+  }
+
+  const sheet = ensureNotificationsSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const duplicateWindowMs = 30 * 1000;
+
+  for (let index = table.rows.length - 1; index >= 0; index -= 1) {
+    const existing = rowsToObjects(headers, [table.rows[index]])[0] || {};
+    const createdAt = new Date(existing.created_at || 0).getTime();
+
+    if (!createdAt || Date.now() - createdAt > duplicateWindowMs) {
+      break;
+    }
+
+    if (
+      String(existing.target_user_id || "").trim() === record.target_user_id &&
+      normalizeRoleValue_(existing.target_role || "") === record.target_role &&
+      String(existing.title || "").trim() === record.title &&
+      String(existing.type || "").trim() === record.type &&
+      String(existing.booking_id || "").trim() === record.booking_id &&
+      String(existing.url || "").trim() === record.url
+    ) {
+      return {
+        ...record,
+        notification_id: String(existing.notification_id || "").trim() || record.notification_id,
+        created_at: String(existing.created_at || "").trim() || record.created_at,
+        is_read: normalizeNotificationReadValue_(existing.is_read),
+        read_at: String(existing.read_at || "").trim(),
+      };
+    }
+  }
+
+  const row = headers.map((header) => {
+    if (header === "is_read") return false;
+    return record[header] !== undefined ? record[header] : "";
+  });
+
+  appendSheetRow(sheet, row);
+  return record;
+}
+
+function buildNotificationMessageForBooking_(booking, fallbackMessage) {
+  const bookingNo = String(booking && booking.booking_no || "").trim();
+  const requesterName = String(booking && booking.requester_name || "").trim();
+  const destination = String(booking && booking.destination || "").trim();
+  const parts = [];
+
+  if (bookingNo) parts.push(bookingNo);
+  if (requesterName) parts.push(requesterName);
+  if (destination) parts.push(destination);
+
+  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+}
+
+function createRoleNotifications_(roles, payload) {
+  (roles || []).forEach((role) => {
+    appendNotificationRecord_({
+      ...payload,
+      target_user_id: "",
+      target_role: normalizeRoleValue_(role),
+    });
+  });
+}
+
+function createDriverNotification_(userId, payload) {
+  const targetUserId = String(userId || "").trim();
+  if (!targetUserId) return;
+
+  appendNotificationRecord_({
+    ...payload,
+    target_user_id: targetUserId,
+    target_role: "",
+  });
+}
+
+function isNotificationVisibleToUser_(notification, userId, role) {
+  const targetUserId = String(notification && notification.target_user_id || "").trim();
+  const targetRole = normalizeRoleValue_(notification && notification.target_role || "");
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedRole = normalizeRoleValue_(role);
+
+  return (
+    (targetUserId && normalizedUserId && targetUserId === normalizedUserId) ||
+    (targetRole && normalizedRole && targetRole === normalizedRole)
+  );
+}
+
+function getVisibleNotificationEntries_(userId, role) {
+  const sheet = ensureNotificationsSheet();
+  const table = readSheetTable(sheet);
+  const notifications = rowsToObjects(table.headers, table.rows)
+    .filter((notification) => isNotificationVisibleToUser_(notification, userId, role))
+    .map((notification) => ({
+      ...notification,
+      target_user_id: String(notification.target_user_id || "").trim(),
+      target_role: normalizeRoleValue_(notification.target_role || ""),
+      is_read: normalizeNotificationReadValue_(notification.is_read),
+      created_at: String(notification.created_at || ""),
+      read_at: String(notification.read_at || ""),
+    }));
+
+  notifications.sort((left, right) => {
+    const leftTime = new Date(left.created_at || 0).getTime() || 0;
+    const rightTime = new Date(right.created_at || 0).getTime() || 0;
+    return rightTime - leftTime;
+  });
+
+  return notifications;
+}
+
+function createNotification(data) {
+  try {
+    const record = appendNotificationRecord_(data || {});
+    return jsonOutput({
+      success: true,
+      message: "Create notification success",
+      data: record,
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function getNotifications(data) {
+  try {
+    const userId = String(data && data.user_id || "").trim();
+    const role = normalizeRoleValue_(data && data.role || "");
+
+    if (!userId && !role) {
+      return jsonOutput({
+        success: false,
+        message: "user_id or role is required",
+      });
+    }
+
+    const visibleNotifications = getVisibleNotificationEntries_(userId, role);
+    const latestNotifications = visibleNotifications.slice(0, 50);
+    const unreadCount = visibleNotifications.filter((notification) => !notification.is_read).length;
+
+    return jsonOutput({
+      success: true,
+      total: latestNotifications.length,
+      unread_count: unreadCount,
+      data: latestNotifications,
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function markNotificationRead(data) {
+  try {
+    const notificationId = String(data && data.notification_id || "").trim();
+    if (!notificationId) {
+      return jsonOutput({
+        success: false,
+        message: "notification_id is required",
+      });
+    }
+
+    const sheet = ensureNotificationsSheet();
+    const table = readSheetTable(sheet);
+    const columnMap = table.columnMap;
+    const notificationIdCol = columnMap.notification_id;
+    const isReadCol = columnMap.is_read;
+    const readAtCol = columnMap.read_at;
+
+    if (notificationIdCol === undefined || isReadCol === undefined || readAtCol === undefined) {
+      throw new Error("Notifications sheet columns are invalid");
+    }
+
+    for (let index = 0; index < table.rows.length; index += 1) {
+      const rowValues = table.rows[index];
+      if (String(rowValues[notificationIdCol] || "").trim() !== notificationId) {
+        continue;
+      }
+
+      const nextValues = rowValues.slice();
+      nextValues[isReadCol] = true;
+      nextValues[readAtCol] = new Date().toISOString();
+      setRowValues(sheet, index + 2, nextValues);
+
+      return jsonOutput({
+        success: true,
+        message: "Mark notification read success",
+        data: rowsToObjects(table.headers, [nextValues])[0] || {},
+      });
+    }
+
+    return jsonOutput({
+      success: false,
+      message: "Notification not found",
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function markAllNotificationsRead(data) {
+  try {
+    const userId = String(data && data.user_id || "").trim();
+    const role = normalizeRoleValue_(data && data.role || "");
+
+    if (!userId && !role) {
+      return jsonOutput({
+        success: false,
+        message: "user_id or role is required",
+      });
+    }
+
+    const sheet = ensureNotificationsSheet();
+    const table = readSheetTable(sheet);
+    const columnMap = table.columnMap;
+    const isReadCol = columnMap.is_read;
+    const readAtCol = columnMap.read_at;
+    const nowIso = new Date().toISOString();
+    let updatedCount = 0;
+
+    for (let index = 0; index < table.rows.length; index += 1) {
+      const notification = rowsToObjects(table.headers, [table.rows[index]])[0] || {};
+      if (!isNotificationVisibleToUser_(notification, userId, role)) {
+        continue;
+      }
+
+      if (normalizeNotificationReadValue_(notification.is_read)) {
+        continue;
+      }
+
+      const nextValues = table.rows[index].slice();
+      nextValues[isReadCol] = true;
+      nextValues[readAtCol] = nowIso;
+      setRowValues(sheet, index + 2, nextValues);
+      updatedCount += 1;
+    }
+
+    return jsonOutput({
+      success: true,
+      message: "Mark all notifications read success",
+      data: {
+        updated_count: updatedCount,
+      },
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
 function findRowByBookingId(sheetOrTable, bookingId) {
   const targetBookingId = String(bookingId || "").trim();
   if (!targetBookingId) {
@@ -811,6 +1163,19 @@ function createBooking(data) {
 
     logBookingAction("createBooking", bookingId, row);
 
+    createRoleNotifications_(["STAFF", "ADMIN"], {
+      title: "มีรายการจองใหม่",
+      message: buildNotificationMessageForBooking_({
+        booking_no: bookingNo,
+        requester_name: data.requester_name || "",
+        destination: data.destination || "",
+      }, "มีคำขอจองรถใหม่"),
+      type: "BOOKING_CREATED",
+      booking_id: bookingId,
+      url: "/booking",
+      created_by: String(data.created_by || data.requester_name || "").trim(),
+    });
+
     return jsonOutput({
       success: true,
       message: "Create booking success",
@@ -1011,6 +1376,24 @@ function approveBooking(data) {
         assigned_by_name: currentUserName || "",
       })
     );
+
+    const assignedNotificationUserId = String(rowValues[assignedUserIdCol] || "").trim();
+    if (assignedNotificationUserId) {
+      createNotification({
+        target_user_id: assignedNotificationUserId,
+        target_role: "",
+        title: "คุณได้รับมอบหมายงาน",
+        message: buildNotificationMessageForBooking_({
+          booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
+          requester_name: rowValues[columnMap.requester_name] || "",
+          destination: rowValues[columnMap.destination] || "",
+        }, "มีการมอบหมายงานใหม่"),
+        type: "BOOKING_ASSIGNED",
+        booking_id: values[currentRow][bookingIdCol],
+        url: "/driver-jobs",
+        created_by: currentUserName || "",
+      });
+    }
   }
 
   return jsonOutput({
@@ -1550,6 +1933,15 @@ function requestDriverCancelJob(data) {
     })
   );
 
+  createRoleNotifications_(["STAFF", "ADMIN"], {
+    title: "คนขับขอยกเลิกงาน",
+    message: buildNotificationMessageForBooking_(currentBooking, reason),
+    type: "DRIVER_CANCEL_REQUESTED",
+    booking_id: currentBooking.booking_id || data.booking_id,
+    url: "/booking",
+    created_by: requestedBy || "",
+  });
+
   return jsonOutput({
     success: true,
     message: "Driver cancel request created",
@@ -1619,6 +2011,7 @@ function reviewDriverCancelRequest(data) {
   const reviewedBy = String(data.reviewed_by || "").trim();
   const reviewReason = String(data.review_reason || "").trim();
   const now = new Date();
+  const currentAssignedUserId = String(currentRowValues[columnMap.assigned_user_id] || "").trim();
 
   if (decision === "APPROVE") {
     const resolution = applyDriverCancelResolution_(sheet, table, row, {
@@ -1645,6 +2038,18 @@ function reviewDriverCancelRequest(data) {
     setRowValues(sheet, row, updatedValues);
 
     const currentBooking = rowsToObjects(headers, [updatedValues])[0] || {};
+    if (currentAssignedUserId) {
+      createNotification({
+        target_user_id: currentAssignedUserId,
+        target_role: "",
+        title: "การยกเลิกได้รับอนุมัติ",
+        message: buildNotificationMessageForBooking_(currentBooking, currentRowValues[requestReasonCol] || ""),
+        type: "DRIVER_CANCEL_APPROVED",
+        booking_id: currentBooking.booking_id || data.booking_id,
+        url: "/driver-jobs",
+        created_by: reviewedBy || "",
+      });
+    }
     return jsonOutput({
       success: true,
       message: "Driver cancel request approved",
@@ -1701,6 +2106,20 @@ function reviewDriverCancelRequest(data) {
       created_by: reviewedBy || "",
     })
   );
+
+  const reviewedDriverUserId = String(currentBooking.assigned_user_id || currentAssignedUserId || "").trim();
+  if (reviewedDriverUserId) {
+    createNotification({
+      target_user_id: reviewedDriverUserId,
+      target_role: "",
+      title: "ไม่อนุมัติการยกเลิกงาน",
+      message: buildNotificationMessageForBooking_(currentBooking, reviewReason),
+      type: "DRIVER_CANCEL_REJECTED",
+      booking_id: currentBooking.booking_id || data.booking_id,
+      url: "/driver-jobs",
+      created_by: reviewedBy || "",
+    });
+  }
 
   return jsonOutput({
     success: true,
@@ -4605,6 +5024,22 @@ function confirmDriverQueueAssignment(data) {
   logRow[logTable.columnMap.created_by] = createdBy || "";
   appendSheetRow(logSheet, logRow);
 
+  if (assignedDriverUserId) {
+    createNotification({
+      target_user_id: assignedDriverUserId,
+      target_role: "",
+      title: "คุณได้รับมอบหมายงาน",
+      message: buildNotificationMessageForBooking_({
+        booking_id: bookingId,
+        booking_no: bookingNo,
+      }, "มีการมอบหมายงานใหม่"),
+      type: "BOOKING_ASSIGNED",
+      booking_id: bookingId,
+      url: "/driver-jobs",
+      created_by: createdBy || "",
+    });
+  }
+
   return jsonOutput({
     success: true,
     message: warning ? "Confirm driver queue assignment success with warning" : "Confirm driver queue assignment success",
@@ -5588,6 +6023,19 @@ function unassignBookingDriver(data) {
       assigned_by_name: updatedBy,
     })
   );
+
+  if (oldDriverUserId) {
+    createNotification({
+      target_user_id: oldDriverUserId,
+      target_role: "",
+      title: "มีการดึงงานกลับ",
+      message: buildNotificationMessageForBooking_(updatedBooking, reason),
+      type: "BOOKING_UNASSIGNED",
+      booking_id: bookingId,
+      url: "/driver-jobs",
+      created_by: updatedBy,
+    });
+  }
 
   return jsonOutput({
     success: true,

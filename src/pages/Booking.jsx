@@ -868,7 +868,7 @@ const BookingTableRow = memo(function BookingTableRow({
                 disabled={disabled}
                 onClick={() => onCancel(booking)}
               >
-                {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
+                {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
               </button>
             )}
             {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
@@ -1736,7 +1736,7 @@ export default function Booking() {
   const handleCancelBooking = useCallback(async (booking) => {
     if (processingAction) return;
     const result = await Swal.fire({
-      title: normalizeStatus(booking.status) === "PENDING" ? "ยกเลิกรายการจอง" : "Delete Booking",
+      title: normalizeStatus(booking.status) === "PENDING" ? "ยกเลิกรายการจอง" : "ยกเลิกรายการจอง",
       html: `
         <div class="swal-form">
           <label>เหตุผลการยกเลิก</label>

@@ -578,17 +578,19 @@ export default function DriverJobs() {
     const managingOnBehalf = (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
     const assignedUserLabel = getAssignedUserLabel(booking);
     const result = await Swal.fire({
+      title: "รับงาน / ออกรถ",
       html: managingOnBehalf
         ? `
           <div class="swal-confirm-copy">
-            <div>\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:</div>
-            <div class="swal-confirm-secondary">\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:</div>
+            <div>คุณกำลังกดรับงานแทน:</div>
             <div class="swal-confirm-name">${assignedUserLabel}</div>
           </div>
         `
-        : "\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E23\u0E31\u0E1A\u0E07\u0E32\u0E19\u0E41\u0E17\u0E19:",
-      title: "รับงาน / ออกรถ",
-      text: "ยืนยันการรับงานและออกรถใช่หรือไม่",
+        : `
+          <div class="swal-confirm-copy">
+            <div>ยืนยันการรับงานและออกรถใช่หรือไม่</div>
+          </div>
+        `,
       showCancelButton: true,
       confirmButtonText: "ตกลง",
       cancelButtonText: "ยกเลิก",
@@ -636,22 +638,24 @@ export default function DriverJobs() {
     const managingOnBehalf = (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
     const assignedUserLabel = getAssignedUserLabel(booking);
     const result = await Swal.fire({
+      title: "จบงาน / คืนรถ",
       html: managingOnBehalf
         ? `
           <div class="swal-confirm-copy">
-            <div>\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:</div>
-            <div class="swal-confirm-secondary">\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:</div>
+            <div>คุณกำลังกดคืนรถแทน:</div>
             <div class="swal-confirm-name">${assignedUserLabel}</div>
           </div>
         `
-        : "\u0E04\u0E38\u0E13\u0E01\u0E33\u0E25\u0E31\u0E07\u0E01\u0E14\u0E04\u0E37\u0E19\u0E23\u0E16\u0E41\u0E17\u0E19:",
-      title: "จบงาน / คืนรถ",
+        : `
+          <div class="swal-confirm-copy">
+            <div>ยืนยันการจบงานและคืนรถใช่หรือไม่</div>
+          </div>
+        `,
       showCancelButton: true,
       confirmButtonText: "ตกลง",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
-      text: "ยืนยันการจบงานและคืนรถใช่หรือไม่",
     });
 
     if (!result.isConfirmed) return;

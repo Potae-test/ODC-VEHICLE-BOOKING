@@ -318,6 +318,7 @@ const BookingFormModal = forwardRef(function BookingFormModal(
             destination,
             purpose,
             vehicle_id: booking?.vehicle_id || "",
+            created_by: currentUser?.name || currentUser?.email || "",
             is_backdated: isBackdatedInput
               ? isBackdatedInput.checked
                 ? "TRUE"

@@ -10,6 +10,7 @@ const SHEET_API_URL =
 const getRouteActions: Record<string, string> = {
   "/api/vehicles": "vehicles",
   "/api/bookings": "bookings",
+  "/api/notifications": "getNotifications",
   "/api/bookings/cancellations": "bookingCancellations",
   "/api/thai_holidays": "thai_holidays",
   "/api/getDriverUnavailable": "getDriverUnavailable",
@@ -28,6 +29,9 @@ const postRouteActions: Record<string, string> = {
   "/api/vehicles/update": "updateVehicle",
   "/api/vehicles/delete": "deleteVehicle",
   "/api/bookings": "createBooking",
+  "/api/notifications": "createNotification",
+  "/api/notifications/read": "markNotificationRead",
+  "/api/notifications/read-all": "markAllNotificationsRead",
   "/api/bookings/approve": "approveBooking",
   "/api/bookings/start-trip": "startTrip",
   "/api/bookings/complete-trip": "completeTrip",
@@ -86,8 +90,18 @@ async function fetchSheetJson(url: string, options?: RequestInit) {
   }
 }
 
-async function forwardSheetGet(action: string) {
-  return fetchSheetJson(`${SHEET_API_URL}?action=${encodeURIComponent(action)}`);
+async function forwardSheetGet(action: string, params?: URLSearchParams) {
+  const query = new URLSearchParams();
+  query.set("action", action);
+
+  if (params) {
+    params.forEach((value, key) => {
+      if (key === "ts") return;
+      query.set(key, value);
+    });
+  }
+
+  return fetchSheetJson(`${SHEET_API_URL}?${query.toString()}`);
 }
 
 async function forwardSheetPost(action: string, data: unknown) {
@@ -131,7 +145,7 @@ export default {
     if (request.method === "GET") {
       const action = getRouteActions[url.pathname];
       if (action) {
-        return jsonResponse(await forwardSheetGet(action));
+        return jsonResponse(await forwardSheetGet(action, url.searchParams));
       }
     }
 

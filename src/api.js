@@ -16,6 +16,11 @@ function invalidateApiCache(keys) {
   keys.forEach((key) => apiCache.delete(key));
 }
 
+function emitNotificationsRefresh() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event("odc-notifications-refresh"));
+}
+
 async function fetchJson(url, options) {
   const res = await fetch(url, options);
   const json = await res.json();
@@ -200,6 +205,46 @@ export async function getBookingsFresh() {
   return getBookings({ fresh: true });
 }
 
+export async function getNotifications(params = {}) {
+  const search = new URLSearchParams();
+
+  if (params.user_id) search.set("user_id", params.user_id);
+  if (params.role) search.set("role", params.role);
+  search.set("ts", String(Date.now()));
+
+  const json = await fetchJson(`${API_BASE_URL}/api/notifications?${search.toString()}`);
+  return {
+    items: json.data || [],
+    unreadCount: Number(json.unread_count || 0),
+  };
+}
+
+export async function markNotificationRead(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/notifications/read`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data || {}),
+  });
+
+  invalidateApiCache(["notifications"]);
+  return json.data || json;
+}
+
+export async function markAllNotificationsRead(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/notifications/read-all`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data || {}),
+  });
+
+  invalidateApiCache(["notifications"]);
+  return json.data || json;
+}
+
 export async function getDriverJobLogs(options = {}) {
   return apiRequest("driver_job_logs", options);
 }
@@ -244,6 +289,7 @@ export async function createBooking(data) {
   });
 
   invalidateApiCache(["bookings"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 
@@ -268,6 +314,7 @@ export async function approveBooking(data) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 
@@ -292,6 +339,7 @@ export async function startTrip(data) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data || json;
 }
 
@@ -325,6 +373,7 @@ export async function requestDriverCancelJob(data) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data || json;
 }
 
@@ -336,6 +385,7 @@ export async function reviewDriverCancelRequest(data) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data || json;
 }
 
@@ -347,6 +397,7 @@ export async function cancelBooking(data) {
   });
 
   invalidateApiCache(["bookings", "booking-cancellations"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 
@@ -358,6 +409,7 @@ export async function unassignBookingDriver(payload) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data || json;
 }
 
@@ -479,6 +531,7 @@ export async function updateDriverQueue(data) {
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 
@@ -544,6 +597,7 @@ export async function confirmDriverQueueAssignment(data) {
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 
