@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../../api";
 
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
+const NOTIFICATIONS_PER_PAGE = 3;
 
 const thaiDateTimeFormatter = new Intl.DateTimeFormat("th-TH", {
   timeZone: "Asia/Bangkok",
@@ -34,10 +35,17 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [activeNotificationId, setActiveNotificationId] = useState("");
   const [markingAll, setMarkingAll] = useState(false);
+  const [page, setPage] = useState(1);
   const rootRef = useRef(null);
 
   const userId = String(currentUser?.user_id || "").trim();
   const role = String(currentUser?.role || "").trim().toUpperCase();
+  const notifications = items;
+  const totalPages = Math.max(1, Math.ceil(notifications.length / NOTIFICATIONS_PER_PAGE));
+  const pagedNotifications = notifications.slice(
+    (page - 1) * NOTIFICATIONS_PER_PAGE,
+    page * NOTIFICATIONS_PER_PAGE
+  );
 
   const loadNotifications = useCallback(
     async ({ silent = false } = {}) => {
@@ -120,6 +128,16 @@ export default function NotificationBell({ currentUser, onNavigate }) {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [notifications.length]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const handleOpen = async () => {
     const nextOpen = !isOpen;
@@ -238,9 +256,10 @@ export default function NotificationBell({ currentUser, onNavigate }) {
               <div className="notification-empty-state">ยังไม่มีรายการแจ้งเตือน</div>
             )}
 
-            {!loading && items.length > 0 && (
-              <div className="notification-list">
-                {items.map((notification) => {
+            {!loading && notifications.length > 0 && (
+              <>
+                <div className="notification-list">
+                  {pagedNotifications.map((notification) => {
                   const notificationId = String(notification.notification_id || "").trim();
                   const isUnread = !notification.is_read;
 
@@ -260,8 +279,23 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                       <div className="notification-item-message">{notification.message || "-"}</div>
                     </button>
                   );
-                })}
-              </div>
+                  })}
+                </div>
+                {totalPages > 1 && (
+                  <div className="notification-pagination">
+                    {Array.from({ length: totalPages }).map((_, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className={page === index + 1 ? "active-page" : ""}
+                        onClick={() => setPage(index + 1)}
+                      >
+                        {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 

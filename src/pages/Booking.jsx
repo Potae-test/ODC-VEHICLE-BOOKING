@@ -94,8 +94,22 @@ function getStatusMeta(status) {
 
 function sortLatestFirst(items) {
   return [...items].sort((a, b) => {
-    const dateA = new Date(a.created_at || a.updated_at || a.start_datetime).getTime();
-    const dateB = new Date(b.created_at || b.updated_at || b.start_datetime).getTime();
+    const dateA = new Date(
+      a.created_at ||
+        a.booking_created_at ||
+        a.updated_at ||
+        a.start_datetime ||
+        0
+    ).getTime();
+
+    const dateB = new Date(
+      b.created_at ||
+        b.booking_created_at ||
+        b.updated_at ||
+        b.start_datetime ||
+        0
+    ).getTime();
+
     return dateB - dateA;
   });
 }

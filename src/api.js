@@ -351,6 +351,7 @@ export async function completeTrip(data) {
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 

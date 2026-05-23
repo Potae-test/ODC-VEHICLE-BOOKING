@@ -645,16 +645,35 @@ function createDriverNotification_(userId, payload) {
   });
 }
 
+function resolveRequesterNotificationUserId_(booking) {
+  const target = booking || {};
+  const candidateFields = [
+    "requester_user_id",
+    "user_id",
+    "created_by_user_id",
+    "created_user_id",
+    "requested_by_user_id",
+  ];
+
+  for (let index = 0; index < candidateFields.length; index += 1) {
+    const value = String(target[candidateFields[index]] || "").trim();
+    if (value) return value;
+  }
+
+  return "";
+}
+
 function isNotificationVisibleToUser_(notification, userId, role) {
   const targetUserId = String(notification && notification.target_user_id || "").trim();
   const targetRole = normalizeRoleValue_(notification && notification.target_role || "");
   const normalizedUserId = String(userId || "").trim();
   const normalizedRole = normalizeRoleValue_(role);
 
-  return (
-    (targetUserId && normalizedUserId && targetUserId === normalizedUserId) ||
-    (targetRole && normalizedRole && targetRole === normalizedRole)
-  );
+  if (targetUserId) {
+    return Boolean(normalizedUserId) && targetUserId === normalizedUserId;
+  }
+
+  return Boolean(targetRole && normalizedRole && targetRole === normalizedRole);
 }
 
 function getVisibleNotificationEntries_(userId, role) {
@@ -1499,6 +1518,21 @@ function startTrip(data) {
   logRowValues[logUpdatedAtCol] = now;
   appendSheetRow(logSheet, logRowValues);
 
+  const requesterUserId = resolveRequesterNotificationUserId_(currentBooking);
+  const startedDriverName = String(actualStartBy || assignedUserName || currentBooking.driver_name || "").trim();
+  if (requesterUserId) {
+    createNotification({
+      target_user_id: requesterUserId,
+      target_role: "",
+      title: "คนขับรับงานแล้ว",
+      message: `คนขับ ${startedDriverName || "-"} รับงานของคุณแล้ว`,
+      type: "DRIVER_STARTED_JOB",
+      booking_id: currentBooking.booking_id || data.booking_id,
+      url: "/booking",
+      created_by: startedDriverName || assignedUserName || "",
+    });
+  }
+
   return jsonOutput({
     success: true,
     message: "Start trip success",
@@ -1589,6 +1623,16 @@ function completeTrip(data) {
       logRowValues[remarkCol] = data.remark || logValues[i][remarkCol] || "";
       logRowValues[logUpdatedAtCol] = now;
       setRowValues(logSheet, row, logRowValues);
+
+      const completedDriverName = String(actualReturnBy || completedAssignedUserName || completedBooking.driver_name || "").trim();
+      createRoleNotifications_(["STAFF", "ADMIN"], {
+        title: "ปิดงานแล้ว",
+        message: `คนขับ ${completedDriverName || "-"} ปิดงานแล้ว`,
+        type: "DRIVER_COMPLETED_JOB",
+        booking_id: completedBooking.booking_id || data.booking_id,
+        url: "/booking",
+        created_by: completedDriverName || completedAssignedUserName || "",
+      });
 
       return jsonOutput({
         success: true,
@@ -2208,6 +2252,7 @@ function cancelBooking(data) {
   rowValues[staffNoteCol] = reason;
   rowValues[updatedAtCol] = now;
   setRowValues(sheet, row, rowValues);
+  const cancelledBooking = rowsToObjects(headers, [rowValues])[0] || {};
 
   const historySheet = ensureCancellationHistorySheet();
   const historyHeaders = readSheetTable(historySheet).headers;
@@ -2235,6 +2280,34 @@ function cancelBooking(data) {
   setHistoryValue(historyHeaders, historyRow, "updated_at", now);
 
   appendSheetRow(historySheet, historyRow);
+
+  const requesterUserId = resolveRequesterNotificationUserId_(cancelledBooking);
+  if (requesterUserId) {
+    createNotification({
+      target_user_id: requesterUserId,
+      target_role: "",
+      title: "รายการจองถูกยกเลิก",
+      message: `รายการจองของคุณถูกยกเลิก เหตุผล: ${reason || "-"}`,
+      type: "BOOKING_CANCELLED",
+      booking_id: cancelledBooking.booking_id || data.booking_id,
+      url: "/booking",
+      created_by: cancelledBy,
+    });
+  }
+
+  const cancelledAssignedUserId = String(cancelledBooking.assigned_user_id || "").trim();
+  if (cancelledAssignedUserId) {
+    createNotification({
+      target_user_id: cancelledAssignedUserId,
+      target_role: "",
+      title: "รายการจองถูกยกเลิก",
+      message: `รายการงานที่มอบหมายถูกยกเลิก เหตุผล: ${reason || "-"}`,
+      type: "BOOKING_CANCELLED",
+      booking_id: cancelledBooking.booking_id || data.booking_id,
+      url: "/driver-jobs",
+      created_by: cancelledBy,
+    });
+  }
 
   return jsonOutput({
     success: true,
