@@ -15,6 +15,8 @@ import { showConfirm, showError, showSuccess } from "../utils/alert";
 import ThaiDateTimeField from "../components/common/ThaiDateTimeField";
 import { parseAppDateTime, toLocalDateTimeString } from "../utils/datetime";
 
+const ROWS_PER_PAGE = 5;
+
 function getCurrentUser() {
   try {
     return JSON.parse(localStorage.getItem("odc_user") || "null");
@@ -82,6 +84,32 @@ function getUnavailableReasonLabel(record) {
   const parts = [getTypeLabel(record.type)];
   if (record.reason) parts.push(record.reason);
   return parts.join(" - ");
+}
+
+function paginate(items, page) {
+  const start = (page - 1) * ROWS_PER_PAGE;
+  return items.slice(start, start + ROWS_PER_PAGE);
+}
+
+function totalPages(items) {
+  return Math.max(1, Math.ceil(items.length / ROWS_PER_PAGE));
+}
+
+function Pagination({ page, total, onChange }) {
+  return (
+    <div className="pagination">
+      {Array.from({ length: total }).map((_, index) => (
+        <button
+          key={index}
+          type="button"
+          className={page === index + 1 ? "active-page" : ""}
+          onClick={() => onChange(index + 1)}
+        >
+          {index + 1}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function UnavailableDateTimeFields({ initialStart, initialEnd, onChange }) {
@@ -174,6 +202,7 @@ export default function DriverUnavailable() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
   const currentUser = getCurrentUser();
   const currentRole = normalizeRole(currentUser?.role);
   const canCreate = hasPermission(null, "driver_unavailable_create");
@@ -237,8 +266,9 @@ export default function DriverUnavailable() {
     });
   }, [filters, visibleItems]);
 
-  function handleExportExcel() {
-    const rows = filteredItems.map((record, index) => ({
+  const exportRows = useMemo(
+    () =>
+      filteredItems.map((record, index) => ({
       ลำดับ: index + 1,
       คนขับ: record.driver_name || "-",
       ประเภท: getTypeLabel(record.type),
@@ -250,7 +280,25 @@ export default function DriverUnavailable() {
       สร้างเมื่อ: record.created_at ? formatThaiDateTime(record.created_at) : "-",
       ผู้แก้ไข: record.updated_by || "-",
       แก้ไขเมื่อ: record.updated_at ? formatThaiDateTime(record.updated_at) : "-",
-    }));
+      })),
+    [filteredItems]
+  );
+
+  const pages = useMemo(() => totalPages(filteredItems), [filteredItems]);
+  const pageItems = useMemo(() => paginate(filteredItems, page), [filteredItems, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
+
+  useEffect(() => {
+    if (page > pages) {
+      setPage(pages);
+    }
+  }, [page, pages]);
+
+  function handleExportExcel() {
+    const rows = exportRows;
 
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -542,7 +590,7 @@ export default function DriverUnavailable() {
                     <td colSpan="7">ไม่พบรายการตามเงื่อนไขที่ค้นหา</td>
                   </tr>
                 ) : (
-                  filteredItems.map((record) => (
+                  pageItems.map((record) => (
                     <tr key={record.unavailable_id}>
                       <td>{record.driver_name || "-"}</td>
                       <td>
@@ -576,6 +624,10 @@ export default function DriverUnavailable() {
               </tbody>
             </table>
           </div>
+
+          {filteredItems.length > 0 && (
+            <Pagination page={page} total={pages} onChange={setPage} />
+          )}
         </div>
       )}
     </div>

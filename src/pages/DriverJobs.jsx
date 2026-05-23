@@ -274,7 +274,6 @@ function PaginationControls({ page, totalPages, onChange }) {
     </div>
   );
 }
-
 function DriverJobTableActions({
   booking,
   processing,
@@ -298,19 +297,19 @@ function DriverJobTableActions({
 
       {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
         <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
-          ยกเลิกงาน
+          {processing === "cancel-request" ? "กำลังยกเลิกงาน..." : "ยกเลิกงาน"}
         </button>
       )}
 
       {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
         <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
-          รับงาน / ออกรถ
-        </button>
+          {processing === "start" ? "กำลังรับงาน..." : "รับงาน / ออกรถ"}
+          </button>
       )}
 
       {canComplete && status === "IN_USE" && !hasPendingDriverCancelRequest && (
         <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
-          จบงาน / คืนรถ
+          {processing === "complete" ? "กำลังจบงาน..." : "จบงาน / คืนรถ"}
         </button>
       )}
     </div>
@@ -411,19 +410,20 @@ const JobCard = memo(function JobCard({
 
         {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
           <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
-            ยกเลิกงาน
+              {processing === "cancel-request" ? "กำลังยกเลิกงาน..." : "ยกเลิกงาน"}
           </button>
         )}
 
         {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
           <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
-            รับงาน / ออกรถ
+            {processing === "start" ? "กำลังรับงาน..." : "รับงาน / ออกรถ"}
+
           </button>
         )}
 
         {canComplete && status === "IN_USE" && !hasPendingDriverCancelRequest && (
           <button type="button" className="warning-button" disabled={disabled} onClick={() => onComplete(booking)}>
-            จบงาน / คืนรถ
+            {processing === "complete" ? "กำลังจบงาน..." : "จบงาน / คืนรถ"}
           </button>
         )}
 
