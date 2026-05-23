@@ -101,13 +101,15 @@ export default function BookingCancellationHistory() {
     setPage(1);
   }, [filters]);
 
+  const sortedHistory = useMemo(() => sortLatestFirst(history), [history]);
+
   const filteredHistory = useMemo(() => {
     const requester = filters.requester.trim().toLowerCase();
     const destination = filters.destination.trim().toLowerCase();
     const reason = filters.reason.trim().toLowerCase();
     const cancelledBy = filters.cancelled_by.trim().toLowerCase();
 
-    return sortLatestFirst(history).filter((item) => {
+    return sortedHistory.filter((item) => {
       if (requester && !String(item.requester_name || "").toLowerCase().includes(requester)) {
         return false;
       }
@@ -126,10 +128,10 @@ export default function BookingCancellationHistory() {
 
       return true;
     });
-  }, [history, filters]);
+  }, [filters, sortedHistory]);
 
-  const historyPages = totalPages(filteredHistory);
-  const pageItems = paginate(filteredHistory, page);
+  const historyPages = useMemo(() => totalPages(filteredHistory), [filteredHistory]);
+  const pageItems = useMemo(() => paginate(filteredHistory, page), [filteredHistory, page]);
 
   useEffect(() => {
     if (page > historyPages) {
@@ -198,19 +200,12 @@ export default function BookingCancellationHistory() {
     try {
       setDeletingId(cancellationId);
 
-      console.log("Deleting cancellation history", {
-        cancellationId,
-        item,
-      });
-
-      const response = await deleteBookingCancellationHistory({
+      await deleteBookingCancellationHistory({
         cancellation_id: item.cancellation_id || "",
         booking_id: item.booking_id || "",
         id: item.id || "",
         row_number: item.row_number || "",
       });
-
-      console.log("Deleted cancellation history response", response);
 
       setHistory((current) =>
         current.filter((row) => getCancellationDeleteId(row) !== cancellationId)

@@ -4,10 +4,66 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwqsGXCt7Ac0p92IFYFWndE8PY_-u1rmo8J7f7mMihYMKkVAub8jAOlbpLMCy0hah3A/exec";
+const SHEET_API_URL =
+  "https://script.google.com/macros/s/AKfycbwqsGXCt7Ac0p92IFYFWndE8PY_-u1rmo8J7f7mMihYMKkVAub8jAOlbpLMCy0hah3A/exec";
 
-function jsonResponse(data: any, status = 200) {
-  return Response.json(data, {
+const getRouteActions: Record<string, string> = {
+  "/api/vehicles": "vehicles",
+  "/api/bookings": "bookings",
+  "/api/bookings/cancellations": "bookingCancellations",
+  "/api/thai_holidays": "thai_holidays",
+  "/api/getDriverUnavailable": "getDriverUnavailable",
+  "/api/getDriverUnavailableLogs": "getDriverUnavailableLogs",
+  "/api/getDriverQueue": "getDriverQueue",
+  "/api/getDriverQueueState": "getDriverQueueState",
+  "/api/getDriverQueueLogs": "getDriverQueueLogs",
+  "/api/driver-job-logs": "driver_job_logs",
+  "/api/driver_job_logs": "driver_job_logs",
+  "/api/drivers": "drivers",
+  "/api/users": "users",
+};
+
+const postRouteActions: Record<string, string> = {
+  "/api/vehicles": "createVehicle",
+  "/api/vehicles/update": "updateVehicle",
+  "/api/vehicles/delete": "deleteVehicle",
+  "/api/bookings": "createBooking",
+  "/api/bookings/approve": "approveBooking",
+  "/api/bookings/start-trip": "startTrip",
+  "/api/bookings/complete-trip": "completeTrip",
+  "/api/backdate_complete_booking": "backdate_complete_booking",
+  "/api/bookings/driver-cancel-job": "driverCancelJob",
+  "/api/requestDriverCancelJob": "requestDriverCancelJob",
+  "/api/reviewDriverCancelRequest": "reviewDriverCancelRequest",
+  "/api/bookings/cancel": "cancelBooking",
+  "/api/bookings/cancellations/delete": "deleteBookingCancellationHistory",
+  "/api/unassign_booking_driver": "unassign_booking_driver",
+  "/api/login": "loginUser",
+  "/api/drivers": "createDriver",
+  "/api/drivers/status": "updateDriverStatus",
+  "/api/drivers/update": "updateDriver",
+  "/api/drivers/delete": "deleteDriver",
+  "/api/users": "createUser",
+  "/api/users/update": "updateUser",
+  "/api/users/reset-password": "resetUserPassword",
+  "/api/users/disable": "disableUser",
+  "/api/users/delete": "deleteUser",
+  "/api/bookings/update": "updateBooking",
+  "/api/createDriverUnavailable": "createDriverUnavailable",
+  "/api/updateDriverUnavailable": "updateDriverUnavailable",
+  "/api/cancelDriverUnavailable": "cancelDriverUnavailable",
+  "/api/checkDriverUnavailable": "checkDriverUnavailable",
+  "/api/updateDriverQueue": "updateDriverQueue",
+  "/api/updateDriverQueueMaster": "updateDriverQueueMaster",
+  "/api/resetDriverQueueState": "resetDriverQueueState",
+  "/api/resetDriverQueuePointer": "resetDriverQueuePointer",
+  "/api/setCurrentDriverQueuePointer": "setCurrentDriverQueuePointer",
+  "/api/recommendDriverForBooking": "recommendDriverForBooking",
+  "/api/confirmDriverQueueAssignment": "confirmDriverQueueAssignment",
+};
+
+function jsonResponse(payload: unknown, status = 200) {
+  return Response.json(payload, {
     status,
     headers: corsHeaders,
   });
@@ -22,11 +78,33 @@ async function fetchSheetJson(url: string, options?: RequestInit) {
   } catch {
     return {
       success: false,
-      message: "Apps Script ไม่ได้ส่ง JSON กลับมา",
+      data: null,
+      message: "Apps Script did not return valid JSON",
       status: res.status,
       preview: text.slice(0, 300),
     };
   }
+}
+
+async function forwardSheetGet(action: string) {
+  return fetchSheetJson(`${SHEET_API_URL}?action=${encodeURIComponent(action)}`);
+}
+
+async function forwardSheetPost(action: string, data: unknown) {
+  return fetchSheetJson(SHEET_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify({
+      action,
+      data,
+    }),
+  });
+}
+
+async function readRequestBody(request: Request) {
+  return (await request.json().catch(() => ({}))) as Record<string, unknown>;
 }
 
 export default {
@@ -43,601 +121,39 @@ export default {
     if (url.pathname === "/api/health") {
       return jsonResponse({
         success: true,
+        data: {
+          time: new Date().toISOString(),
+        },
         message: "ODC Vehicle Booking API Running",
-        time: new Date().toISOString(),
       });
     }
 
-    if (url.pathname === "/api/vehicles" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=vehicles`);
-      return jsonResponse(sheetJson);
+    if (request.method === "GET") {
+      const action = getRouteActions[url.pathname];
+      if (action) {
+        return jsonResponse(await forwardSheetGet(action));
+      }
     }
 
-    if (url.pathname === "/api/vehicles" && request.method === "POST") {
-      const body = await request.json();
+    if (request.method === "POST") {
+      const body = await readRequestBody(request);
 
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          action: "createVehicle",
-          data: body,
-        }),
-      });
+      if (url.pathname === "/api/thai_holidays") {
+        const requestedAction = String(body?.action || "thai_holidays").trim();
+        const action = requestedAction === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
+        return jsonResponse(await forwardSheetPost(action, body?.data || body || {}));
+      }
 
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookings`);
-      return jsonResponse(sheetJson);
+      const action = postRouteActions[url.pathname];
+      if (action) {
+        return jsonResponse(await forwardSheetPost(action, body));
+      }
     }
 
-    if (url.pathname === "/api/bookings" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          action: "createBooking",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/approve" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          action: "approveBooking",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/unassign_booking_driver" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          action: "unassign_booking_driver",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/start-trip" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "startTrip",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-
-    if (url.pathname === "/api/bookings/complete-trip" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "completeTrip",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/backdate_complete_booking" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "backdate_complete_booking",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/driver-cancel-job" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "driverCancelJob",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/requestDriverCancelJob" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "requestDriverCancelJob",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/reviewDriverCancelRequest" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "reviewDriverCancelRequest",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/cancel" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "cancelBooking",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/cancellations" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=bookingCancellations`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/thai_holidays" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=thai_holidays`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/thai_holidays" && request.method === "POST") {
-      const body = (await request.json().catch(() => ({}))) as any;
-      const action = String(body?.action || "thai_holidays").trim();
-      const resolvedAction = action === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify({
-          action: resolvedAction,
-          data: body?.data || body || {},
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/getDriverUnavailable" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverUnavailable`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/getDriverUnavailableLogs" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverUnavailableLogs`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/getDriverQueue" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverQueue`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/getDriverQueueState" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverQueueState`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/getDriverQueueLogs" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=getDriverQueueLogs`);
-      return jsonResponse(sheetJson);
-    }
-    if ((url.pathname === "/api/driver-job-logs" || url.pathname === "/api/driver_job_logs") && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=driver_job_logs`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/bookings/cancellations/delete" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "deleteBookingCancellationHistory",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/login" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "loginUser",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/drivers" && request.method === "GET") {
-      const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=drivers`);
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/drivers" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "createDriver",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/drivers/status" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "updateDriverStatus",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-if (url.pathname === "/api/users" && request.method === "GET") {
-  const sheetJson = await fetchSheetJson(`${SHEET_API_URL}?action=users`);
-  return jsonResponse(sheetJson);
-}
-
-if (url.pathname === "/api/users" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "createUser",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-}
-
-if (url.pathname === "/api/users/update" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "updateUser",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-}
-
-if (url.pathname === "/api/users/reset-password" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "resetUserPassword",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-  }
- if (url.pathname === "/api/vehicles/delete" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "deleteVehicle",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-  }
-
-  if (url.pathname === "/api/vehicles/update" && request.method === "POST") {
-    const body = await request.json();
-
-    const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "updateVehicle",
-        data: body,
-      }),
-    });
-
-    return jsonResponse(sheetJson);
-  }
-if (url.pathname === "/api/users/disable" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "disableUser",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-    }
-
-    if (url.pathname === "/api/users/delete" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "deleteUser",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-if (url.pathname === "/api/drivers/update" && request.method === "POST") {
-  const body = await request.json();
-
-  const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({
-      action: "updateDriver",
-      data: body,
-    }),
-  });
-
-  return jsonResponse(sheetJson);
-  }
-
-  if (url.pathname === "/api/drivers/delete" && request.method === "POST") {
-    const body = await request.json();
-
-    const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "deleteDriver",
-        data: body,
-      }),
-    });
-
-    return jsonResponse(sheetJson);
-  }
-    if (url.pathname === "/api/bookings/update" && request.method === "POST") {
-      const body = await request.json();
-
-    const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "updateBooking",
-        data: body,
-      }),
-    });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/createDriverUnavailable" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "createDriverUnavailable",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/updateDriverUnavailable" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "updateDriverUnavailable",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/cancelDriverUnavailable" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "cancelDriverUnavailable",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/checkDriverUnavailable" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "checkDriverUnavailable",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/updateDriverQueue" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "updateDriverQueue",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/updateDriverQueueMaster" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "updateDriverQueueMaster",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/resetDriverQueueState" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "resetDriverQueueState",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/resetDriverQueuePointer" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "resetDriverQueuePointer",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/setCurrentDriverQueuePointer" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "setCurrentDriverQueuePointer",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/recommendDriverForBooking" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "recommendDriverForBooking",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
-    if (url.pathname === "/api/confirmDriverQueueAssignment" && request.method === "POST") {
-      const body = await request.json();
-
-      const sheetJson = await fetchSheetJson(SHEET_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "confirmDriverQueueAssignment",
-          data: body,
-        }),
-      });
-
-      return jsonResponse(sheetJson);
-    }
     return jsonResponse(
       {
         success: false,
+        data: null,
         message: "API Not Found",
         path: url.pathname,
       },

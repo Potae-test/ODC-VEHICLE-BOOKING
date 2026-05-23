@@ -16,6 +16,8 @@ npm install \
 @fullcalendar/daygrid \
 @fullcalendar/interaction \
 @fullcalendar/core
+npm install xlsx
+
 
 3) Login Cloudflare ใหม่
 npx wrangler login
@@ -34,7 +36,9 @@ npx wrangler pages deploy dist --project-name odc-vehicle-booking
 
 7) Deploy API Worker
 cd odc-vehicle-api
+npm run build
 npx wrangler deploy 
+
 npx wrangler deploy src/index.ts --name odc-vehicle-api
 
 -----------------------------

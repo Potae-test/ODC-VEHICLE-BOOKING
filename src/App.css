@@ -1754,6 +1754,15 @@ label {
   background-color: #13889c;
   color: white;
 }
+.primary-button {
+  background: #007bff;
+  margin-left: 8px;
+ 
+}
+.primary-button:hover {
+  background-color: #0056b3;
+  color: white;
+}
 .success-button {
   background: #28a745;
   margin-left: 8px;
@@ -1785,22 +1794,21 @@ label {
 .danger-button:hover {
   background: #b91c1c;
 }
-.action-buttons .booking-action-button:not(.warning-button):not(.danger-button) {
-  background: #19c0f3;
+.action-buttons .booking-action-button{
+  /* background: #19c0f3; */
   padding: 10px 16px;
   min-width: auto;
   width: auto;
   min-height: 44px;
   border-radius: 10px;
   font-size: 24px;
+  
 }
 
-.action-buttons .booking-action-button:not(.warning-button):not(.danger-button):hover {
-  background: #0f429f;
-}
+
 .action-buttons {
   display: flex;
-  gap: 12px;
+  gap: 5px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -1808,6 +1816,7 @@ label {
 .action-buttons button {
   margin: 0 !important;
 }
+
 .section-toolbar {
   display: flex;
   justify-content: flex-end;

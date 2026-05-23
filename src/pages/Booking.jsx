@@ -559,6 +559,64 @@ function getDriverUnavailableConflict(driver, currentBooking, unavailableGroups)
   }) || null;
 }
 
+function buildVehicleOptionsHtml(vehicles, currentBooking, bookingGroups) {
+  return vehicles
+    .map((vehicle) => {
+      const available = isVehicleAvailable(vehicle, currentBooking, bookingGroups);
+      const vehicleStatus = normalizeVehicleStatus(vehicle.status);
+      const unavailableByStatus = vehicleStatus === "UNAVAILABLE";
+      const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
+        vehicle.license_plate || vehicle.plate_no || "-"
+      }`;
+      const availabilityLabel = unavailableByStatus
+        ? " ⚠️ ไม่พร้อมใช้งาน"
+        : available
+          ? " ✅ ว่าง"
+          : " ❌ ไม่ว่าง";
+
+      return `<option value="${escapeHtml(vehicle.vehicle_id)}" ${
+        available ? "" : "disabled"
+      }>${escapeHtml(label)}${availabilityLabel}</option>`;
+    })
+    .join("");
+}
+
+function buildDriverOptionsHtml(availableDrivers, recommendedDriverId) {
+  return availableDrivers
+    .map((driver) => {
+      const available = driver.available !== false;
+      const selected = available && String(driver.user_id || "") === String(recommendedDriverId || "");
+      const reasonLabel = driver.reason ? ` ❌ ${driver.reason}` : " ❌ ไม่ว่าง";
+
+      return `<option value="${escapeHtml(driver.user_id)}" ${
+        available ? "" : "disabled"
+      } ${selected ? "selected" : ""}>${escapeHtml(driver.name)}${
+        driver.phone ? ` (${escapeHtml(driver.phone)})` : ""
+      }${available ? " ✅ ว่าง" : reasonLabel}</option>`;
+    })
+    .join("");
+}
+
+function buildSkippedDriversHtml(skippedDrivers, resolveDriverName) {
+  if (skippedDrivers.length === 0) return "";
+
+  return `
+    <div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
+      <div style="font-weight:800;margin-bottom:8px;">รายการที่ข้าม</div>
+      <div style="display:grid;gap:6px;text-align:left;">
+        ${skippedDrivers
+          .map(
+            (item) =>
+              `<div style="color:#475569;">${escapeHtml(
+                resolveDriverName(item.driver_user_id || item.user_id || item.driver_id, item.driver_name || "")
+              )} - ${escapeHtml(item.reason || "-")}</div>`
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
 function getQueueAssignModeLabel(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
   if (normalized === "MANUAL_OVERRIDE") return "เลือกคนขับเอง";
@@ -742,7 +800,7 @@ const BookingTableRow = memo(function BookingTableRow({
       </td>
       <td className="action-buttons">
         {canShowDetail && (
-          <button type="button" className="booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
+          <button type="button" className="info-button booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
             ดูรายละเอียด
           </button>
         )}
@@ -758,7 +816,9 @@ const BookingTableRow = memo(function BookingTableRow({
         ) : (
           <>
             {canShowProcess && (
-              <button type="button" disabled={disabled} onClick={() => onProcess(booking)}>
+              <button type="button" 
+              className="primary-button booking-action-button" 
+              disabled={disabled} onClick={() => onProcess(booking)}>
                 {processing === "process"
                   ? "กำลังดำเนินการ..."
                   : status === "APPROVED"
@@ -781,21 +841,22 @@ const BookingTableRow = memo(function BookingTableRow({
             {canShowUnassign && (
               <button
                 type="button"
-                className="warning-button booking-action-button"
+                className="success-button booking-action-button"
                 disabled={disabled}
                 onClick={() => onUnassign(booking)}
               >
-                ดึงงานกลับ
+                {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
+                
               </button>
             )}
             {canShowCancel && (
               <button
                 type="button"
-                className="danger-button"
+                className="danger-button booking-action-button"
                 disabled={disabled}
                 onClick={() => onCancel(booking)}
               >
-                {processing === "cancel" ? "กำยังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
+                {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ลบ"}
               </button>
             )}
             {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
@@ -975,6 +1036,17 @@ export default function Booking() {
     return map;
   }, [activeDrivers]);
 
+  const bookingById = useMemo(() => {
+    const map = new Map();
+    bookings.forEach((booking) => {
+      const id = String(booking.booking_id || "").trim();
+      if (id) {
+        map.set(id, booking);
+      }
+    });
+    return map;
+  }, [bookings]);
+
   const resolveDriverName = useCallback(
     (driverUserId, fallbackName = "") => {
       const id = String(driverUserId || "").trim();
@@ -996,6 +1068,26 @@ export default function Booking() {
     [driverUnavailableRecords]
   );
 
+  const activeAssignmentsByDriverId = useMemo(() => {
+    const map = new Map();
+    bookingGroups.byAssignedUserId.forEach((driverBookings, driverId) => {
+      if (driverBookings.length > 0) {
+        map.set(driverId, driverBookings[0]);
+      }
+    });
+    return map;
+  }, [bookingGroups]);
+
+  const unavailableByDriverId = useMemo(() => {
+    const map = new Map();
+    driverUnavailableGroups.byDriverId.forEach((records, driverId) => {
+      if (records.length > 0) {
+        map.set(driverId, records[0]);
+      }
+    });
+    return map;
+  }, [driverUnavailableGroups]);
+
   const sortedBookings = useMemo(() => sortLatestFirst(bookings), [bookings]);
 
   const filteredBookings = useMemo(() => {
@@ -1008,9 +1100,7 @@ export default function Booking() {
       : "";
     const startFilter = debouncedFilters.start_datetime ? new Date(debouncedFilters.start_datetime).getTime() : null;
     const endFilter = debouncedFilters.end_datetime ? new Date(debouncedFilters.end_datetime).getTime() : null;
-    const selectedDriverName = driverFilter
-      ? activeDrivers.find((driver) => String(driver.user_id || "").trim() === driverFilter)?.name || ""
-      : "";
+    const selectedDriverName = driverFilter ? driverById.get(driverFilter)?.name || "" : "";
 
     return sortedBookings.filter((booking) => {
       const bookingStatus = normalizeStatus(booking.status);
@@ -1051,7 +1141,7 @@ export default function Booking() {
   
       return true;
     });
-  }, [activeDrivers, debouncedFilters, sortedBookings]);
+  }, [debouncedFilters, driverById, sortedBookings]);
 
   const bookingStatusCounts = useMemo(() => {
     const counts = {
@@ -1138,15 +1228,16 @@ export default function Booking() {
 
   const handleProcessBooking = useCallback(async (booking) => {
     if (processingAction) return;
+    const currentBooking = bookingById.get(String(booking.booking_id || "").trim()) || booking;
 
     let driverQueueRecommendation = null;
     let driverQueueRecommendationError = "";
 
     try {
       const recommendation = await recommendDriverForBooking({
-        booking_id: booking.booking_id,
-        start_datetime: booking.start_datetime,
-        end_datetime: booking.end_datetime,
+        booking_id: currentBooking.booking_id,
+        start_datetime: currentBooking.start_datetime,
+        end_datetime: currentBooking.end_datetime,
       });
       driverQueueRecommendation = recommendation?.data || recommendation || null;
       if (!driverQueueRecommendation) {
@@ -1184,6 +1275,26 @@ export default function Booking() {
     const availableDrivers = Array.isArray(driverQueueRecommendation?.available_drivers)
       ? driverQueueRecommendation.available_drivers
       : [];
+    const driverOptions = availableDrivers.length > 0
+      ? availableDrivers
+      : activeDrivers.map((driver) => {
+          const driverId = String(driver.user_id || "").trim();
+          const assignmentConflict = activeAssignmentsByDriverId.get(driverId);
+          const unavailableConflict = unavailableByDriverId.get(driverId);
+          const reason = assignmentConflict
+            ? "มีงานที่มอบหมายแล้ว"
+            : unavailableConflict
+              ? "ไม่พร้อม / ติดภารกิจ"
+              : "";
+
+          return {
+            user_id: driverId,
+            name: resolveDriverName(driverId, driver.name || ""),
+            phone: driver.phone || "",
+            available: !reason,
+            reason,
+          };
+        });
     const skippedDriverSummary = skippedDrivers.length > 0
       ? `ข้าม: ${skippedDrivers
           .map((item) => `${item.driver_name || "-"} (${item.reason || "-"})`)
@@ -1211,6 +1322,11 @@ export default function Booking() {
       nextQueueDriverResolvedName && nextQueueDriverResolvedName !== "-"
         ? nextQueueDriverResolvedName
         : nextQueueDriverBackendName || "ระบบจะคำนวณหลังบันทึก";
+    const vehicleOptionsHtml = FEATURES.vehicleModule
+      ? buildVehicleOptionsHtml(vehicles, currentBooking, bookingGroups)
+      : "";
+    const driverOptionsHtml = buildDriverOptionsHtml(driverOptions, recommendedDriverId);
+    const skippedDriversHtml = buildSkippedDriversHtml(skippedDrivers, resolveDriverName);
 
     const result = await Swal.fire({
       title: "ดำเนินการมอบหมายงาน",
@@ -1239,24 +1355,7 @@ export default function Booking() {
           <label>เลือกรถ</label>
           <select id="vehicle_id" class="swal2-select">
             <option value="">-- เลือกรถ --</option>
-            ${vehicles
-              .map((vehicle) => {
-                const available = isVehicleAvailable(vehicle, booking, bookingGroups);
-                const vehicleStatus = normalizeVehicleStatus(vehicle.status);
-                const unavailableByStatus = vehicleStatus === "UNAVAILABLE";
-                const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
-                  vehicle.license_plate || vehicle.plate_no || "-"
-                }`;
-                const availabilityLabel = unavailableByStatus
-                      ? " ⚠️ ไม่พร้อมใช้งาน"
-                      : available
-                        ? " ✅ ว่าง"
-                        : " ❌ ไม่ว่าง";
-                return `<option value="${escapeHtml(vehicle.vehicle_id)}" ${
-                  available ? "" : "disabled"
-                }>${escapeHtml(label)}${availabilityLabel}</option>`;
-              })
-              .join("")}
+            ${vehicleOptionsHtml}
           </select>
           `
               : ""
@@ -1265,20 +1364,7 @@ export default function Booking() {
           <label>เลือกผู้ใช้</label>
           <select id="assigned_user_id" class="swal2-select">
             <option value="">-- เลือกผู้ใช้ --</option>
-            ${availableDrivers
-              .map((driver) => {
-                const available = driver.available !== false;
-                const selected = available && String(driver.user_id || "") === String(recommendedDriverId || "");
-                const reasonLabel = driver.reason ? ` ❌ ${driver.reason}` : " ❌ ไม่ว่าง";
-                return `<option value="${escapeHtml(driver.user_id)}" ${
-                  available ? "" : "disabled"
-                } ${selected ? "selected" : ""}>${escapeHtml(driver.name)}${driver.phone ? ` (${escapeHtml(driver.phone)})` : ""}${
-                  available
-                    ? " ✅ ว่าง"
-                    : reasonLabel
-                }</option>`;
-              })
-              .join("")}
+            ${driverOptionsHtml}
           </select>
 
           <label>เหตุผลที่เลือกคนขับเอง</label>
@@ -1289,25 +1375,7 @@ export default function Booking() {
             placeholder="ระบุเมื่อเลือกคนขับไม่ตรงกับที่ระบบแนะนำ"
           ></textarea>
 
-          ${
-            skippedDrivers.length > 0
-              ? `
-          <div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
-            <div style="font-weight:800;margin-bottom:8px;">รายการที่ข้าม</div>
-            <div style="display:grid;gap:6px;text-align:left;">
-              ${skippedDrivers
-                .map(
-                  (item) =>
-                    `<div style="color:#475569;">${escapeHtml(
-                      resolveDriverName(item.driver_user_id || item.user_id || item.driver_id, item.driver_name || "")
-                    )} - ${escapeHtml(item.reason || "-")}</div>`
-                )
-                .join("")}
-            </div>
-          </div>
-          `
-              : ""
-          }
+          ${skippedDriversHtml}
 
           <label>หมายเหตุ</label>
           <input id="staff_note" class="swal2-input" placeholder="-">
@@ -1335,13 +1403,11 @@ export default function Booking() {
         }
 
         const vehicle = FEATURES.vehicleModule
-          ? vehicles.find((item) => item.vehicle_id === vehicle_id)
+          ? vehicleMap.get(vehicle_id) || null
           : null;
-        const driver = activeDrivers.find(
-          (item) => String(item.user_id || "").trim() === String(assigned_user_id || "").trim()
-        );
+        const driver = driverById.get(String(assigned_user_id || "").trim()) || null;
 
-        if (FEATURES.vehicleModule && (!vehicle || !isVehicleAvailable(vehicle, booking, bookingGroups))) {
+        if (FEATURES.vehicleModule && (!vehicle || !isVehicleAvailable(vehicle, currentBooking, bookingGroups))) {
           Swal.showValidationMessage("รถคันนี้ไม่ว่างหรือไม่พร้อมใช้งาน");
           return false;
         }
@@ -1355,8 +1421,8 @@ export default function Booking() {
         }
 
         return {
-          booking_id: booking.booking_id,
-          booking_no: booking.booking_no || "",
+          booking_id: currentBooking.booking_id,
+          booking_no: currentBooking.booking_no || "",
           vehicle_id: FEATURES.vehicleModule ? vehicle_id : "",
           assigned_user_id,
           assigned_user_name: resolveDriverName(assigned_user_id, driver?.name || ""),
@@ -1378,14 +1444,14 @@ export default function Booking() {
       if (!result.isConfirmed) return;
 
     try {
-      setProcessingAction({ bookingId: booking.booking_id, type: "process" });
+      setProcessingAction({ bookingId: currentBooking.booking_id, type: "process" });
       const approved = await approveBooking(result.value);
       mergeBooking({ ...result.value, ...(approved || {}), status: "APPROVED" });
 
       try {
         await confirmDriverQueueAssignment({
-          booking_id: booking.booking_id,
-          booking_no: booking.booking_no || "",
+          booking_id: currentBooking.booking_id,
+          booking_no: currentBooking.booking_no || "",
           recommended_driver_user_id: result.value.recommended_driver_user_id || "",
           recommended_driver_name: resolveDriverName(
             result.value.recommended_driver_user_id,
@@ -1414,7 +1480,7 @@ export default function Booking() {
     } finally {
       setProcessingAction(null);
     }
-  }, [activeDrivers, bookingGroups, currentUser?.email, currentUser?.name, driverUnavailableGroups, drivers, mergeBooking, processingAction, vehicles]);
+  }, [activeAssignmentsByDriverId, activeDrivers, bookingById, bookingGroups, confirmDriverQueueAssignment, currentUser?.email, currentUser?.name, driverById, mergeBooking, processingAction, recommendDriverForBooking, resolveDriverName, unavailableByDriverId, vehicleMap, vehicles]);
 
   const handleEditBooking = useCallback(async (booking) => {
     if (processingAction) return;
@@ -1592,7 +1658,6 @@ export default function Booking() {
           updated_by: actor,
         };
 
-        console.log("backdate payload", payload);
         const response = await backdateCompleteBooking(payload);
         if (response?.success === false) {
           showError(response?.message || "บันทึกงานย้อนหลังไม่สำเร็จ");

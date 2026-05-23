@@ -3,7 +3,6 @@ import Swal from "sweetalert2";
 import {
   completeTrip,
   getBookings,
-  getBookingsFresh,
   getVehicles,
   requestDriverCancelJob,
   startTrip,
@@ -479,20 +478,13 @@ export default function DriverJobs() {
       }
       setError("");
 
-      const bookingFetcher = options.freshBookings || options.refreshOnly ? getBookingsFresh : getBookings;
       const [bookingData, vehicleData] = await Promise.all([
-        bookingFetcher(),
+        getBookings(options.freshBookings || options.refreshOnly ? { fresh: true } : {}),
         FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
       ]);
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
-      if (options.logBookingId) {
-        const updatedBooking = (Array.isArray(bookingData) ? bookingData : []).find(
-          (item) => String(item.booking_id || "").trim() === String(options.logBookingId || "").trim()
-        );
-        console.log("DriverJobs refreshed booking row", updatedBooking || null);
-      }
     } catch (err) {
       const message = err.message || "โหลดงานคนขับไม่สำเร็จ";
       setError(message);
@@ -549,10 +541,16 @@ export default function DriverJobs() {
     [debouncedWaitingSearch, waitingJobs]
   );
   const pendingJobs = filteredWaitingJobs;
-  const pendingJobsTotalPages = getTotalPages(pendingJobs);
-  const todayJobsTotalPages = getTotalPages(todayJobs);
-  const paginatedPendingJobs = paginateItems(pendingJobs, pendingJobsPage);
-  const paginatedTodayJobs = paginateItems(todayJobs, todayJobsPage);
+  const pendingJobsTotalPages = useMemo(() => getTotalPages(pendingJobs), [pendingJobs]);
+  const todayJobsTotalPages = useMemo(() => getTotalPages(todayJobs), [todayJobs]);
+  const paginatedPendingJobs = useMemo(
+    () => paginateItems(pendingJobs, pendingJobsPage),
+    [pendingJobs, pendingJobsPage]
+  );
+  const paginatedTodayJobs = useMemo(
+    () => paginateItems(todayJobs, todayJobsPage),
+    [todayJobs, todayJobsPage]
+  );
   const driverJobTableColSpan = FEATURES.vehicleModule ? 9 : 8;
 
   useEffect(() => {
@@ -601,8 +599,6 @@ export default function DriverJobs() {
         assigned_user_id: currentUser?.user_id || "",
         assigned_user_name: currentUser?.name || "",
       });
-
-      console.log("DriverJobs startTrip response", response);
 
       if (response?.success === false) {
         showError(response?.message || "เริ่มงานไม่สำเร็จ");

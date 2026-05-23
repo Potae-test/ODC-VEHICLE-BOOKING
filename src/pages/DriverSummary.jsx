@@ -306,30 +306,12 @@ function getStatusClass(status) {
   return "status";
 }
 
-function countByRange(bookings, range) {
-  return bookings.filter((booking) => isInRange(booking, range)).length;
-}
-
-function latestBooking(bookings) {
-  return [...bookings]
-    .filter((booking) => parseBookingDate(booking.created_at || booking.updated_at || booking.start_datetime))
-    .sort(
-      (a, b) =>
-        parseBookingDate(b.created_at || b.updated_at || b.start_datetime) -
-        parseBookingDate(a.created_at || a.updated_at || a.start_datetime)
-    )[0];
-}
-
 function sortLatestFirst(bookings) {
   return [...bookings].sort((a, b) => {
     const dateA = parseBookingDate(a.created_at || a.updated_at || a.start_datetime)?.getTime() || 0;
     const dateB = parseBookingDate(b.created_at || b.updated_at || b.start_datetime)?.getTime() || 0;
     return dateB - dateA;
   });
-}
-
-function countByCategory(bookings, category) {
-  return bookings.filter((booking) => getDriverJobActionCategoryV2(booking) === category).length;
 }
 
 function compareDriverUserIds(a, b) {
@@ -507,45 +489,87 @@ export default function DriverSummary() {
       }
     });
 
-    const bookingsByDriverKey = new Map();
+    const statsByDriverKey = new Map();
+
+    driverOptions.forEach((driver) => {
+      statsByDriverKey.set(driver.key, {
+        allDetailBookings: [],
+        todayCount: 0,
+        weekCount: 0,
+        monthCount: 0,
+        selectedCount: 0,
+        latest: null,
+        completedCount: 0,
+        approvedCount: 0,
+        inUseCount: 0,
+        cancelledCount: 0,
+        requestedCount: 0,
+      });
+    });
 
     latestBookingActionMap.forEach((booking, summaryKey) => {
       const [driverKey] = summaryKey.split("::");
+      const stats = statsByDriverKey.get(driverKey);
+      if (!stats) return;
 
-      if (!bookingsByDriverKey.has(driverKey)) {
-        bookingsByDriverKey.set(driverKey, []);
+      stats.allDetailBookings.push(booking);
+
+      if (isInRange(booking, todayRange)) stats.todayCount += 1;
+      if (isInRange(booking, weekRange)) stats.weekCount += 1;
+      if (isInRange(booking, monthRange)) stats.monthCount += 1;
+      if (isInRange(booking, selectedRange)) stats.selectedCount += 1;
+
+      const category = getDriverJobActionCategoryV2(booking);
+      if (category === "completed") stats.completedCount += 1;
+      if (category === "approved") stats.approvedCount += 1;
+      if (category === "in_use") stats.inUseCount += 1;
+      if (category === "rejected") stats.cancelledCount += 1;
+      if (category === "requested") stats.requestedCount += 1;
+
+      const bookingTime = parseBookingDate(booking.created_at || booking.updated_at || booking.start_datetime)?.getTime() || 0;
+      const latestTime = parseBookingDate(
+        stats.latest?.created_at || stats.latest?.updated_at || stats.latest?.start_datetime
+      )?.getTime() || 0;
+      if (!stats.latest || bookingTime >= latestTime) {
+        stats.latest = booking;
       }
-
-      bookingsByDriverKey.get(driverKey).push(booking);
     });
 
     return driverOptions
       .map((driver) => {
-        const allDriverBookings = bookingsByDriverKey.get(driver.key) || [];
-        const summaryBookings = sortLatestFirst(allDriverBookings);
-        const selectedRangeBookings = summaryBookings.filter((booking) => isInRange(booking, selectedRange));
-        const allDetailBookings = summaryBookings;
-        const latest = latestBooking(summaryBookings);
+        const stats = statsByDriverKey.get(driver.key) || {
+          allDetailBookings: [],
+          todayCount: 0,
+          weekCount: 0,
+          monthCount: 0,
+          selectedCount: 0,
+          latest: null,
+          completedCount: 0,
+          approvedCount: 0,
+          inUseCount: 0,
+          cancelledCount: 0,
+          requestedCount: 0,
+        };
+        const allDetailBookings = sortLatestFirst(stats.allDetailBookings);
 
         return {
           key: driver.key,
           user_id: driver.user_id,
           name: driver.name,
-          todayCount: countByRange(summaryBookings, todayRange),
-          weekCount: countByRange(summaryBookings, weekRange),
-          monthCount: countByRange(summaryBookings, monthRange),
-          selectedCount: selectedRangeBookings.length,
-          latest,
+          todayCount: stats.todayCount,
+          weekCount: stats.weekCount,
+          monthCount: stats.monthCount,
+          selectedCount: stats.selectedCount,
+          latest: stats.latest,
           allDetailBookings,
-          selectedRangeBookings,
-          cardTotal: summaryBookings.length,
-          completedCount: countByCategory(summaryBookings, "completed"),
-          approvedCount: countByCategory(summaryBookings, "approved"),
-          inUseCount: countByCategory(summaryBookings, "in_use"),
-          cancelledCount: countByCategory(summaryBookings, "rejected"),
-          requestedCount: countByCategory(summaryBookings, "requested"),
-          approvedCancelCount: countByCategory(summaryBookings, "approved"),
-          rejectedCancelCount: countByCategory(summaryBookings, "rejected"),
+          cardTotal: allDetailBookings.length,
+          completedCount: stats.completedCount,
+          approvedCount: stats.approvedCount,
+          inUseCount: stats.inUseCount,
+          cancelledCount: stats.cancelledCount,
+          requestedCount: stats.requestedCount,
+          approvedCancelCount: stats.approvedCount,
+          rejectedCancelCount: stats.cancelledCount,
         };
       })
       .filter((row) => selectedDriver === "ALL" || row.key === selectedDriver)
@@ -573,7 +597,10 @@ export default function DriverSummary() {
     [detailDriver, visibleDriverRows]
   );
 
-  const totalTablePages = Math.max(1, Math.ceil(visibleDriverRows.length / TABLE_PAGE_SIZE));
+  const totalTablePages = useMemo(
+    () => Math.max(1, Math.ceil(visibleDriverRows.length / TABLE_PAGE_SIZE)),
+    [visibleDriverRows.length]
+  );
   const paginatedDriverRows = useMemo(
     () =>
       visibleDriverRows.slice(

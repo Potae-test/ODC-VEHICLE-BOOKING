@@ -433,6 +433,26 @@ export default function CalendarPage() {
   const bookingFormModalRef = useRef(null);
   const fullCalendarRef = useRef(null);
 
+  const mergeBooking = useCallback((nextBooking) => {
+    if (!nextBooking?.booking_id) return;
+
+    setBookings((current) => {
+      const bookingId = String(nextBooking.booking_id || "").trim();
+      const index = current.findIndex((booking) => String(booking.booking_id || "").trim() === bookingId);
+
+      if (index === -1) {
+        return [nextBooking, ...current];
+      }
+
+      const next = [...current];
+      next[index] = {
+        ...next[index],
+        ...nextBooking,
+      };
+      return next;
+    });
+  }, []);
+
   const handleNavigate = useCallback((nextDate) => {
     if (nextDate === "TODAY") {
       setCalendarDate(new Date());
@@ -468,6 +488,20 @@ export default function CalendarPage() {
     });
     return map;
   }, [vehicles]);
+
+  const driverNameByUserId = useMemo(() => {
+    const map = new Map();
+    users.forEach((user) => {
+      if (normalizeStatus(user.role) !== "DRIVER") return;
+
+      const id = String(user.user_id || "").trim();
+      const name = String(user.name || user.full_name || user.display_name || "").trim();
+      if (id && name) {
+        map.set(id, name);
+      }
+    });
+    return map;
+  }, [users]);
 
   const thaiHolidayMap = useMemo(() => {
     const map = new Map();
@@ -704,51 +738,6 @@ export default function CalendarPage() {
     return availableDrivers;
   }, [driverUnavailableRecords, users]);
 
-  const nextQueueDriver = useMemo(() => {
-    const activeRows = [...driverQueueRows]
-      .filter(
-        (row) =>
-          String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
-          String(row.driver_status || "").trim().toUpperCase() === "ACTIVE"
-      )
-      .sort((a, b) => {
-        const orderA = Number(a.queue_order || 0);
-        const orderB = Number(b.queue_order || 0);
-        if (orderA !== orderB) return orderA - orderB;
-        return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
-      });
-
-    if (activeRows.length === 0) return null;
-    const currentIndex = activeRows.findIndex(
-      (row) => String(row.driver_user_id || "") === String(driverQueueState?.current_driver_user_id || "")
-    );
-    const baseIndex = currentIndex >= 0 ? currentIndex : 0;
-    return activeRows[(baseIndex + 1) % activeRows.length] || activeRows[0] || null;
-  }, [driverQueueRows, driverQueueState]);
-
-  const currentQueueDriver = useMemo(() => {
-    const activeRows = [...driverQueueRows]
-      .filter(
-        (row) =>
-          String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
-          String(row.driver_status || "").trim().toUpperCase() === "ACTIVE"
-      )
-      .sort((a, b) => {
-        const orderA = Number(a.queue_order || 0);
-        const orderB = Number(b.queue_order || 0);
-        if (orderA !== orderB) return orderA - orderB;
-        return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
-      });
-
-    if (activeRows.length === 0) return null;
-
-    const currentIndex = activeRows.findIndex(
-      (row) => String(row.driver_user_id || "") === String(driverQueueState?.current_driver_user_id || "")
-    );
-
-    return activeRows[currentIndex >= 0 ? currentIndex : 0] || null;
-  }, [driverQueueRows, driverQueueState]);
-
   const activeQueueRows = useMemo(() => {
     return [...driverQueueRows]
       .filter(
@@ -756,13 +745,39 @@ export default function CalendarPage() {
           String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
           String(row.driver_status || "").trim().toUpperCase() === "ACTIVE"
       )
+      .map((row) => ({
+        ...row,
+        driver_name:
+          driverNameByUserId.get(String(row.driver_user_id || "").trim()) ||
+          String(row.driver_name || "").trim() ||
+          "-",
+      }))
       .sort((a, b) => {
         const orderA = Number(a.queue_order || 0);
         const orderB = Number(b.queue_order || 0);
         if (orderA !== orderB) return orderA - orderB;
         return String(a.driver_name || "").localeCompare(String(b.driver_name || ""), "th");
       });
-  }, [driverQueueRows]);
+  }, [driverNameByUserId, driverQueueRows]);
+
+  const currentQueueIndex = useMemo(() => {
+    if (activeQueueRows.length === 0) return -1;
+
+    const currentIndex = activeQueueRows.findIndex(
+      (row) => String(row.driver_user_id || "") === String(driverQueueState?.current_driver_user_id || "")
+    );
+    return currentIndex >= 0 ? currentIndex : 0;
+  }, [activeQueueRows, driverQueueState?.current_driver_user_id]);
+
+  const currentQueueDriver = useMemo(() => {
+    if (currentQueueIndex < 0) return null;
+    return activeQueueRows[currentQueueIndex] || null;
+  }, [activeQueueRows, currentQueueIndex]);
+
+  const nextQueueDriver = useMemo(() => {
+    if (activeQueueRows.length === 0) return null;
+    return activeQueueRows[(currentQueueIndex + 1) % activeQueueRows.length] || activeQueueRows[0] || null;
+  }, [activeQueueRows, currentQueueIndex]);
 
   const handleShowMoreEvents = useCallback(async (events, date) => {
     const titleDate = formatThaiDateTime(date).split(" ")[0];
@@ -977,7 +992,7 @@ export default function CalendarPage() {
       <BookingFormModal
         ref={bookingFormModalRef}
         overlapCandidates={activeBookings}
-        onSuccess={() => loadData({ refreshOnly: true })}
+        onSuccess={mergeBooking}
       />
 
 

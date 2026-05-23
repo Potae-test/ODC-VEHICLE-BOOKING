@@ -1,4 +1,5 @@
 ﻿function doGet(e) {
+  resetRequestCache_();
   const action = e && e.parameter ? e.parameter.action || "vehicles" : "vehicles";
 
   if (action === "vehicles") {
@@ -52,6 +53,7 @@
 
 function doPost(e) {
   try {
+    resetRequestCache_();
     const body = JSON.parse(e && e.postData ? e.postData.contents || "{}" : "{}");
     const action = body.action;
 
@@ -282,39 +284,96 @@ function buildColumnMap(headers) {
 function appendSheetRow(sheet, values) {
   const nextRow = sheet.getLastRow() + 1;
   sheet.getRange(nextRow, 1, 1, values.length).setValues([values]);
+  invalidateSheetCache_(sheet);
   return nextRow;
 }
 
 function setRowValues(sheet, row, values) {
   sheet.getRange(row, 1, 1, values.length).setValues([values]);
+  invalidateSheetCache_(sheet);
+}
+
+var REQUEST_CACHE_ = null;
+
+function resetRequestCache_() {
+  REQUEST_CACHE_ = {
+    sheetTables: {},
+  };
+}
+
+function getRequestCache_() {
+  if (!REQUEST_CACHE_) {
+    resetRequestCache_();
+  }
+
+  return REQUEST_CACHE_;
+}
+
+function getSheetCacheKey_(sheet) {
+  return `${sheet.getSheetId()}:${sheet.getName()}`;
+}
+
+function invalidateSheetCache_(sheetOrName) {
+  const cache = getRequestCache_();
+
+  if (!sheetOrName) return;
+
+  if (typeof sheetOrName === "string") {
+    Object.keys(cache.sheetTables).forEach((key) => {
+      if (key.endsWith(`:${sheetOrName}`)) {
+        delete cache.sheetTables[key];
+      }
+    });
+    return;
+  }
+
+  delete cache.sheetTables[getSheetCacheKey_(sheetOrName)];
 }
 
 function readSheetTable(sheetOrName) {
   const sheet = typeof sheetOrName === "string"
     ? SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetOrName)
     : sheetOrName;
+  const cache = getRequestCache_();
+  const cacheKey = getSheetCacheKey_(sheet);
+
+  if (cache.sheetTables[cacheKey]) {
+    return cache.sheetTables[cacheKey];
+  }
 
   const lastRow = sheet.getLastRow();
   const lastColumn = sheet.getLastColumn();
 
   if (lastRow === 0 || lastColumn === 0) {
-    return {
+    const emptyTable = {
       sheet,
       headers: [],
       rows: [],
       columnMap: {},
     };
+    cache.sheetTables[cacheKey] = emptyTable;
+    return emptyTable;
   }
 
   const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
   const headers = values[0] || [];
 
-  return {
+  const table = {
     sheet,
     headers,
     rows: lastRow > 1 ? values.slice(1) : [],
-    columnMap: buildColumnMap(headers),
+    columnMap: getHeaderMap(headers),
   };
+  cache.sheetTables[cacheKey] = table;
+  return table;
+}
+
+function getSheetDataCached(sheetName) {
+  return readSheetTable(sheetName);
+}
+
+function getHeaderMap(headers) {
+  return buildColumnMap(headers);
 }
 
 function rowsToObjects(headers, rows) {
@@ -447,11 +506,11 @@ function findRowByBookingId(sheetOrTable, bookingId) {
 }
 
 function logBookingAction(actionName, bookingId, row) {
-  Logger.log(JSON.stringify({
+  return {
     action: actionName,
     booking_id: bookingId || "",
     matched_row: row || -1,
-  }));
+  };
 }
 
 function normalizeDriverCancelDecision_(decision) {
@@ -688,10 +747,8 @@ function getBookings() {
 function createBooking(data) {
   try {
     data = data || {};
-    Logger.log("createBooking received data: " + JSON.stringify(data || {}));
 
     const sheet = ensureBookingsSheet();
-    Logger.log("createBooking target sheet name: " + sheet.getName());
 
     const now = new Date();
     const table = readSheetTable(sheet);
@@ -722,8 +779,6 @@ function createBooking(data) {
     const bookingNumber = getNextBookingSequence(table, bookingIdCol);
     const bookingId = "BK" + Utilities.formatString("%04d", bookingNumber);
     const bookingNo = "ODC-CAR-" + Utilities.formatString("%04d", bookingNumber);
-    Logger.log("createBooking generated booking_id: " + bookingId);
-    Logger.log("createBooking generated booking_no: " + bookingNo);
 
     const bookingRow = Array(headers.length).fill("");
     bookingRow[bookingIdCol] = bookingId;
@@ -748,7 +803,6 @@ function createBooking(data) {
     bookingRow[backdatedCompletedByCol] = "";
 
     const row = appendSheetRow(sheet, bookingRow);
-    Logger.log("createBooking final appended row: " + row);
 
     if (row <= 1) {
       logBookingAction("createBooking", bookingId, row);
@@ -771,7 +825,6 @@ function createBooking(data) {
       }
     });
   } catch (err) {
-    Logger.log("createBooking error: " + String(err && err.stack ? err.stack : err));
     return jsonOutput({ success: false, message: String(err.message || err) });
   }
 }
@@ -5608,8 +5661,7 @@ function unassignBookingDriver(data) {
 
   setRowValues(sheet, rowNumber, rowValues);
 
-  const refreshedTable = readSheetTable(sheet);
-  const updatedBooking = rowsToObjects(refreshedTable.headers, [refreshedTable.rows[rowNumber - 2]])[0] || {};
+  const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
 
   const logSheet = ensureDriverQueueLogsSheet();
   const logTable = readSheetTable(logSheet);

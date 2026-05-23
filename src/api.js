@@ -235,20 +235,13 @@ export async function deleteBookingCancellationHistory(input) {
 }
 
 export async function createBooking(data) {
-  const res = await fetch(`${API_BASE_URL}/api/bookings`, {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(data),
   });
-  const json = await res.json();
-
-  console.log("createBooking response", json);
-
-  if (!json.success) {
-    throw new Error(json.message);
-  }
 
   invalidateApiCache(["bookings"]);
   return json.data;
@@ -292,17 +285,14 @@ export async function backdateCompleteBooking(payload) {
 }
 
 export async function startTrip(data) {
-  invalidateApiCache(["bookings", "driver_job_logs"]);
-
-  const res = await fetch(`${API_BASE_URL}/api/bookings/start-trip`, {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings/start-trip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
-  const json = await res.json();
   invalidateApiCache(["bookings", "driver_job_logs"]);
-  return json;
+  return json.data || json;
 }
 
 export async function completeTrip(data) {
@@ -537,14 +527,13 @@ export async function setCurrentDriverQueuePointer(data) {
 }
 
 export async function recommendDriverForBooking(data) {
-  const res = await fetch(`${API_BASE_URL}/api/recommendDriverForBooking`, {
+  const json = await fetchJson(`${API_BASE_URL}/api/recommendDriverForBooking`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
 
-  const json = await res.json();
-  return json.success ? json.data : json;
+  return json.data || json;
 }
 
 export async function confirmDriverQueueAssignment(data) {
