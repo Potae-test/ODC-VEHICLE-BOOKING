@@ -97,7 +97,13 @@ function normalizeAction(action) {
   return String(action || "").trim().toUpperCase();
 }
 
+function hasCompletedStatus(booking) {
+  return normalizeStatus(booking?.status) === "COMPLETED";
+}
+
 function getDriverJobActionCategory(booking) {
+  if (hasCompletedStatus(booking)) return "completed";
+
   const action = normalizeAction(booking.action);
 
   if (action === "ASSIGNED") return "approved";
@@ -112,6 +118,8 @@ function getDriverJobActionCategory(booking) {
 }
 
 function getDriverJobActionLabel(booking) {
+  if (hasCompletedStatus(booking)) return "เสร็จสิ้น";
+
   const action = normalizeAction(booking.action);
 
   if (action === "ASSIGNED") return "ได้รับมอบหมาย";
@@ -124,6 +132,8 @@ function getDriverJobActionLabel(booking) {
 }
 
 function getDriverJobActionDescription(booking) {
+  if (hasCompletedStatus(booking)) return "จบงาน / คืนรถ";
+
   const action = normalizeAction(booking.action);
   const reason = String(booking.reason || "").trim();
 
@@ -141,6 +151,8 @@ function getDriverJobActionDescription(booking) {
 }
 
 function getDriverJobActionClass(booking) {
+  if (hasCompletedStatus(booking)) return "status gray";
+
   const action = normalizeAction(booking.action);
 
   if (action === "COMPLETED") return "status gray";
@@ -153,6 +165,8 @@ function getDriverJobActionClass(booking) {
 }
 
 function getDriverJobActionCategoryV2(booking) {
+  if (hasCompletedStatus(booking)) return "completed";
+
   const action = normalizeAction(booking.action);
 
   if (action === "ASSIGNED") return "approved";
@@ -167,6 +181,8 @@ function getDriverJobActionCategoryV2(booking) {
 }
 
 function getDriverJobActionLabelV2(booking) {
+  if (hasCompletedStatus(booking)) return "เสร็จสิ้น";
+
   const action = normalizeAction(booking.action);
 
   if (action === "ASSIGNED") return "ได้มอบหมาย";
@@ -182,6 +198,8 @@ function getDriverJobActionLabelV2(booking) {
 }
 
 function getDriverJobActionDescriptionV2(booking) {
+  if (hasCompletedStatus(booking)) return "จบงาน / คืนรถ";
+
   const action = normalizeAction(booking.action);
   const reason = String(booking.reason || "").trim();
 
@@ -208,6 +226,8 @@ function getDriverJobActionDescriptionV2(booking) {
 }
 
 function getDriverJobActionClassV2(booking) {
+  if (hasCompletedStatus(booking)) return "status gray";
+
   const action = normalizeAction(booking.action);
 
   if (action === "COMPLETED") return "status gray";

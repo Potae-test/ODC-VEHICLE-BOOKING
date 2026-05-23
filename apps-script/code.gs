@@ -2982,6 +2982,8 @@ function setDriverQueueStateValue_(value, updatedBy) {
   };
 }
 
+// LEGACY QUEUE HELPERS (deprecated)
+// Shadowed by later queue engine generations below. Kept for backward compatibility review only.
 function buildDriverQueueRows_() {
   const queueSheet = ensureDriverQueueSheet();
   const table = readSheetTable(queueSheet);
@@ -3918,6 +3920,8 @@ function findDriverQueueStateRow_(table) {
   return -1;
 }
 
+// ACTIVE QUEUE ENGINE
+// Final runtime queue engine. Functions below are the effective implementations used at runtime.
 function readDriverQueueStateRow_() {
   const sheet = ensureDriverQueueStateSheet();
   const table = readSheetTable(sheet);
@@ -3952,23 +3956,6 @@ function readDriverQueueStateRow_() {
     updated_at: row[table.columnMap.updated_at] || "",
     updated_by: row[table.columnMap.updated_by] || "",
   };
-}
-
-function appendDriverQueueStateRow_(payload) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("DriverQueueState") || ensureDriverQueueStateSheet();
-  const table = readSheetTable(sheet);
-  const row = Array(table.headers.length).fill("");
-  row[table.columnMap.state_key] = payload.state_key || "last_assigned_queue_order";
-  row[table.columnMap.state_value] = payload.state_value !== undefined ? String(payload.state_value) : "0";
-  row[table.columnMap.current_index] = payload.current_index !== undefined ? String(payload.current_index) : "0";
-  row[table.columnMap.current_driver_user_id] = payload.current_driver_user_id || "";
-  row[table.columnMap.current_driver_name] = payload.current_driver_name || "";
-  row[table.columnMap.last_assigned_driver_user_id] = payload.last_assigned_driver_user_id || "";
-  row[table.columnMap.last_assigned_driver_name] = payload.last_assigned_driver_name || "";
-  row[table.columnMap.last_assigned_booking_id] = payload.last_assigned_booking_id || "";
-  row[table.columnMap.updated_at] = payload.updated_at || new Date().toISOString();
-  row[table.columnMap.updated_by] = payload.updated_by || "";
-  return appendSheetRow(sheet, row);
 }
 
 function writeDriverQueueStateRow_(payload) {
@@ -4053,12 +4040,6 @@ function buildDriverQueueRows_() {
 
 function getActiveMasterQueue() {
   return buildDriverQueueRows_().filter((row) => normalizeQueueActiveFlag_(row));
-}
-
-function getDriverIndexInMasterQueue(driverUserId) {
-  const normalized = String(driverUserId || "").trim();
-  if (!normalized) return -1;
-  return getActiveMasterQueue().findIndex((row) => String(row.driver_user_id || "").trim() === normalized);
 }
 
 function getNextCircularIndex(index, queueLength) {
@@ -4177,17 +4158,6 @@ function setCurrentQueueState_(payload, updatedBy) {
   });
 
   return getCurrentQueueState();
-}
-
-function resolveCurrentIndexFromLegacyPointer_(queueRows, legacyValue) {
-  if (!queueRows.length) return 0;
-  const sorted = [...queueRows].sort((a, b) => Number(a.queue_order || 0) - Number(b.queue_order || 0));
-  const pointer = Number(legacyValue || 0) || 0;
-  const nextIndex = sorted.findIndex((row) => Number(row.queue_order || 0) > pointer);
-  if (nextIndex === -1) return 0;
-  const nextDriver = sorted[nextIndex];
-  const actualIndex = queueRows.findIndex((row) => String(row.driver_user_id || "") === String(nextDriver.driver_user_id || ""));
-  return actualIndex >= 0 ? actualIndex : nextIndex;
 }
 
 function buildQueueScanRows_(queueRows, currentIndex) {
@@ -4732,23 +4702,6 @@ function readDriverQueueStateRow_() {
   };
 }
 
-function appendDriverQueueStateRow_(payload) {
-  const sheet = ensureDriverQueueStateSheet();
-  const table = readSheetTable(sheet);
-  const row = Array(table.headers.length).fill("");
-  row[table.columnMap.state_key] = payload.state_key || "last_assigned_queue_order";
-  row[table.columnMap.state_value] = payload.state_value !== undefined ? String(payload.state_value) : "0";
-  row[table.columnMap.current_index] = payload.current_index !== undefined ? String(payload.current_index) : "0";
-  row[table.columnMap.current_driver_user_id] = payload.current_driver_user_id || "";
-  row[table.columnMap.current_driver_name] = payload.current_driver_name || "";
-  row[table.columnMap.last_assigned_driver_user_id] = payload.last_assigned_driver_user_id || "";
-  row[table.columnMap.last_assigned_driver_name] = payload.last_assigned_driver_name || "";
-  row[table.columnMap.last_assigned_booking_id] = payload.last_assigned_booking_id || "";
-  row[table.columnMap.updated_at] = payload.updated_at || new Date().toISOString();
-  row[table.columnMap.updated_by] = payload.updated_by || "";
-  return appendSheetRow(sheet, row);
-}
-
 function writeDriverQueueStateRow_(payload) {
   const sheet = ensureDriverQueueStateSheet();
   const table = readSheetTable(sheet);
@@ -4820,12 +4773,6 @@ function buildDriverQueueRows_() {
 
 function getActiveMasterQueue() {
   return buildDriverQueueRows_().filter((row) => normalizeQueueActiveFlag_(row));
-}
-
-function getDriverIndexInMasterQueue(driverUserId) {
-  const normalized = String(driverUserId || "").trim();
-  if (!normalized) return -1;
-  return getActiveMasterQueue().findIndex((row) => String(row.driver_user_id || "").trim() === normalized);
 }
 
 function getNextCircularIndex(index, queueLength) {
@@ -4916,17 +4863,6 @@ function setCurrentQueueState_(payload, updatedBy) {
   });
 
   return getCurrentQueueState();
-}
-
-function resolveCurrentIndexFromLegacyPointer_(queueRows, legacyValue) {
-  if (!queueRows.length) return 0;
-  const sorted = [...queueRows].sort((a, b) => Number(a.queue_order || 0) - Number(b.queue_order || 0));
-  const pointer = Number(legacyValue || 0) || 0;
-  const nextIndex = sorted.findIndex((row) => Number(row.queue_order || 0) > pointer);
-  if (nextIndex === -1) return 0;
-  const nextDriver = sorted[nextIndex];
-  const actualIndex = queueRows.findIndex((row) => String(row.driver_user_id || "") === String(nextDriver.driver_user_id || ""));
-  return actualIndex >= 0 ? actualIndex : nextIndex;
 }
 
 function buildQueueScanRows_(queueRows, currentIndex) {

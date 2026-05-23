@@ -18,6 +18,10 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function isCompletedBooking(booking) {
+  return normalizeStatus(booking?.status) === "COMPLETED";
+}
+
 function getVehicleTypeText(type) {
   const value = String(type || "").trim();
   const normalized = value.toUpperCase();
@@ -231,10 +235,18 @@ function getStatusMeta(status) {
 }
 
 function getDriverCancelRequestStatus(booking) {
+  if (isCompletedBooking(booking)) {
+    return "";
+  }
+
   return normalizeStatus(booking.driver_cancel_request_status);
 }
 
 function getDriverCancelRequestStateLabel(booking) {
+  if (isCompletedBooking(booking)) {
+    return "";
+  }
+
   const status = getDriverCancelRequestStatus(booking);
   if (status === "PENDING") return "รอ STAFF อนุมัติยกเลิก";
   if (status === "REJECTED") return "ไม่อนุมัติการยกเลิก";

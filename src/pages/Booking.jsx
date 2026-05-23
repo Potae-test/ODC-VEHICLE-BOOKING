@@ -80,6 +80,10 @@ function normalizeVehicleStatus(status) {
   return "AVAILABLE";
 }
 
+function isCompletedBooking(booking) {
+  return normalizeStatus(booking?.status) === "COMPLETED";
+}
+
 function getStatusMeta(status) {
   return STATUS_META[normalizeStatus(status)] || {
     label: status || "-",
@@ -129,6 +133,10 @@ const STAFF_DETAIL_ROLES = ["STAFF", "ADMIN"];
 const ADMIN_DETAIL_ROLES = ["ADMIN"];
 
 function getBookingDetailFields({ booking, vehicleMap }) {
+  const statusLabel = isCompletedBooking(booking)
+    ? STATUS_META.COMPLETED.label
+    : getStatusMeta(booking.status).label;
+
   return [
     {
       key: "requester_name",
@@ -198,7 +206,7 @@ function getBookingDetailFields({ booking, vehicleMap }) {
       key: "status",
       label: "สถานะ",
       roles: ALL_DETAIL_ROLES,
-      value: getStatusMeta(booking.status).label,
+      value: statusLabel,
     },
     {
       key: "staff_note",
@@ -672,6 +680,10 @@ function getBookingDriverLabel(booking) {
 }
 
 function getDriverCancelRequestStatus(booking) {
+  if (isCompletedBooking(booking)) {
+    return "";
+  }
+
   return normalizeStatus(booking.driver_cancel_request_status);
 }
 

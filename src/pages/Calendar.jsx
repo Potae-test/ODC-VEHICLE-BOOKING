@@ -76,6 +76,16 @@ function getBookingCalendarStatusMeta(status) {
     };
   }
 
+  if (normalized === "COMPLETED") {
+    return {
+      label: "เสร็จสิ้น",
+      className: "gray",
+      color: "#475569",
+      backgroundColor: "#e2e8f0",
+      borderColor: "#cbd5e1",
+    };
+  }
+
   return {
     label: "อนุมัติแล้ว",
     className: "blue",
