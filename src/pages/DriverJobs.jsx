@@ -611,7 +611,7 @@ export default function DriverJobs() {
         actual_start_by: startBy,
         out_mileage: "",
         assigned_user_id: currentUser?.user_id || "",
-        assigned_user_name: currentUser?.name || "",
+        assigned_user_name: currentUser?.name || currentUser?.email || "",
       });
 
       if (response?.success === false) {

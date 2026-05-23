@@ -82,10 +82,8 @@ async function fetchSheetJson(url: string, options?: RequestInit) {
   } catch {
     return {
       success: false,
-      data: null,
       message: "Apps Script did not return valid JSON",
-      status: res.status,
-      preview: text.slice(0, 300),
+      raw: text.slice(0, 500),
     };
   }
 }

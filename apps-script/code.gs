@@ -1,6 +1,9 @@
 ﻿function doGet(e) {
-  resetRequestCache_();
-  const action = e && e.parameter ? e.parameter.action || "vehicles" : "vehicles";
+  try {
+    resetRequestCache_();
+    const action = e && e.parameter
+      ? e.parameter.action || "vehicles"
+      : "vehicles";
 
   if (action === "vehicles") {
     return getVehicles();
@@ -51,10 +54,18 @@
     return getDriverQueueLogs();
   }
   
-  return jsonOutput({
-    success: false,
-    message: "Invalid action"
-  });
+    return jsonOutput({
+      success: false,
+      message: "Invalid action"
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: "Apps Script Error: " + String(err && err.message ? err.message : err),
+      error: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : "",
+    });
+  }
 }
 
 function doPost(e) {
@@ -117,9 +128,9 @@ function doPost(e) {
   } catch (err) {
     return jsonOutput({
       success: false,
-      message: "Apps Script Error",
-      error: String(err),
-      stack: err && err.stack ? err.stack : ""
+      message: "Apps Script Error: " + String(err && err.message ? err.message : err),
+      error: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : ""
     });
   }
 }
@@ -403,6 +414,7 @@ function ensureBookingsSheet() {
     "booking_id",
     "booking_no",
     "requester_name",
+    "requester_user_id",
     "department",
     "phone",
     "start_datetime",
@@ -415,6 +427,7 @@ function ensureBookingsSheet() {
     "assigned_user_name",
     "status",
     "staff_note",
+    "created_by_user_id",
     "created_at",
     "updated_at",
   ];
@@ -440,50 +453,34 @@ function ensureBookingsSheet() {
     sheet = ss.insertSheet("Bookings");
   }
 
-  if (sheet.getMaxColumns() < headers.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
-  }
-
-  const lastRow = sheet.getLastRow();
-  const firstRow = lastRow >= 1
-    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0]
-    : [];
-  const hasRequiredHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
-  const hasLegacyHeaderRow = legacyHeaders.every((header, index) => String(firstRow[index] || "").trim() === header);
-  const hasBaseHeaderRow = baseHeaders.every((header, index) => String(firstRow[index] || "").trim() === header);
-
-  if (lastRow === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    return sheet;
-  }
-
-  if (hasRequiredHeaderRow) {
-    return sheet;
-  }
-
-  if (hasBaseHeaderRow) {
-    if (sheet.getMaxColumns() < headers.length) {
-      sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
-    }
-
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    return sheet;
-  }
-
-  if (hasLegacyHeaderRow) {
-    if (sheet.getMaxColumns() < headers.length) {
-      sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
-    }
-
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    return sheet;
-  }
-
-  if (!hasRequiredHeaderRow) {
-    throw new Error("Bookings sheet header row is invalid");
-  }
-
+  ensureSheetColumns_(sheet, headers);
   return sheet;
+}
+
+function ensureSheetColumns_(sheet, requiredHeaders) {
+  if (!sheet) {
+    throw new Error("Sheet is required");
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, requiredHeaders.length).setValues([requiredHeaders]);
+    return requiredHeaders.slice();
+  }
+
+  const lastColumn = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet
+    .getRange(1, 1, 1, lastColumn)
+    .getValues()[0]
+    .map((header) => String(header || "").trim());
+
+  requiredHeaders.forEach((header) => {
+    if (!headers.includes(header)) {
+      headers.push(header);
+      sheet.getRange(1, headers.length).setValue(header);
+    }
+  });
+
+  return headers;
 }
 
 function ensureNotificationsSheet() {
@@ -508,23 +505,34 @@ function ensureNotificationsSheet() {
     sheet = ss.insertSheet("Notifications");
   }
 
-  if (sheet.getMaxColumns() < headers.length) {
-    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  ensureSheetColumns_(sheet, headers);
+  return sheet;
+}
+
+function ensureVehicleLogsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("VehicleLogs");
+
+  const headers = [
+    "log_id",
+    "booking_id",
+    "vehicle_id",
+    "assigned_user_id",
+    "assigned_user_name",
+    "out_time",
+    "out_mileage",
+    "in_time",
+    "in_mileage",
+    "remark",
+    "created_at",
+    "updated_at"
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("VehicleLogs");
   }
 
-  const lastRow = sheet.getLastRow();
-  if (lastRow === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    return sheet;
-  }
-
-  const firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0] || [];
-  const hasRequiredHeaderRow = headers.every((header, index) => String(firstRow[index] || "").trim() === header);
-
-  if (!hasRequiredHeaderRow) {
-    throw new Error("Notifications sheet header row is invalid");
-  }
-
+  ensureSheetColumns_(sheet, headers);
   return sheet;
 }
 
@@ -626,23 +634,31 @@ function buildNotificationMessageForBooking_(booking, fallbackMessage) {
 
 function createRoleNotifications_(roles, payload) {
   (roles || []).forEach((role) => {
-    appendNotificationRecord_({
-      ...payload,
-      target_user_id: "",
-      target_role: normalizeRoleValue_(role),
-    });
+    try {
+      appendNotificationRecord_({
+        ...payload,
+        target_user_id: "",
+        target_role: normalizeRoleValue_(role),
+      });
+    } catch (err) {
+      console.warn("createRoleNotifications_ failed", err);
+    }
   });
 }
 
 function createDriverNotification_(userId, payload) {
-  const targetUserId = String(userId || "").trim();
-  if (!targetUserId) return;
+  try {
+    const targetUserId = String(userId || "").trim();
+    if (!targetUserId) return;
 
-  appendNotificationRecord_({
-    ...payload,
-    target_user_id: targetUserId,
-    target_role: "",
-  });
+    appendNotificationRecord_({
+      ...payload,
+      target_user_id: targetUserId,
+      target_role: "",
+    });
+  } catch (err) {
+    console.warn("createDriverNotification_ failed", err);
+  }
 }
 
 function resolveRequesterNotificationUserId_(booking) {
@@ -1128,6 +1144,7 @@ function createBooking(data) {
     const bookingIdCol = ensureColumn(sheet, headers, "booking_id");
     const bookingNoCol = ensureColumn(sheet, headers, "booking_no");
     const requesterNameCol = ensureColumn(sheet, headers, "requester_name");
+    const requesterUserIdCol = ensureColumn(sheet, headers, "requester_user_id");
     const departmentCol = ensureColumn(sheet, headers, "department");
     const phoneCol = ensureColumn(sheet, headers, "phone");
     ensureTextColumn_(sheet, headers, "phone");
@@ -1141,6 +1158,7 @@ function createBooking(data) {
     const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
     const statusCol = ensureColumn(sheet, headers, "status");
     const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
+    const createdByUserIdCol = ensureColumn(sheet, headers, "created_by_user_id");
     const createdAtCol = ensureColumn(sheet, headers, "created_at");
     const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
     const isBackdatedCol = ensureColumn(sheet, headers, "is_backdated");
@@ -1155,6 +1173,7 @@ function createBooking(data) {
     bookingRow[bookingIdCol] = bookingId;
     bookingRow[bookingNoCol] = bookingNo;
     bookingRow[requesterNameCol] = data.requester_name || "";
+    bookingRow[requesterUserIdCol] = data.requester_user_id || "";
     bookingRow[departmentCol] = data.department || "";
     bookingRow[phoneCol] = normalizePhone_(data.phone);
     bookingRow[startCol] = data.start_datetime || "";
@@ -1167,6 +1186,7 @@ function createBooking(data) {
     bookingRow[assignedUserNameCol] = data.assigned_user_name || "";
     bookingRow[statusCol] = "PENDING";
     bookingRow[staffNoteCol] = "";
+    bookingRow[createdByUserIdCol] = data.created_by_user_id || "";
     bookingRow[createdAtCol] = now;
     bookingRow[updatedAtCol] = now;
     bookingRow[isBackdatedCol] = String(data.is_backdated || "").trim().toUpperCase() === "TRUE" ? "TRUE" : "FALSE";
@@ -1202,6 +1222,8 @@ function createBooking(data) {
         ...data,
         booking_id: bookingId,
         booking_no: bookingNo,
+        requester_user_id: data.requester_user_id || "",
+        created_by_user_id: data.created_by_user_id || "",
         status: "PENDING",
         assigned_user_id: data.assigned_user_id || "",
         assigned_user_name: data.assigned_user_name || "",
@@ -1397,21 +1419,25 @@ function approveBooking(data) {
     );
 
     const assignedNotificationUserId = String(rowValues[assignedUserIdCol] || "").trim();
-    if (assignedNotificationUserId) {
-      createNotification({
-        target_user_id: assignedNotificationUserId,
-        target_role: "",
-        title: "คุณได้รับมอบหมายงาน",
-        message: buildNotificationMessageForBooking_({
-          booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
-          requester_name: rowValues[columnMap.requester_name] || "",
-          destination: rowValues[columnMap.destination] || "",
-        }, "มีการมอบหมายงานใหม่"),
-        type: "BOOKING_ASSIGNED",
-        booking_id: values[currentRow][bookingIdCol],
-        url: "/driver-jobs",
-        created_by: currentUserName || "",
-      });
+    try {
+      if (assignedNotificationUserId) {
+        createNotification({
+          target_user_id: assignedNotificationUserId,
+          target_role: "",
+          title: "คุณได้รับมอบหมายงาน",
+          message: buildNotificationMessageForBooking_({
+            booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
+            requester_name: rowValues[columnMap.requester_name] || "",
+            destination: rowValues[columnMap.destination] || "",
+          }, "มีการมอบหมายงานใหม่"),
+          type: "BOOKING_ASSIGNED",
+          booking_id: values[currentRow][bookingIdCol],
+          url: "/driver-jobs",
+          created_by: currentUserName || "",
+        });
+      }
+    } catch (notificationErr) {
+      console.warn("approveBooking notification failed", notificationErr);
     }
   }
 
@@ -1430,7 +1456,7 @@ function approveBooking(data) {
 }
 function startTrip(data) {
   const bookingSheet = ensureBookingsSheet();
-  const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
+  const logSheet = ensureVehicleLogsSheet();
 
   const table = readSheetTable(bookingSheet);
   const values = [table.headers].concat(table.rows);
@@ -1518,19 +1544,36 @@ function startTrip(data) {
   logRowValues[logUpdatedAtCol] = now;
   appendSheetRow(logSheet, logRowValues);
 
-  const requesterUserId = resolveRequesterNotificationUserId_(currentBooking);
-  const startedDriverName = String(actualStartBy || assignedUserName || currentBooking.driver_name || "").trim();
-  if (requesterUserId) {
-    createNotification({
-      target_user_id: requesterUserId,
-      target_role: "",
-      title: "คนขับรับงานแล้ว",
-      message: `คนขับ ${startedDriverName || "-"} รับงานของคุณแล้ว`,
-      type: "DRIVER_STARTED_JOB",
-      booking_id: currentBooking.booking_id || data.booking_id,
-      url: "/booking",
-      created_by: startedDriverName || assignedUserName || "",
-    });
+  const bookingForNotification = rowsToObjects(headers, [bookingRowValues])[0] || currentBooking || {};
+  const requesterUserId = String(
+    bookingForNotification.requester_user_id ||
+      bookingForNotification.created_by_user_id ||
+      bookingForNotification.user_id ||
+      bookingForNotification.created_user_id ||
+      ""
+  ).trim();
+  const driverName = String(
+    data.assigned_user_name ||
+      data.actual_start_by ||
+      bookingForNotification.assigned_user_name ||
+      bookingForNotification.driver_name ||
+      ""
+  ).trim();
+  try {
+    if (requesterUserId) {
+      createNotification({
+        target_user_id: requesterUserId,
+        target_role: "",
+        title: "คนขับรับงานแล้ว",
+        message: `คนขับ ${driverName || "-"} รับงานของคุณแล้ว`,
+        type: "DRIVER_STARTED_JOB",
+        booking_id: bookingForNotification.booking_id || data.booking_id || "",
+        url: "/booking",
+        created_by: driverName || data.actual_start_by || "",
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("startTrip notification failed", notificationErr);
   }
 
   return jsonOutput({
@@ -1549,7 +1592,7 @@ function startTrip(data) {
 
 function completeTrip(data) {
   const bookingSheet = ensureBookingsSheet();
-  const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
+  const logSheet = ensureVehicleLogsSheet();
 
   const bookingTable = readSheetTable(bookingSheet);
   const bookingHeaders = bookingTable.headers;
@@ -1625,14 +1668,18 @@ function completeTrip(data) {
       setRowValues(logSheet, row, logRowValues);
 
       const completedDriverName = String(actualReturnBy || completedAssignedUserName || completedBooking.driver_name || "").trim();
-      createRoleNotifications_(["STAFF", "ADMIN"], {
-        title: "ปิดงานแล้ว",
-        message: `คนขับ ${completedDriverName || "-"} ปิดงานแล้ว`,
-        type: "DRIVER_COMPLETED_JOB",
-        booking_id: completedBooking.booking_id || data.booking_id,
-        url: "/booking",
-        created_by: completedDriverName || completedAssignedUserName || "",
-      });
+      try {
+        createRoleNotifications_(["STAFF", "ADMIN"], {
+          title: "ปิดงานแล้ว",
+          message: `คนขับ ${completedDriverName || "-"} ปิดงานแล้ว`,
+          type: "DRIVER_COMPLETED_JOB",
+          booking_id: completedBooking.booking_id || data.booking_id,
+          url: "/booking",
+          created_by: completedDriverName || completedAssignedUserName || "",
+        });
+      } catch (notificationErr) {
+        console.warn("completeTrip notification failed", notificationErr);
+      }
 
       return jsonOutput({
         success: true,
@@ -1648,7 +1695,10 @@ function completeTrip(data) {
     }
   }
 
-  return jsonOutput({ success: false, message: "Vehicle log not found" });
+  return jsonOutput({
+    success: false,
+    message: "ไม่พบประวัติการออกรถ กรุณากดรับงาน/ออกรถก่อน"
+  });
 }
 
 function appendBookingBypassLog_(payload) {
@@ -2082,17 +2132,21 @@ function reviewDriverCancelRequest(data) {
     setRowValues(sheet, row, updatedValues);
 
     const currentBooking = rowsToObjects(headers, [updatedValues])[0] || {};
-    if (currentAssignedUserId) {
-      createNotification({
-        target_user_id: currentAssignedUserId,
-        target_role: "",
-        title: "การยกเลิกได้รับอนุมัติ",
-        message: buildNotificationMessageForBooking_(currentBooking, currentRowValues[requestReasonCol] || ""),
-        type: "DRIVER_CANCEL_APPROVED",
-        booking_id: currentBooking.booking_id || data.booking_id,
-        url: "/driver-jobs",
-        created_by: reviewedBy || "",
-      });
+    try {
+      if (currentAssignedUserId) {
+        createNotification({
+          target_user_id: currentAssignedUserId,
+          target_role: "",
+          title: "การยกเลิกได้รับอนุมัติ",
+          message: buildNotificationMessageForBooking_(currentBooking, currentRowValues[requestReasonCol] || ""),
+          type: "DRIVER_CANCEL_APPROVED",
+          booking_id: currentBooking.booking_id || data.booking_id,
+          url: "/driver-jobs",
+          created_by: reviewedBy || "",
+        });
+      }
+    } catch (notificationErr) {
+      console.warn("reviewDriverCancelRequest approve notification failed", notificationErr);
     }
     return jsonOutput({
       success: true,
@@ -2152,17 +2206,21 @@ function reviewDriverCancelRequest(data) {
   );
 
   const reviewedDriverUserId = String(currentBooking.assigned_user_id || currentAssignedUserId || "").trim();
-  if (reviewedDriverUserId) {
-    createNotification({
-      target_user_id: reviewedDriverUserId,
-      target_role: "",
-      title: "ไม่อนุมัติการยกเลิกงาน",
-      message: buildNotificationMessageForBooking_(currentBooking, reviewReason),
-      type: "DRIVER_CANCEL_REJECTED",
-      booking_id: currentBooking.booking_id || data.booking_id,
-      url: "/driver-jobs",
-      created_by: reviewedBy || "",
-    });
+  try {
+    if (reviewedDriverUserId) {
+      createNotification({
+        target_user_id: reviewedDriverUserId,
+        target_role: "",
+        title: "ไม่อนุมัติการยกเลิกงาน",
+        message: buildNotificationMessageForBooking_(currentBooking, reviewReason),
+        type: "DRIVER_CANCEL_REJECTED",
+        booking_id: currentBooking.booking_id || data.booking_id,
+        url: "/driver-jobs",
+        created_by: reviewedBy || "",
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("reviewDriverCancelRequest reject notification failed", notificationErr);
   }
 
   return jsonOutput({
@@ -2282,31 +2340,35 @@ function cancelBooking(data) {
   appendSheetRow(historySheet, historyRow);
 
   const requesterUserId = resolveRequesterNotificationUserId_(cancelledBooking);
-  if (requesterUserId) {
-    createNotification({
-      target_user_id: requesterUserId,
-      target_role: "",
-      title: "รายการจองถูกยกเลิก",
-      message: `รายการจองของคุณถูกยกเลิก เหตุผล: ${reason || "-"}`,
-      type: "BOOKING_CANCELLED",
-      booking_id: cancelledBooking.booking_id || data.booking_id,
-      url: "/booking",
-      created_by: cancelledBy,
-    });
-  }
-
   const cancelledAssignedUserId = String(cancelledBooking.assigned_user_id || "").trim();
-  if (cancelledAssignedUserId) {
-    createNotification({
-      target_user_id: cancelledAssignedUserId,
-      target_role: "",
-      title: "รายการจองถูกยกเลิก",
-      message: `รายการงานที่มอบหมายถูกยกเลิก เหตุผล: ${reason || "-"}`,
-      type: "BOOKING_CANCELLED",
-      booking_id: cancelledBooking.booking_id || data.booking_id,
-      url: "/driver-jobs",
-      created_by: cancelledBy,
-    });
+  try {
+    if (requesterUserId) {
+      createNotification({
+        target_user_id: requesterUserId,
+        target_role: "",
+        title: "รายการจองถูกยกเลิก",
+        message: `รายการจองของคุณถูกยกเลิก เหตุผล: ${reason || "-"}`,
+        type: "BOOKING_CANCELLED",
+        booking_id: cancelledBooking.booking_id || data.booking_id,
+        url: "/booking",
+        created_by: cancelledBy,
+      });
+    }
+
+    if (cancelledAssignedUserId) {
+      createNotification({
+        target_user_id: cancelledAssignedUserId,
+        target_role: "",
+        title: "รายการจองถูกยกเลิก",
+        message: `รายการงานที่มอบหมายถูกยกเลิก เหตุผล: ${reason || "-"}`,
+        type: "BOOKING_CANCELLED",
+        booking_id: cancelledBooking.booking_id || data.booking_id,
+        url: "/driver-jobs",
+        created_by: cancelledBy,
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("cancelBooking notification failed", notificationErr);
   }
 
   return jsonOutput({
@@ -5097,20 +5159,24 @@ function confirmDriverQueueAssignment(data) {
   logRow[logTable.columnMap.created_by] = createdBy || "";
   appendSheetRow(logSheet, logRow);
 
-  if (assignedDriverUserId) {
-    createNotification({
-      target_user_id: assignedDriverUserId,
-      target_role: "",
-      title: "คุณได้รับมอบหมายงาน",
-      message: buildNotificationMessageForBooking_({
+  try {
+    if (assignedDriverUserId) {
+      createNotification({
+        target_user_id: assignedDriverUserId,
+        target_role: "",
+        title: "คุณได้รับมอบหมายงาน",
+        message: buildNotificationMessageForBooking_({
+          booking_id: bookingId,
+          booking_no: bookingNo,
+        }, "มีการมอบหมายงานใหม่"),
+        type: "BOOKING_ASSIGNED",
         booking_id: bookingId,
-        booking_no: bookingNo,
-      }, "มีการมอบหมายงานใหม่"),
-      type: "BOOKING_ASSIGNED",
-      booking_id: bookingId,
-      url: "/driver-jobs",
-      created_by: createdBy || "",
-    });
+        url: "/driver-jobs",
+        created_by: createdBy || "",
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("confirmDriverQueueAssignment notification failed", notificationErr);
   }
 
   return jsonOutput({
@@ -6097,17 +6163,21 @@ function unassignBookingDriver(data) {
     })
   );
 
-  if (oldDriverUserId) {
-    createNotification({
-      target_user_id: oldDriverUserId,
-      target_role: "",
-      title: "มีการดึงงานกลับ",
-      message: buildNotificationMessageForBooking_(updatedBooking, reason),
-      type: "BOOKING_UNASSIGNED",
-      booking_id: bookingId,
-      url: "/driver-jobs",
-      created_by: updatedBy,
-    });
+  try {
+    if (oldDriverUserId) {
+      createNotification({
+        target_user_id: oldDriverUserId,
+        target_role: "",
+        title: "มีการดึงงานกลับ",
+        message: buildNotificationMessageForBooking_(updatedBooking, reason),
+        type: "BOOKING_UNASSIGNED",
+        booking_id: bookingId,
+        url: "/driver-jobs",
+        created_by: updatedBy,
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("unassignBookingDriver notification failed", notificationErr);
   }
 
   return jsonOutput({
