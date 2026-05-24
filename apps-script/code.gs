@@ -53,6 +53,11 @@
   if (action === "getDriverQueueLogs") {
     return getDriverQueueLogs();
   }
+  if (action === "getPushSubscriptionsByUserId") {
+    return getPushSubscriptionsByUserId({
+      user_id: e && e.parameter ? e.parameter.user_id : "",
+    });
+  }
   
     return jsonOutput({
       success: false,
@@ -117,6 +122,9 @@ function doPost(e) {
     if (action === "confirmDriverQueueAssignment") return confirmDriverQueueAssignment(body.data);
     if (action === "markNotificationRead") return markNotificationRead(body.data);
     if (action === "markAllNotificationsRead") return markAllNotificationsRead(body.data);
+    if (action === "savePushSubscription") return savePushSubscription(body.data);
+    if (action === "disablePushSubscription") return disablePushSubscription(body.data);
+    if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
@@ -318,6 +326,7 @@ var REQUEST_CACHE_ = null;
 function resetRequestCache_() {
   REQUEST_CACHE_ = {
     sheetTables: {},
+    createdNotifications: [],
   };
 }
 
@@ -331,6 +340,24 @@ function getRequestCache_() {
 
 function getSheetCacheKey_(sheet) {
   return `${sheet.getSheetId()}:${sheet.getName()}`;
+}
+
+function trackCreatedNotification_(notification) {
+  if (!notification || !notification.notification_id) return;
+
+  const cache = getRequestCache_();
+  const exists = cache.createdNotifications.some(function (item) {
+    return String(item.notification_id || "").trim() === String(notification.notification_id || "").trim();
+  });
+
+  if (!exists) {
+    cache.createdNotifications.push(notification);
+  }
+}
+
+function getCreatedNotifications_() {
+  const cache = getRequestCache_();
+  return (cache.createdNotifications || []).slice();
 }
 
 function invalidateSheetCache_(sheetOrName) {
@@ -510,6 +537,31 @@ function ensureNotificationsSheet() {
   return sheet;
 }
 
+function ensurePushSubscriptionsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("PushSubscriptions");
+  const headers = [
+    "subscription_id",
+    "user_id",
+    "endpoint",
+    "p256dh",
+    "auth",
+    "fcm_token",
+    "provider",
+    "user_agent",
+    "status",
+    "created_at",
+    "updated_at",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("PushSubscriptions");
+  }
+
+  ensureSheetColumns_(sheet, headers);
+  return sheet;
+}
+
 function ensureVehicleLogsSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName("VehicleLogs");
@@ -650,6 +702,7 @@ function appendNotificationRecord_(data) {
   });
 
   appendSheetRow(sheet, row);
+  trackCreatedNotification_(record);
   return record;
 }
 
@@ -757,6 +810,7 @@ function createNotification(data) {
       success: true,
       message: "Create notification success",
       data: record,
+      created_notifications: getCreatedNotifications_(),
     });
   } catch (err) {
     return jsonOutput({
@@ -764,6 +818,229 @@ function createNotification(data) {
       message: String(err && err.message ? err.message : err),
     });
   }
+}
+
+function getPushSubscriptionsByUserId(data) {
+  try {
+    const userId = String(data && data.user_id || "").trim();
+    if (!userId) {
+      return jsonOutput({
+        success: false,
+        message: "user_id is required",
+      });
+    }
+
+    const subscriptions = getActivePushSubscriptionsByUserId_(userId).filter(function (row) {
+      return String(row.provider || "").trim().toUpperCase() === "FCM" &&
+        String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
+        String(row.fcm_token || "").trim();
+    });
+
+    return jsonOutput({
+      success: true,
+      total: subscriptions.length,
+      data: subscriptions,
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function savePushSubscription(data) {
+  try {
+    const payload = data || {};
+    const subscription = payload.subscription || {};
+    const keys = subscription.keys || {};
+    const userId = String(payload.user_id || "").trim();
+    const endpoint = String(subscription.endpoint || payload.endpoint || "").trim();
+    const p256dh = String(keys.p256dh || payload.p256dh || "").trim();
+    const auth = String(keys.auth || payload.auth || "").trim();
+    const fcmToken = String(payload.fcm_token || "").trim();
+    const provider = String(payload.provider || (fcmToken ? "FCM" : "WEB_PUSH")).trim().toUpperCase();
+    const userAgent = String(payload.user_agent || "").trim();
+    const nowIso = new Date().toISOString();
+    const matchColumnKey = provider === "FCM" ? "fcm_token" : "endpoint";
+    const matchValue = provider === "FCM" ? fcmToken : endpoint;
+
+    if (!userId) {
+      return jsonOutput({
+        success: false,
+        message: "user_id is required",
+      });
+    }
+
+    if (provider === "FCM" && !fcmToken) {
+      return jsonOutput({
+        success: false,
+        message: "fcm_token is required",
+      });
+    }
+
+    if (provider !== "FCM" && !endpoint) {
+      return jsonOutput({
+        success: false,
+        message: "subscription endpoint is required",
+      });
+    }
+
+    const sheet = ensurePushSubscriptionsSheet();
+    const table = readSheetTable(sheet);
+    const headers = table.headers;
+    const columnMap = table.columnMap;
+    const matchCol = columnMap[matchColumnKey];
+
+    for (let index = 0; index < table.rows.length; index += 1) {
+      const rowValues = table.rows[index];
+      if (String(rowValues[matchCol] || "").trim() !== matchValue) {
+        continue;
+      }
+
+      const nextValues = rowValues.slice();
+      nextValues[columnMap.user_id] = userId;
+      nextValues[columnMap.endpoint] = endpoint;
+      nextValues[columnMap.p256dh] = p256dh;
+      nextValues[columnMap.auth] = auth;
+      nextValues[columnMap.fcm_token] = fcmToken;
+      nextValues[columnMap.provider] = provider;
+      nextValues[columnMap.user_agent] = userAgent;
+      nextValues[columnMap.status] = "ACTIVE";
+      nextValues[columnMap.updated_at] = nowIso;
+      if (!String(nextValues[columnMap.created_at] || "").trim()) {
+        nextValues[columnMap.created_at] = nowIso;
+      }
+      if (!String(nextValues[columnMap.subscription_id] || "").trim()) {
+        nextValues[columnMap.subscription_id] = "PS-" + Utilities.getUuid();
+      }
+
+      setRowValues(sheet, index + 2, nextValues);
+
+      return jsonOutput({
+        success: true,
+        message: "Save push subscription success",
+        data: rowsToObjects(headers, [nextValues])[0] || {},
+      });
+    }
+
+    const row = Array(headers.length).fill("");
+    row[columnMap.subscription_id] = "PS-" + Utilities.getUuid();
+    row[columnMap.user_id] = userId;
+    row[columnMap.endpoint] = endpoint;
+    row[columnMap.p256dh] = p256dh;
+    row[columnMap.auth] = auth;
+    row[columnMap.fcm_token] = fcmToken;
+    row[columnMap.provider] = provider;
+    row[columnMap.user_agent] = userAgent;
+    row[columnMap.status] = "ACTIVE";
+    row[columnMap.created_at] = nowIso;
+    row[columnMap.updated_at] = nowIso;
+    appendSheetRow(sheet, row);
+
+    return jsonOutput({
+      success: true,
+      message: "Save push subscription success",
+      data: rowsToObjects(headers, [row])[0] || {},
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function disablePushSubscription(data) {
+  try {
+    const payload = data || {};
+    const endpoint = String(
+      payload.endpoint ||
+      payload.subscription_endpoint ||
+      (payload.subscription && payload.subscription.endpoint) ||
+      ""
+    ).trim();
+    const fcmToken = String(payload.fcm_token || "").trim();
+    const matchColumnKey = fcmToken ? "fcm_token" : "endpoint";
+    const matchValue = fcmToken || endpoint;
+
+    if (!matchValue) {
+      return jsonOutput({
+        success: false,
+        message: "endpoint or fcm_token is required",
+      });
+    }
+
+    const sheet = ensurePushSubscriptionsSheet();
+    const table = readSheetTable(sheet);
+    const headers = table.headers;
+    const columnMap = table.columnMap;
+    const nowIso = new Date().toISOString();
+
+    for (let index = 0; index < table.rows.length; index += 1) {
+      const rowValues = table.rows[index];
+      if (String(rowValues[columnMap[matchColumnKey]] || "").trim() !== matchValue) {
+        continue;
+      }
+
+      const nextValues = rowValues.slice();
+      nextValues[columnMap.status] = "INACTIVE";
+      nextValues[columnMap.updated_at] = nowIso;
+      setRowValues(sheet, index + 2, nextValues);
+
+      return jsonOutput({
+        success: true,
+        message: "Disable push subscription success",
+        data: rowsToObjects(headers, [nextValues])[0] || {},
+      });
+    }
+
+    return jsonOutput({
+      success: true,
+      message: "Push subscription already disabled",
+      data: {
+        endpoint,
+        fcm_token: fcmToken,
+        updated: false,
+      },
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function getActivePushSubscriptionsByUserId_(userId) {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return [];
+
+  const sheet = ensurePushSubscriptionsSheet();
+  const table = readSheetTable(sheet);
+
+  return rowsToObjects(table.headers, table.rows)
+    .filter((row) =>
+      String(row.user_id || "").trim() === normalizedUserId &&
+      String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
+      (
+        String(row.endpoint || "").trim() ||
+        String(row.fcm_token || "").trim()
+      )
+    )
+    .map((row) => ({
+      subscription_id: String(row.subscription_id || "").trim(),
+      user_id: String(row.user_id || "").trim(),
+      endpoint: String(row.endpoint || "").trim(),
+      p256dh: String(row.p256dh || "").trim(),
+      auth: String(row.auth || "").trim(),
+      fcm_token: String(row.fcm_token || "").trim(),
+      provider: String(row.provider || "").trim().toUpperCase(),
+      user_agent: String(row.user_agent || "").trim(),
+      status: String(row.status || "").trim().toUpperCase(),
+      created_at: String(row.created_at || "").trim(),
+      updated_at: String(row.updated_at || "").trim(),
+    }));
 }
 
 function getNotifications(data) {
@@ -1510,7 +1787,8 @@ function approveBooking(data) {
       assigned_user_id: data.assigned_user_id || data.driver_id || "",
       assigned_user_name: data.assigned_user_name || data.driver_name || "",
       status: "APPROVED"
-    }
+    },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 function startTrip(data) {
@@ -1651,7 +1929,8 @@ function startTrip(data) {
       actual_start_by: actualStartBy,
       updated_at: now.toISOString(),
       log_id: logId
-    }
+    },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -6141,6 +6420,7 @@ function confirmDriverQueueAssignment(data) {
       warning,
       state,
     },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 

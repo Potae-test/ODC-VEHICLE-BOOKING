@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../../api";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  savePushSubscription,
+} from "../../api";
+import {
+  isPushSupported,
+  listenForegroundMessages,
+  requestFcmToken,
+  requestNotificationPermission,
+} from "../../utils/pushNotifications";
 
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 const NOTIFICATIONS_PER_PAGE = 3;
-
 function formatNotificationDateTime(value) {
   try {
     if (!value) return "";
@@ -61,6 +71,13 @@ function getRequesterAssignedPayload(notification) {
   };
 }
 
+function getPushStatusLabel(status) {
+  if (status === "unsupported") return "ไม่รองรับ";
+  if (status === "blocked") return "ถูกบล็อก";
+  if (status === "enabled") return "เปิดแล้ว";
+  return "ยังไม่ได้เปิด";
+}
+
 export default function NotificationBell({ currentUser, onNavigate }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -69,6 +86,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   const [loading, setLoading] = useState(true);
   const [activeNotificationId, setActiveNotificationId] = useState("");
   const [markingAll, setMarkingAll] = useState(false);
+  const [pushStatus, setPushStatus] = useState("loading");
   const [page, setPage] = useState(1);
   const rootRef = useRef(null);
 
@@ -173,6 +191,78 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     }
   }, [page, totalPages]);
 
+  useEffect(() => {
+    let unsubscribe = () => {};
+
+    listenForegroundMessages((payload) => {
+      const notificationUrl = String(payload?.fcmOptions?.link || payload?.data?.url || "").trim();
+      if (notificationUrl) {
+        window.dispatchEvent(new Event("odc-notifications-refresh"));
+      }
+    })
+      .then((nextUnsubscribe) => {
+        unsubscribe = typeof nextUnsubscribe === "function" ? nextUnsubscribe : () => {};
+      })
+      .catch((err) => {
+        console.warn("listenForegroundMessages failed", err);
+      });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function syncPushState() {
+      if (!isPushSupported()) {
+        if (!cancelled) setPushStatus("unsupported");
+        return;
+      }
+
+      if (Notification.permission === "denied") {
+        if (!cancelled) setPushStatus("blocked");
+        return;
+      }
+
+      try {
+        if (Notification.permission !== "granted") {
+          if (!cancelled) setPushStatus("not_enabled");
+          return;
+        }
+
+        const fcmToken = await requestFcmToken();
+        if (!fcmToken) {
+          if (!cancelled) setPushStatus("not_enabled");
+          return;
+        }
+
+        if (userId) {
+          await savePushSubscription({
+            user_id: userId,
+            fcm_token: fcmToken,
+            provider: "FCM",
+            user_agent: navigator.userAgent || "",
+          });
+        }
+
+        if (!cancelled) setPushStatus("enabled");
+      } catch (err) {
+        console.warn("push sync failed", err);
+        if (!cancelled) {
+          setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
+        }
+      }
+    }
+
+    syncPushState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   const handleOpen = async () => {
     const nextOpen = !isOpen;
     setIsOpen(nextOpen);
@@ -241,6 +331,36 @@ export default function NotificationBell({ currentUser, onNavigate }) {
       console.warn("markAllNotificationsRead failed", err);
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    if (!userId) return;
+    if (!isPushSupported()) {
+      setPushStatus("unsupported");
+      return;
+    }
+
+    setPushStatus("loading");
+
+    try {
+      const permission = await requestNotificationPermission();
+      if (permission !== "granted") {
+        setPushStatus(permission === "denied" ? "blocked" : "not_enabled");
+        return;
+      }
+
+      const fcmToken = await requestFcmToken();
+      await savePushSubscription({
+        user_id: userId,
+        fcm_token: fcmToken,
+        provider: "FCM",
+        user_agent: navigator.userAgent || "",
+      });
+      setPushStatus("enabled");
+    } catch (err) {
+      console.warn("enable push failed", err);
+      setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
     }
   };
 
@@ -363,6 +483,14 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           <div className="notification-panel-footer">
             <button type="button" className="notification-text-button" onClick={handleMarkAll} disabled={!unreadCount || markingAll}>
               อ่านทั้งหมด
+            </button>
+            <button
+              type="button"
+              className="notification-text-button"
+              onClick={handleEnablePush}
+              disabled={!userId || pushStatus === "enabled" || pushStatus === "unsupported" || pushStatus === "blocked"}
+            >
+              {pushStatus === "loading" ? "เปิดแจ้งเตือนบนเครื่องนี้" : getPushStatusLabel(pushStatus)}
             </button>
             <button
               type="button"

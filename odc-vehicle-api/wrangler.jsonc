@@ -31,7 +31,8 @@
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
+	// "vars": {  "VAPID_SUBJECT": "mailto:admin@example.com" }
+	// Set `VAPID_PRIVATE_KEY` with `wrangler secret put VAPID_PRIVATE_KEY`
 	/**
 	 * Static Assets
 	 * https://developers.cloudflare.com/workers/static-assets/binding/

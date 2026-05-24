@@ -14,6 +14,7 @@
     "@fullcalendar/daygrid": "^6.1.20",
     "@fullcalendar/interaction": "^6.1.20",
     "@fullcalendar/react": "^6.1.20",
+    "firebase": "^12.13.0",
     "flatpickr": "^4.6.13",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

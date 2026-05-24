@@ -245,6 +245,36 @@ export async function markAllNotificationsRead(data) {
   return json.data || json;
 }
 
+export async function savePushSubscription(data) {
+  const payload = {
+    ...data,
+    fcm_token: data?.fcm_token ?? "",
+    provider: data?.provider ?? "",
+  };
+  const json = await fetchJson(`${API_BASE_URL}/api/push-subscriptions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return json.data || json;
+}
+
+export async function disablePushSubscription(value) {
+  const payload = typeof value === "string" ? { endpoint: value } : (value || {});
+  const json = await fetchJson(`${API_BASE_URL}/api/push-subscriptions/disable`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return json.data || json;
+}
+
 export async function getDriverJobLogs(options = {}) {
   return apiRequest("driver_job_logs", options);
 }
