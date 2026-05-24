@@ -499,6 +499,7 @@ function ensureNotificationsSheet() {
     "created_at",
     "read_at",
     "created_by",
+    "payload_json",
   ];
 
   if (!sheet) {
@@ -545,6 +546,36 @@ function normalizeNotificationReadValue_(value) {
   return String(value || "").trim().toUpperCase() === "TRUE";
 }
 
+function safeStringifyNotificationPayload_(payload) {
+  try {
+    if (!payload) return "";
+    if (typeof payload === "string") return payload;
+    return JSON.stringify(payload);
+  } catch (err) {
+    return "";
+  }
+}
+
+function buildNotificationPayloadFromBooking_(booking, overrides) {
+  const source = booking || {};
+  const next = {
+    booking_id: String(source.booking_id || "").trim(),
+    booking_no: String(source.booking_no || "").trim(),
+    requester_name: String(source.requester_name || "").trim(),
+    driver_name: String(source.assigned_user_name || source.driver_name || "").trim(),
+    destination: String(source.destination || "").trim(),
+    start_datetime: String(source.start_datetime || "").trim(),
+    end_datetime: String(source.end_datetime || "").trim(),
+  };
+
+  Object.keys(overrides || {}).forEach((key) => {
+    const value = overrides[key];
+    next[key] = value === undefined || value === null ? "" : value;
+  });
+
+  return next;
+}
+
 function buildNotificationRecord_(data) {
   const nowIso = new Date().toISOString();
 
@@ -561,6 +592,7 @@ function buildNotificationRecord_(data) {
     created_at: nowIso,
     read_at: "",
     created_by: String(data && data.created_by || "").trim(),
+    payload_json: safeStringifyNotificationPayload_(data && data.payload_json),
   };
 }
 
@@ -598,7 +630,8 @@ function appendNotificationRecord_(data) {
       String(existing.title || "").trim() === record.title &&
       String(existing.type || "").trim() === record.type &&
       String(existing.booking_id || "").trim() === record.booking_id &&
-      String(existing.url || "").trim() === record.url
+      String(existing.url || "").trim() === record.url &&
+      String(existing.payload_json || "").trim() === record.payload_json
     ) {
       return {
         ...record,
@@ -606,6 +639,7 @@ function appendNotificationRecord_(data) {
         created_at: String(existing.created_at || "").trim() || record.created_at,
         is_read: normalizeNotificationReadValue_(existing.is_read),
         read_at: String(existing.read_at || "").trim(),
+        payload_json: String(existing.payload_json || "").trim() || record.payload_json,
       };
     }
   }
@@ -704,6 +738,7 @@ function getVisibleNotificationEntries_(userId, role) {
       is_read: normalizeNotificationReadValue_(notification.is_read),
       created_at: String(notification.created_at || ""),
       read_at: String(notification.read_at || ""),
+      payload_json: String(notification.payload_json || ""),
     }));
 
   notifications.sort((left, right) => {
@@ -1419,7 +1454,9 @@ function approveBooking(data) {
     );
 
     const assignedNotificationUserId = String(rowValues[assignedUserIdCol] || "").trim();
+    const requesterNotificationUserId = resolveRequesterNotificationUserId_(rowsToObjects(headers, [rowValues])[0] || {});
     try {
+      const assignedBooking = rowsToObjects(headers, [rowValues])[0] || {};
       if (assignedNotificationUserId) {
         createNotification({
           target_user_id: assignedNotificationUserId,
@@ -1434,6 +1471,28 @@ function approveBooking(data) {
           booking_id: values[currentRow][bookingIdCol],
           url: "/driver-jobs",
           created_by: currentUserName || "",
+          payload_json: buildNotificationPayloadFromBooking_(assignedBooking, {
+            driver_name: rowValues[assignedUserNameCol] || "",
+            status: "APPROVED",
+          }),
+        });
+      }
+
+      if (requesterNotificationUserId) {
+        const requesterDriverName = String(rowValues[assignedUserNameCol] || "").trim();
+        createNotification({
+          target_user_id: requesterNotificationUserId,
+          target_role: "",
+          title: "รายการจองได้รับมอบหมายคนขับแล้ว",
+          message: `${requesterDriverName || "คนขับ"} ได้รับมอบหมายแล้ว`,
+          type: "BOOKING_ASSIGNED_TO_REQUESTER",
+          booking_id: values[currentRow][bookingIdCol],
+          url: "/booking",
+          created_by: currentUserName || "",
+          payload_json: buildNotificationPayloadFromBooking_(assignedBooking, {
+            driver_name: requesterDriverName,
+            status: "APPROVED",
+          }),
         });
       }
     } catch (notificationErr) {
@@ -1561,15 +1620,21 @@ function startTrip(data) {
   ).trim();
   try {
     if (requesterUserId) {
+      const startDatetimeLabel = String(bookingForNotification.start_datetime || "").trim();
+      const destinationLabel = String(bookingForNotification.destination || "").trim();
       createNotification({
         target_user_id: requesterUserId,
         target_role: "",
         title: "คนขับรับงานแล้ว",
-        message: `คนขับ ${driverName || "-"} รับงานของคุณแล้ว`,
+        message: `คนขับ ${driverName || "-"} รับงานของคุณแล้ว ปลายทาง ${destinationLabel || "-"} เวลาไป ${startDatetimeLabel || "-"}`,
         type: "DRIVER_STARTED_JOB",
         booking_id: bookingForNotification.booking_id || data.booking_id || "",
         url: "/booking",
         created_by: driverName || data.actual_start_by || "",
+        payload_json: buildNotificationPayloadFromBooking_(bookingForNotification, {
+          driver_name: driverName || bookingForNotification.assigned_user_name || "",
+          status: "IN_USE",
+        }),
       });
     }
   } catch (notificationErr) {
@@ -1671,11 +1736,16 @@ function completeTrip(data) {
       try {
         createRoleNotifications_(["STAFF", "ADMIN"], {
           title: "ปิดงานแล้ว",
-          message: `คนขับ ${completedDriverName || "-"} ปิดงานแล้ว`,
+          message: `คนขับ ${completedDriverName || "-"} ปิดงานแล้ว ปลายทาง ${String(completedBooking.destination || "").trim() || "-"}`,
           type: "DRIVER_COMPLETED_JOB",
           booking_id: completedBooking.booking_id || data.booking_id,
           url: "/booking",
           created_by: completedDriverName || completedAssignedUserName || "",
+          payload_json: buildNotificationPayloadFromBooking_(completedBooking, {
+            driver_name: completedDriverName || completedBooking.assigned_user_name || "",
+            actual_return_datetime: actualReturnDatetime,
+            status: "COMPLETED",
+          }),
         });
       } catch (notificationErr) {
         console.warn("completeTrip notification failed", notificationErr);
@@ -2034,6 +2104,11 @@ function requestDriverCancelJob(data) {
     booking_id: currentBooking.booking_id || data.booking_id,
     url: "/booking",
     created_by: requestedBy || "",
+    payload_json: buildNotificationPayloadFromBooking_(currentBooking, {
+      reason,
+      status: String(currentBooking.status || "").trim(),
+      driver_cancel_request_status: "PENDING",
+    }),
   });
 
   return jsonOutput({
@@ -2343,6 +2418,10 @@ function cancelBooking(data) {
   const cancelledAssignedUserId = String(cancelledBooking.assigned_user_id || "").trim();
   try {
     if (requesterUserId) {
+      const cancellationPayload = buildNotificationPayloadFromBooking_(cancelledBooking, {
+        reason,
+        status: "CANCELLED",
+      });
       createNotification({
         target_user_id: requesterUserId,
         target_role: "",
@@ -2352,6 +2431,7 @@ function cancelBooking(data) {
         booking_id: cancelledBooking.booking_id || data.booking_id,
         url: "/booking",
         created_by: cancelledBy,
+        payload_json: cancellationPayload,
       });
     }
 
@@ -2365,6 +2445,10 @@ function cancelBooking(data) {
         booking_id: cancelledBooking.booking_id || data.booking_id,
         url: "/driver-jobs",
         created_by: cancelledBy,
+        payload_json: buildNotificationPayloadFromBooking_(cancelledBooking, {
+          reason,
+          status: "CANCELLED",
+        }),
       });
     }
   } catch (notificationErr) {
@@ -5161,6 +5245,10 @@ function confirmDriverQueueAssignment(data) {
 
   try {
     if (assignedDriverUserId) {
+      const assignmentPayload = buildNotificationPayloadFromBooking_(booking, {
+        driver_name: assignedDriverName || booking.assigned_user_name || "",
+        status: "APPROVED",
+      });
       createNotification({
         target_user_id: assignedDriverUserId,
         target_role: "",
@@ -5173,6 +5261,7 @@ function confirmDriverQueueAssignment(data) {
         booking_id: bookingId,
         url: "/driver-jobs",
         created_by: createdBy || "",
+        payload_json: assignmentPayload,
       });
     }
   } catch (notificationErr) {
@@ -5915,6 +6004,12 @@ function confirmDriverQueueAssignment(data) {
     });
   }
 
+  const bookingSheet = ensureBookingsSheet();
+  const bookingTable = readSheetTable(bookingSheet);
+  const bookingRowNumber = findRowByBookingId(bookingTable, bookingId);
+  const booking = bookingRowNumber > 1
+    ? rowsToObjects(bookingTable.headers, [bookingTable.rows[bookingRowNumber - 2]])[0] || {}
+    : {};
   const queueRows = getActiveMasterQueue();
   const activeDriverLookup = getActiveDriverLookup_();
   const stateBefore = getCurrentQueueState();
@@ -5981,6 +6076,49 @@ function confirmDriverQueueAssignment(data) {
   logRow[logTable.columnMap.created_at] = now;
   logRow[logTable.columnMap.created_by] = createdBy || "";
   appendSheetRow(logSheet, logRow);
+
+  try {
+    if (assignedDriverUserId) {
+      createNotification({
+        target_user_id: assignedDriverUserId,
+        target_role: "",
+        title: "คุณได้รับมอบหมายงาน",
+        message: buildNotificationMessageForBooking_(booking, "มีการมอบหมายงานใหม่"),
+        type: "BOOKING_ASSIGNED",
+        booking_id: bookingId,
+        url: "/driver-jobs",
+        created_by: createdBy || "",
+        payload_json: buildNotificationPayloadFromBooking_(booking, {
+          booking_id: bookingId,
+          booking_no: booking.booking_no || bookingNo,
+          driver_name: resolvedAssignedDriverName || assignedDriverName,
+          status: "APPROVED",
+        }),
+      });
+    }
+
+    const requesterNotificationUserId = resolveRequesterNotificationUserId_(booking);
+    if (requesterNotificationUserId) {
+      createNotification({
+        target_user_id: requesterNotificationUserId,
+        target_role: "",
+        title: "รายการจองได้รับมอบหมายคนขับแล้ว",
+        message: `${resolvedAssignedDriverName || assignedDriverName || "คนขับ"} ได้รับมอบหมายแล้ว`,
+        type: "BOOKING_ASSIGNED_TO_REQUESTER",
+        booking_id: bookingId,
+        url: "/booking",
+        created_by: createdBy || "",
+        payload_json: buildNotificationPayloadFromBooking_(booking, {
+          booking_id: bookingId,
+          booking_no: booking.booking_no || bookingNo,
+          driver_name: resolvedAssignedDriverName || assignedDriverName,
+          status: "APPROVED",
+        }),
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("confirmDriverQueueAssignment notification failed", notificationErr);
+  }
 
   return jsonOutput({
     success: true,

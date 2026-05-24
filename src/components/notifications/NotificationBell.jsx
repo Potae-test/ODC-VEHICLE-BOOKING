@@ -4,27 +4,61 @@ import { getNotifications, markAllNotificationsRead, markNotificationRead } from
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 const NOTIFICATIONS_PER_PAGE = 3;
 
-const thaiDateTimeFormatter = new Intl.DateTimeFormat("th-TH", {
-  timeZone: "Asia/Bangkok",
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 function formatNotificationDateTime(value) {
-  if (!value) return "";
+  try {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-
-  return `${thaiDateTimeFormatter.format(date)} น.`;
+    return new Intl.DateTimeFormat("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  } catch {
+    return "";
+  }
 }
 
 function getUnreadBadgeLabel(count) {
   if (count > 99) return "99+";
   return String(count);
+}
+
+function parseNotificationPayload(value) {
+  try {
+    if (!value) return null;
+    return typeof value === "string" ? JSON.parse(value) : value;
+  } catch {
+    return null;
+  }
+}
+
+function getDriverStartedPayload(notification) {
+  const payload = parseNotificationPayload(notification?.payload_json);
+  if (!payload || String(notification?.type || "").trim() !== "DRIVER_STARTED_JOB") {
+    return null;
+  }
+
+  return {
+    driver_name: String(payload.driver_name || "").trim() || "-",
+    destination: String(payload.destination || "").trim() || "-",
+    start_datetime: formatNotificationDateTime(payload.start_datetime) || "-",
+  };
+}
+
+function getRequesterAssignedPayload(notification) {
+  const payload = parseNotificationPayload(notification?.payload_json);
+  if (!payload || String(notification?.type || "").trim() !== "BOOKING_ASSIGNED_TO_REQUESTER") {
+    return null;
+  }
+
+  return {
+    driver_name: String(payload.driver_name || "").trim() || "-",
+    destination: String(payload.destination || "").trim() || "-",
+  };
 }
 
 export default function NotificationBell({ currentUser, onNavigate }) {
@@ -262,6 +296,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   {pagedNotifications.map((notification) => {
                   const notificationId = String(notification.notification_id || "").trim();
                   const isUnread = !notification.is_read;
+                  const driverStartedPayload = getDriverStartedPayload(notification);
+                  const requesterAssignedPayload = getRequesterAssignedPayload(notification);
 
                   return (
                     <button
@@ -276,7 +312,32 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                         {isUnread && <span className="notification-item-dot" aria-hidden="true" />}
                       </div>
                       <div className="notification-item-time">{formatNotificationDateTime(notification.created_at)}</div>
-                      <div className="notification-item-message">{notification.message || "-"}</div>
+                      {!driverStartedPayload && !requesterAssignedPayload && (
+                        <div className="notification-item-message">{notification.message || "-"}</div>
+                      )}
+                      {driverStartedPayload && (
+                        <div className="notification-detail-list">
+                          <div>
+                            <b>คนขับ:</b> {driverStartedPayload.driver_name}
+                          </div>
+                          <div>
+                            <b>ปลายทาง:</b> {driverStartedPayload.destination}
+                          </div>
+                          <div>
+                            <b>เวลาไป:</b> {driverStartedPayload.start_datetime}
+                          </div>
+                        </div>
+                      )}
+                      {requesterAssignedPayload && (
+                        <div className="notification-detail-list">
+                          <div>
+                            <b>คนขับ:</b> {requesterAssignedPayload.driver_name}
+                          </div>
+                          <div>
+                            <b>ปลายทาง:</b> {requesterAssignedPayload.destination}
+                          </div>
+                        </div>
+                      )}
                     </button>
                   );
                   })}

@@ -313,6 +313,23 @@ button:hover {
   word-break: break-word;
 }
 
+.notification-detail-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.notification-detail-list div {
+  line-height: 1.45;
+}
+
+.notification-detail-list b {
+  color: #0f172a;
+  font-weight: 800;
+}
+
 .notification-item-dot {
   width: 10px;
   height: 10px;
