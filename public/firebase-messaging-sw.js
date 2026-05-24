@@ -14,43 +14,80 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-  const title = payload?.notification?.title || "แจ้งเตือน";
-  const body = payload?.notification?.body || "";
-  const url = payload?.fcmOptions?.link || payload?.data?.url || "/";
+function showNotificationFromPayload(payload) {
+  const title =
+    payload?.notification?.title ||
+    payload?.data?.title ||
+    payload?.title ||
+    "ODC Vehicle Booking";
+  const body =
+    payload?.notification?.body ||
+    payload?.data?.body ||
+    payload?.body ||
+    "มีการแจ้งเตือนใหม่";
+  const url =
+    payload?.fcmOptions?.link ||
+    payload?.data?.url ||
+    payload?.url ||
+    "/";
 
-  self.registration.showNotification(title, {
+  return self.registration.showNotification(title, {
     body,
     icon: "/icon-192.png",
+    badge: "/icon-192.png",
     data: {
       url,
-      payload,
     },
   });
+}
+
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+messaging.onBackgroundMessage((payload) => {
+  return showNotificationFromPayload(payload || {});
+});
+
+self.addEventListener("push", (event) => {
+  let payload = {};
+
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (err) {
+    payload = {
+      title: "ODC Vehicle Booking",
+      body: event.data ? event.data.text() : "มีการแจ้งเตือนใหม่",
+      url: "/",
+    };
+  }
+
+  event.waitUntil(showNotificationFromPayload(payload));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const notificationUrl = event.notification?.data?.url || "/";
-  const targetUrl = new URL(notificationUrl, self.location.origin).href;
+  const url = event.notification?.data?.url || "/";
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (!("focus" in client)) continue;
-
-        if (client.url === targetUrl && "navigate" in client) {
-          return client.focus();
-        }
-
-        if (client.url.startsWith(self.location.origin) && "navigate" in client) {
-          return client.navigate(targetUrl).then(() => client.focus());
+        if ("focus" in client) {
+          client.focus();
+          if ("navigate" in client) {
+            return client.navigate(url);
+          }
+          return undefined;
         }
       }
 
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
+      if (clients.openWindow) {
+        return clients.openWindow(url);
       }
 
       return undefined;
