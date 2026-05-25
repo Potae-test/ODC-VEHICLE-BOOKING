@@ -17,7 +17,7 @@ npm install \
 @fullcalendar/interaction \
 @fullcalendar/core
 npm install xlsx
-npm install firebase
+npm install firebase | npm install -g npm@11.15.0
 
 3) Login Cloudflare ใหม่
 npx wrangler login

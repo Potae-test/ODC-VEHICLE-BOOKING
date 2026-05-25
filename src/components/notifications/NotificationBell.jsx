@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getNotifications,
   markAllNotificationsRead,
@@ -93,11 +93,29 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   const userId = String(currentUser?.user_id || "").trim();
   const role = String(currentUser?.role || "").trim().toUpperCase();
   const notifications = items;
+  const hasUnreadNotifications = unreadCount > 0;
   const totalPages = Math.max(1, Math.ceil(notifications.length / NOTIFICATIONS_PER_PAGE));
   const pagedNotifications = notifications.slice(
     (page - 1) * NOTIFICATIONS_PER_PAGE,
     page * NOTIFICATIONS_PER_PAGE
   );
+  const visiblePageNumbers = useMemo(() => {
+    const pages = [];
+    const maxVisible = 3;
+
+    let start = Math.max(1, page - 1);
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    for (let i = start; i <= end; i += 1) {
+      pages.push(i);
+    }
+
+    return pages;
+  }, [page, totalPages]);
 
   const loadNotifications = useCallback(
     async ({ silent = false } = {}) => {
@@ -368,11 +386,12 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     <div className="notification-bell" ref={rootRef}>
       <button
         type="button"
-        className="notification-bell-trigger"
+        className={`notification-bell-button ${hasUnreadNotifications ? "has-unread" : ""}`}
         onClick={handleOpen}
         aria-label="ศูนย์แจ้งเตือน"
         aria-expanded={isOpen}
       >
+        <span className="notification-bell-pulse" aria-hidden="true" />
         <span className="notification-bell-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" focusable="false">
             <path
@@ -388,9 +407,17 @@ export default function NotificationBell({ currentUser, onNavigate }) {
         <div className={`notification-panel${isExpanded ? " is-expanded" : ""}`} role="dialog" aria-label="รายการแจ้งเตือน">
           <div className="notification-panel-header">
             <div>
-              <strong>แจ้งเตือน</strong>
-              <span>{unreadCount > 0 ? `ยังไม่ได้อ่าน ${unreadCount} รายการ` : "ไม่มีรายการที่ยังไม่ได้อ่าน"}</span>
+              <h3>แจ้งเตือน</h3>
+              <p>{unreadCount > 0 ? `ยังไม่ได้อ่าน ${unreadCount} รายการ` : "ไม่มีรายการที่ยังไม่ได้อ่าน"}</p>
             </div>
+            <button
+              type="button"
+              className="notification-panel-close"
+              aria-label="ปิดแจ้งเตือน"
+              onClick={() => setIsOpen(false)}
+            >
+              ✕
+            </button>
           </div>
 
           <div className="notification-panel-body">
@@ -463,17 +490,33 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   })}
                 </div>
                 {totalPages > 1 && (
-                  <div className="notification-pagination">
-                    {Array.from({ length: totalPages }).map((_, index) => (
+                  <div className="notification-pagination compact">
+                    <button
+                      type="button"
+                      disabled={page <= 1}
+                      onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    >
+                      &lt;&lt;
+                    </button>
+
+                    {visiblePageNumbers.map((pageNumber) => (
                       <button
-                        key={index}
+                        key={pageNumber}
                         type="button"
-                        className={page === index + 1 ? "active-page" : ""}
-                        onClick={() => setPage(index + 1)}
+                        className={page === pageNumber ? "active-page" : ""}
+                        onClick={() => setPage(pageNumber)}
                       >
-                        {index + 1}
+                        {pageNumber}
                       </button>
                     ))}
+
+                    <button
+                      type="button"
+                      disabled={page >= totalPages}
+                      onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                    >
+                      &gt;&gt;
+                    </button>
                   </div>
                 )}
               </>
