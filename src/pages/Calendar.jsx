@@ -366,6 +366,7 @@ const CalendarToolbar = memo(function CalendarToolbar({
 
   return (
     <div
+      className="calendar-toolbar"
       style={{
         display: "flex",
         flexWrap: "wrap",
@@ -388,6 +389,7 @@ const CalendarToolbar = memo(function CalendarToolbar({
       </div>
 
       <div
+        className="calendar-toolbar-label"
         style={{
           flex: "1 1 240px",
           textAlign: "center",
@@ -1019,7 +1021,7 @@ export default function CalendarPage() {
         ) : (
           <>
             <div style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+              <div className="calendar-status-legend" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
                 <span className="status amber" style={{ fontSize: 16, padding: "6px 12px" }}>
                   รออนุมัติ
                 </span>
@@ -1118,6 +1120,7 @@ export default function CalendarPage() {
       {(canViewActiveDriversSummary || canViewNextQueueDriver) && (
         <div className="form-card" style={{ marginBottom: 24 }}>
           <div
+            className="calendar-info-grid"
             style={{
               display: "grid",
               gap: 16,

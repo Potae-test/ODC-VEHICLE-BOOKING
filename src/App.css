@@ -21,6 +21,10 @@ body {
   font-size: 30px;
 }
 
+body.mobile-nav-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -150,6 +154,26 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.install-app-button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1455c8;
+  font-size: 20px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.install-app-button:hover {
+  background: #eaf2ff;
+}
+
+.mobile-nav-toggle,
+.mobile-nav-backdrop {
+  display: none;
 }
 
 .notification-bell {
@@ -3560,5 +3584,529 @@ label {
   .notification-text-button {
     flex: 1;
     justify-content: center;
+  }
+}
+
+.mobile-card-list,
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: block;
+}
+
+.mobile-data-card {
+  background: #ffffff;
+  border: 1px solid #dbe6f3;
+  border-radius: 20px;
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+  box-shadow: 0 8px 20px rgba(15, 47, 92, 0.06);
+}
+
+.mobile-data-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-data-card-header h3 {
+  margin: 2px 0 0;
+  font-size: 26px;
+  line-height: 1.15;
+  color: #073b8e;
+}
+
+.mobile-data-card-index {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.mobile-data-card-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mobile-data-card-grid span {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 18px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.mobile-data-card-grid b {
+  display: block;
+  font-size: 22px;
+  line-height: 1.35;
+  color: #10233f;
+  word-break: break-word;
+}
+
+.mobile-data-card-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-data-card-actions button {
+  width: 100%;
+}
+
+.mobile-empty-card {
+  border: 1px dashed #bfd3ec;
+  border-radius: 18px;
+  padding: 18px 16px;
+  background: #f8fbff;
+  color: #64748b;
+  text-align: center;
+}
+
+.calendar-info-grid {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root,
+  .app-shell,
+  .layout,
+  .main-content {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  body {
+    font-size: 22px;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  .app-shell {
+    padding-top: 76px;
+  }
+
+  .gov-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    min-height: 76px;
+    padding: 12px;
+    gap: 12px;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    flex-shrink: 0;
+  }
+
+  .brand {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .brand-logo {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+  }
+
+  .brand h1 {
+    font-size: 24px;
+  }
+
+  .brand p {
+    display: none;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .profile-box {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 8px;
+    justify-content: flex-end;
+    text-align: left;
+  }
+
+  .profile-box > div:not(.profile-icon) {
+    min-width: 0;
+  }
+
+  .profile-box b {
+    display: block;
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  .profile-box span {
+    font-size: 14px;
+    line-height: 1.1;
+  }
+
+  .logout-btn {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 18px;
+  }
+
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.46);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 35;
+  }
+
+  .mobile-nav-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .layout {
+    display: block;
+    min-height: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 76px;
+    left: 0;
+    bottom: 0;
+    width: min(320px, calc(100vw - 44px));
+    padding: 14px 12px 20px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-right: 1px solid #dbe6f3;
+    border-bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    z-index: 38;
+    gap: 8px;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar button {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 20px;
+    white-space: normal;
+  }
+
+  .main-content {
+    padding: 12px;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 28px;
+  }
+
+  .page-header p {
+    font-size: 18px;
+    line-height: 1.4;
+  }
+
+  .form-card,
+  .card,
+  .calendar-card,
+  .car-card,
+  .summary-card {
+    border-radius: 20px;
+  }
+
+  .form-card {
+    padding: 14px 12px;
+    margin-bottom: 16px;
+  }
+
+  .form-card h3 {
+    font-size: 24px;
+  }
+
+  .section-header,
+  .booking-table-toolbar,
+  .driver-unavailable-toolbar,
+  .section-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .booking-filter-row-3,
+  .booking-filter-row-4,
+  .driver-unavailable-filters,
+  .form-grid,
+  .car-grid,
+  .summary-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .booking-status-counts {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    margin-right: -4px;
+  }
+
+  .booking-status-count {
+    flex: 0 0 auto;
+  }
+
+  .booking-create-wrapper,
+  .driver-unavailable-actions,
+  .section-toolbar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .booking-create-wrapper button,
+  .driver-unavailable-actions button,
+  .section-toolbar button,
+  .page-header > button,
+  .calendar-create-button {
+    width: 100%;
+  }
+
+  .booking-create-wrapper {
+    position: sticky;
+    bottom: 8px;
+    z-index: 8;
+    padding-top: 8px;
+  }
+
+  .mobile-hide-table {
+    display: none;
+  }
+
+  .mobile-card-list,
+  .mobile-only {
+    display: grid;
+    gap: 12px;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-data-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-buttons,
+  .mobile-data-card-actions,
+  .driver-job-actions,
+  .driver-jobs-table-section .action-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .booking-action-button,
+  .driver-job-actions button,
+  .driver-jobs-table-section .action-buttons button {
+    width: 100%;
+  }
+
+  .login-page {
+    padding: 12px;
+    background: linear-gradient(180deg, #dbeafe 0%, #f8fbff 100%);
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: calc(100vw - 24px);
+    padding: 20px 16px;
+    border-radius: 22px;
+  }
+
+  .login-card h1 {
+    font-size: 34px;
+  }
+
+  .login-card p,
+  .login-help {
+    font-size: 20px;
+  }
+
+  .login-card input,
+  .login-card button {
+    min-height: 52px;
+    font-size: 24px;
+  }
+
+  .notification-panel {
+    position: fixed;
+    top: 84px;
+    left: 8px;
+    right: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100vh - 100px);
+    border-radius: 18px;
+  }
+
+  .notification-panel-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .install-app-button {
+    order: 2;
+    width: 100%;
+  }
+
+  .notification-pagination.compact {
+    padding-inline: 8px;
+  }
+
+  .notification-pagination.compact button {
+    min-width: 32px;
+  }
+
+  .calendar-shell {
+    padding: 10px !important;
+  }
+
+  .calendar-toolbar {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .calendar-toolbar-label {
+    text-align: left !important;
+    font-size: 24px !important;
+  }
+
+  .calendar-status-legend {
+    gap: 8px !important;
+  }
+
+  .calendar-shell .fc .fc-toolbar-title,
+  .calendar-shell .fc .fc-event-title,
+  .calendar-shell .fc .fc-col-header-cell-cushion,
+  .calendar-shell .fc .fc-daygrid-day-number {
+    word-break: break-word;
+  }
+
+  .calendar-shell .fc .fc-daygrid-day-frame {
+    min-height: 96px;
+  }
+
+  .calendar-shell .fc .fc-event-title {
+    white-space: normal;
+    line-height: 1.15;
+  }
+
+  .calendar-info-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .driver-job-requester {
+    display: block;
+    margin-bottom: 4px;
+    color: #64748b;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .driver-job-card-head h3,
+  .driver-job-grid b,
+  .driver-job-note b {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+  }
+
+  .driver-job-grid,
+  .driver-summary-detail-expanded-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .driver-job-head-meta {
+    align-items: flex-start;
+  }
+
+  .swal2-popup {
+    width: min(100vw - 16px, 720px) !important;
+    max-width: min(100vw - 16px, 720px) !important;
+    padding: 16px !important;
+    border-radius: 18px !important;
+  }
+
+  .swal2-html-container {
+    max-height: 70vh;
+    overflow: auto;
+  }
+
+  .swal2-actions {
+    width: 100%;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .swal2-actions button {
+    width: 100%;
+  }
+
+  .booking-datetime-stack {
+    gap: 10px;
+  }
+
+  .booking-datetime-stack .thai-datetime-label-row,
+  .booking-datetime-stack .thai-datetime-input-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .booking-datetime-stack .thai-datetime-time-row {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 }

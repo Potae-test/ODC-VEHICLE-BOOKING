@@ -1,5 +1,23 @@
 /* global firebase */
 
+import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+
+cleanupOutdatedCaches();
+precacheAndRoute(self.__WB_MANIFEST);
+
+const appShellHandler = async ({ event }) => {
+  try {
+    return await caches.match(event.request, {
+      ignoreSearch: true,
+    }) || (await fetch(event.request));
+  } catch (error) {
+    return caches.match("/offline.html", { ignoreSearch: true });
+  }
+};
+
+registerRoute(new NavigationRoute(appShellHandler));
+
 importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
 

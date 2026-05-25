@@ -787,6 +787,95 @@ const BookingTableRow = memo(function BookingTableRow({
     canCancelBookings && !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) && !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
 
+  const actionButtons = (
+    <>
+      {canShowDetail && (
+        <button type="button" className="info-button booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
+          ดูรายละเอียด
+        </button>
+      )}
+      {canShowBackdateComplete ? (
+        <button
+          type="button"
+          className="warning-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onBackdateComplete(booking)}
+        >
+          {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
+        </button>
+      ) : (
+        <>
+          {canShowProcess && (
+            <button
+              type="button"
+              className="primary-button booking-action-button"
+              disabled={disabled}
+              onClick={() => onProcess(booking)}
+            >
+              {processing === "process"
+                ? "กำลังดำเนินการ..."
+                : status === "APPROVED"
+                  ? FEATURES.vehicleModule
+                    ? "เปลี่ยนคนขับ/รถ"
+                    : "เปลี่ยนคนขับ"
+                  : "อนุมัติรายการ"}
+            </button>
+          )}
+          {canShowEdit && (
+            <button
+              type="button"
+              className="warning-button booking-action-button"
+              disabled={disabled}
+              onClick={() => onEdit(booking)}
+            >
+              {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
+            </button>
+          )}
+          {canShowUnassign && (
+            <button
+              type="button"
+              className="success-button booking-action-button"
+              disabled={disabled}
+              onClick={() => onUnassign(booking)}
+            >
+              {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
+            </button>
+          )}
+          {canShowCancel && (
+            <button
+              type="button"
+              className="danger-button booking-action-button"
+              disabled={disabled}
+              onClick={() => onCancel(booking)}
+            >
+              {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
+            </button>
+          )}
+          {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
+            <>
+              <button
+                type="button"
+                className="booking-action-button"
+                disabled={disabled}
+                onClick={() => onApproveDriverCancel(booking)}
+              >
+                อนุมัติยกเลิกงานคนขับ
+              </button>
+              <button
+                type="button"
+                className="danger-button booking-action-button"
+                disabled={disabled}
+                onClick={() => onRejectDriverCancel(booking)}
+              >
+                ไม่อนุมัติ
+              </button>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+
   return (
     <tr>
       <td>{rowNumber}</td>
@@ -825,7 +914,89 @@ const BookingTableRow = memo(function BookingTableRow({
         )}
       </td>
       <td className="action-buttons">
-        {canShowDetail && (
+        {actionButtons}
+      </td>
+    </tr>
+  );
+});
+
+const BookingMobileCard = memo(function BookingMobileCard(props) {
+  const {
+    booking,
+    rowNumber,
+    vehicleMap,
+    showVehicleColumn,
+    canViewBookingDetail,
+    canProcessBookings,
+    canBackdateComplete,
+    canCancelBookings,
+    canEditBookings,
+    canUnassignBookings,
+    canReviewDriverCancelRequests,
+    processing,
+    onViewDetail,
+    onProcess,
+    onBackdateComplete,
+    onEdit,
+    onCancel,
+    onUnassign,
+    onApproveDriverCancel,
+    onRejectDriverCancel,
+  } = props;
+  const statusMeta = getStatusMeta(booking.status);
+  const status = normalizeStatus(booking.status);
+  const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
+  const disabled = Boolean(processing);
+  const canShowBackdateComplete =
+    canBackdateComplete &&
+    isBackdatedFlagEnabled(booking) &&
+    !["COMPLETED", "CANCELLED"].includes(status);
+  const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
+  const canShowEdit = canEditBookings && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
+  const canShowCancel =
+    canCancelBookings && !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) && !hasPendingDriverCancelRequest;
+  const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
+
+  return (
+    <article className="mobile-data-card booking-mobile-card">
+      <div className="mobile-data-card-header">
+        <div>
+          <span className="mobile-data-card-index">รายการ {rowNumber}</span>
+          <h3>{booking.requester_name || "-"}</h3>
+        </div>
+        <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+      </div>
+      <div className="mobile-data-card-grid">
+        <div>
+          <span>เวลาไป</span>
+          <b>{formatBookingDateTimeDisplay(booking.start_datetime)}</b>
+        </div>
+        <div>
+          <span>เวลากลับ</span>
+          <b>{formatBookingDateTimeDisplay(booking.end_datetime)}</b>
+        </div>
+        <div>
+          <span>ปลายทาง</span>
+          <b>{booking.destination || "-"}</b>
+        </div>
+        {showVehicleColumn && (
+          <div>
+            <span>รถ</span>
+            <b>{getBookingVehicleLabel(booking, vehicleMap)}</b>
+          </div>
+        )}
+        <div>
+          <span>คนขับ</span>
+          <b>{getBookingDriverLabel(booking)}</b>
+        </div>
+        <div>
+          <span>หมายเหตุ</span>
+          <b>{booking.staff_note || "-"}</b>
+        </div>
+      </div>
+      <div className="mobile-data-card-actions">
+        {canViewBookingDetail && (
           <button type="button" className="info-button booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
             ดูรายละเอียด
           </button>
@@ -842,9 +1013,12 @@ const BookingTableRow = memo(function BookingTableRow({
         ) : (
           <>
             {canShowProcess && (
-              <button type="button" 
-              className="primary-button booking-action-button" 
-              disabled={disabled} onClick={() => onProcess(booking)}>
+              <button
+                type="button"
+                className="primary-button booking-action-button"
+                disabled={disabled}
+                onClick={() => onProcess(booking)}
+              >
                 {processing === "process"
                   ? "กำลังดำเนินการ..."
                   : status === "APPROVED"
@@ -872,7 +1046,6 @@ const BookingTableRow = memo(function BookingTableRow({
                 onClick={() => onUnassign(booking)}
               >
                 {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
-                
               </button>
             )}
             {canShowCancel && (
@@ -882,7 +1055,7 @@ const BookingTableRow = memo(function BookingTableRow({
                 disabled={disabled}
                 onClick={() => onCancel(booking)}
               >
-                {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
+                {processing === "cancel" ? "กำลังยกเลิก..." : "ยกเลิก"}
               </button>
             )}
             {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
@@ -897,7 +1070,7 @@ const BookingTableRow = memo(function BookingTableRow({
                 </button>
                 <button
                   type="button"
-                  className="danger-button"
+                  className="danger-button booking-action-button"
                   disabled={disabled}
                   onClick={() => onRejectDriverCancel(booking)}
                 >
@@ -907,8 +1080,8 @@ const BookingTableRow = memo(function BookingTableRow({
             )}
           </>
         )}
-      </td>
-    </tr>
+      </div>
+    </article>
   );
 });
 
@@ -2137,7 +2310,7 @@ export default function Booking() {
           ) : (
             <>
 
-              <div className="table-wrap" style={{ marginTop: 24 }}>
+              <div className="table-wrap mobile-hide-table" style={{ marginTop: 24 }}>
                 <table>
                   
                   <thead>
@@ -2192,6 +2365,42 @@ export default function Booking() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="mobile-card-list booking-mobile-list" style={{ marginTop: 24 }}>
+                {pageItems.length === 0 ? (
+                  <div className="mobile-empty-card">ไม่พบรายการจอง</div>
+                ) : (
+                  pageItems.map((booking, rowIndex) => (
+                    <BookingMobileCard
+                      key={`mobile-${getBookingId(booking) || booking.booking_no}`}
+                      booking={booking}
+                      rowNumber={(page - 1) * ROWS_PER_PAGE + rowIndex + 1}
+                      vehicleMap={vehicleMap}
+                      showVehicleColumn={FEATURES.vehicleModule}
+                      canViewBookingDetail={canViewBookingDetail}
+                      canProcessBookings={canProcessBookings}
+                      canBackdateComplete={canBackdateComplete}
+                      canCancelBookings={canCancelBookings}
+                      canEditBookings={canEditBookings}
+                      canUnassignBookings={canUnassignBookings}
+                      canReviewDriverCancelRequests={canReviewDriverCancelRequests}
+                      processing={
+                        processingAction?.bookingId === getBookingId(booking)
+                          ? processingAction.type
+                          : ""
+                      }
+                      onViewDetail={handleViewBookingDetail}
+                      onProcess={handleProcessBooking}
+                      onBackdateComplete={handleBackdateComplete}
+                      onEdit={handleEditBooking}
+                      onCancel={handleCancelBooking}
+                      onUnassign={handleUnassignBooking}
+                      onApproveDriverCancel={handleApproveDriverCancel}
+                      onRejectDriverCancel={handleRejectDriverCancel}
+                    />
+                  ))
+                )}
               </div>
 
               <Pagination page={page} total={bookingPages} onChange={setPage} />

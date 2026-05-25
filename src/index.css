@@ -24,13 +24,17 @@ html,
 body,
 #root {
   width: 100%;
-  min-height: 100vh;
+  min-height: 100%;
   margin: 0;
+  overflow-x: hidden;
 }
 
 body {
   overflow-x: hidden;
   background: #f3f7fc;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
 }
 
 #root {

@@ -335,6 +335,7 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     throw new Error("FIREBASE_PROJECT_ID is not configured");
   }
 
+  const maskedToken = `${fcmToken.slice(0, 10)}...`;
   const accessToken = await getFirebaseAccessToken(env);
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -368,6 +369,11 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.warn("[push] firebase response status", {
+      status: response.status,
+      token: maskedToken,
+      type: notification.type || "",
+    });
     const error = new Error(
       typeof payload?.error?.message === "string"
         ? payload.error.message
@@ -381,6 +387,8 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     throw error;
   }
 
+  console.log("[push] success:", maskedToken);
+  console.log("[push] firebase response status", response.status);
   return payload;
 }
 
@@ -388,6 +396,9 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
   for (const notification of notifications) {
     const targetUserId = String(notification?.target_user_id || "").trim();
     if (!targetUserId) continue;
+
+    console.log("[push] sending to user:", targetUserId);
+    console.log("[push] notification type:", notification.type || "");
 
     let subscriptions: PushSubscriptionRecord[] = [];
     try {
@@ -399,6 +410,8 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
       });
       continue;
     }
+
+    console.log("[push] subscriptions:", subscriptions.length);
 
     const tokens = Array.from(
       new Set(
@@ -413,26 +426,25 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
     for (const token of tokens) {
       try {
         await sendFcmPush(env, token, notification);
-        console.info("push success", {
-          user_id: targetUserId,
-          type: notification.type || "",
-          booking_id: notification.booking_id || "",
-        });
       } catch (error) {
         const status = Number((error as { status?: number })?.status || 0);
         const payload = (error as { payload?: unknown })?.payload;
         const invalidToken = isInvalidFcmTokenResponse(status, payload);
+        const maskedToken = `${token.slice(0, 10)}...`;
 
-        console.warn("push failed", {
+        console.warn("[push] failed", {
           user_id: targetUserId,
           type: notification.type || "",
           booking_id: notification.booking_id || "",
           invalid_token: invalidToken,
+          token: maskedToken,
+          firebase_status: status,
           error: error instanceof Error ? error.message : String(error),
         });
 
         if (invalidToken) {
           try {
+            console.warn("[push] disabling invalid token", maskedToken);
             await disableFcmToken(token);
             console.info("invalid token cleaned", {
               user_id: targetUserId,
@@ -451,6 +463,11 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
 }
 
 async function maybeDeliverCreatedNotifications(env: Env, response: SheetResponse) {
+  console.log(
+    "[push] created_notifications:",
+    response.created_notifications?.length || 0
+  );
+
   if (!Array.isArray(response.created_notifications) || response.created_notifications.length === 0) {
     return;
   }

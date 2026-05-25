@@ -315,7 +315,7 @@ function DriverJobTableActions({
 
       {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
         <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
-          {processing === "start" ? "กำลังรับงาน..." : "รับงาน / ออกรถ"}
+          {processing === "start" ? "กำลังรับงาน..." : "รับงาน / วิ่งงาน"}
           </button>
       )}
 
@@ -359,7 +359,7 @@ const JobCard = memo(function JobCard({
     <div className={`driver-job-card ${current ? "current" : ""}`}>
       <div className="driver-job-card-head">
         <div className="driver-job-head-copy">
-          {/* <h3 title={booking.booking_no || "-"}>{booking.booking_no || "-"}</h3> */}
+          <span className="driver-job-requester">{compactText(booking.requester_name)}</span>
           <h3 title={booking.destination || "-"}>{compactText(booking.destination)}</h3>
         </div>
         <div className="driver-job-head-meta">
@@ -428,7 +428,7 @@ const JobCard = memo(function JobCard({
 
         {canStart && status === "APPROVED" && !hasPendingDriverCancelRequest && (
           <button type="button" disabled={disabled} onClick={() => onStart(booking)}>
-            {processing === "start" ? "กำลังรับงาน..." : "รับงาน / ออกรถ"}
+            {processing === "start" ? "กำลังรับงาน..." : "รับงาน / วิ่งงาน"}
 
           </button>
         )}
@@ -537,14 +537,26 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          return isToday(booking.start_datetime, todayKey) && status === "APPROVED";
+          const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+          return (
+            isToday(booking.start_datetime, todayKey) &&
+            status === "APPROVED" &&
+            driverCancelRequestStatus !== "PENDING"
+          );
         })
       ),
     [assignedBookings, todayKey]
   );
 
   const waitingJobs = useMemo(
-    () => sortByTodayPriority(assignedBookings.filter((booking) => normalizeStatus(booking.status) === "APPROVED")),
+    () =>
+      sortByTodayPriority(
+        assignedBookings.filter((booking) => {
+          const status = normalizeStatus(booking.status);
+          const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+          return status === "APPROVED" && driverCancelRequestStatus !== "PENDING";
+        })
+      ),
     [assignedBookings]
   );
 
@@ -578,7 +590,7 @@ export default function DriverJobs() {
     const managingOnBehalf = (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
     const assignedUserLabel = getAssignedUserLabel(booking);
     const result = await Swal.fire({
-      title: "รับงาน / ออกรถ",
+      title: "รับงาน / วิ่งงาน",
       html: managingOnBehalf
         ? `
           <div class="swal-confirm-copy">
@@ -849,7 +861,7 @@ export default function DriverJobs() {
                 <span className="section-counter">{todayJobs.length} รายการ</span>
               </div>
 
-              <div className="table-wrap">
+              <div className="table-wrap mobile-hide-table">
                 <table>
                   <thead>
                     <tr>
@@ -927,6 +939,33 @@ export default function DriverJobs() {
                 </table>
               </div>
 
+              <div className="mobile-card-list driver-job-mobile-list">
+                {paginatedTodayJobs.length === 0 ? (
+                  <div className="mobile-empty-card">ไม่มีงานวันนี้</div>
+                ) : (
+                  paginatedTodayJobs.map((booking) => (
+                    <JobCard
+                      key={`today-mobile-${booking.booking_id}`}
+                      booking={booking}
+                      vehicleMap={vehicleMap}
+                      onStart={handleStart}
+                      onComplete={handleComplete}
+                      onCancelJob={handleCancelJob}
+                      onShowDetails={showDetails}
+                      canStart={canStartTrip}
+                      canComplete={canCompleteTrip}
+                      currentUser={currentUser}
+                      currentRole={currentRole}
+                      processing={
+                        processingAction?.bookingId === booking.booking_id
+                          ? processingAction.type
+                          : ""
+                      }
+                    />
+                  ))
+                )}
+              </div>
+
               <PaginationControls
                 page={todayJobsPage}
                 totalPages={todayJobsTotalPages}
@@ -952,7 +991,7 @@ export default function DriverJobs() {
                 />
               </div>
 
-              <div className="table-wrap">
+              <div className="table-wrap mobile-hide-table">
                 <table>
                   <thead>
                     <tr>
@@ -1028,6 +1067,33 @@ export default function DriverJobs() {
                     )}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="mobile-card-list driver-job-mobile-list">
+                {paginatedPendingJobs.length === 0 ? (
+                  <div className="mobile-empty-card">ไม่มีงานที่รออยู่</div>
+                ) : (
+                  paginatedPendingJobs.map((booking) => (
+                    <JobCard
+                      key={`pending-mobile-${booking.booking_id}`}
+                      booking={booking}
+                      vehicleMap={vehicleMap}
+                      onStart={handleStart}
+                      onComplete={handleComplete}
+                      onCancelJob={handleCancelJob}
+                      onShowDetails={showDetails}
+                      canStart={canStartTrip}
+                      canComplete={canCompleteTrip}
+                      currentUser={currentUser}
+                      currentRole={currentRole}
+                      processing={
+                        processingAction?.bookingId === booking.booking_id
+                          ? processingAction.type
+                          : ""
+                      }
+                    />
+                  ))
+                )}
               </div>
 
               <PaginationControls

@@ -571,7 +571,7 @@ export default function DriverUnavailable() {
             </div>
           </div>
 
-          <div className="table-wrap">
+          <div className="table-wrap mobile-hide-table">
             <table>
               <thead>
                 <tr>
@@ -623,6 +623,56 @@ export default function DriverUnavailable() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="mobile-card-list driver-unavailable-mobile-list">
+            {filteredItems.length === 0 ? (
+              <div className="mobile-empty-card">ไม่พบรายการตามเงื่อนไขที่ค้นหา</div>
+            ) : (
+              pageItems.map((record) => (
+                <article key={`mobile-${record.unavailable_id}`} className="mobile-data-card">
+                  <div className="mobile-data-card-header">
+                    <div>
+                      <span className="mobile-data-card-index">คนขับ</span>
+                      <h3>{record.driver_name || "-"}</h3>
+                    </div>
+                    <span className={`status ${getStatusClassName(record.status)}`}>
+                      {normalizeStatus(record.status)}
+                    </span>
+                  </div>
+                  <div className="mobile-data-card-grid">
+                    <div>
+                      <span>ประเภท</span>
+                      <b>{getTypeLabel(record.type)}</b>
+                    </div>
+                    <div>
+                      <span>เหตุผล</span>
+                      <b>{getUnavailableReasonLabel(record) || "-"}</b>
+                    </div>
+                    <div>
+                      <span>เวลาเริ่ม</span>
+                      <b>{formatThaiDateTime(record.start_datetime)}</b>
+                    </div>
+                    <div>
+                      <span>เวลาสิ้นสุด</span>
+                      <b>{formatThaiDateTime(record.end_datetime)}</b>
+                    </div>
+                  </div>
+                  <div className="mobile-data-card-actions">
+                    {canEdit && normalizeStatus(record.status) === "ACTIVE" && (
+                      <button type="button" onClick={() => handleEdit(record)}>
+                        แก้ไข
+                      </button>
+                    )}
+                    {canCancel && normalizeStatus(record.status) === "ACTIVE" && (
+                      <button type="button" className="danger-button" onClick={() => handleCancel(record)}>
+                        ยกเลิก
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))
+            )}
           </div>
 
           {filteredItems.length > 0 && (

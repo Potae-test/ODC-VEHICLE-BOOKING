@@ -823,23 +823,45 @@ function createNotification(data) {
 function getPushSubscriptionsByUserId(data) {
   try {
     const userId = String(data && data.user_id || "").trim();
-    if (!userId) {
+    const normalizedUserId =
+      String(userId || "").trim().toUpperCase();
+
+    if (!normalizedUserId) {
       return jsonOutput({
         success: false,
         message: "user_id is required",
       });
     }
 
-    const subscriptions = getActivePushSubscriptionsByUserId_(userId).filter(function (row) {
-      return String(row.provider || "").trim().toUpperCase() === "FCM" &&
-        String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
-        String(row.fcm_token || "").trim();
+    const results = getActivePushSubscriptionsByUserId_(userId).filter(function (row) {
+      const rowUserId =
+        String(row.user_id || "").trim().toUpperCase();
+      const provider =
+        String(row.provider || "").trim().toUpperCase();
+      const status =
+        String(row.status || "").trim().toUpperCase();
+      const fcmToken = String(row.fcm_token || "").trim();
+
+      console.log("[push-subscriptions]", {
+        normalizedUserId: normalizedUserId,
+        rowUserId: rowUserId,
+        provider: provider,
+        status: status,
+        hasToken: !!fcmToken,
+      });
+
+      return rowUserId === normalizedUserId &&
+        provider === "FCM" &&
+        status === "ACTIVE" &&
+        fcmToken.length > 0;
     });
+
+    console.log("[push-subscriptions] matched:", results.length);
 
     return jsonOutput({
       success: true,
-      total: subscriptions.length,
-      data: subscriptions,
+      total: results.length,
+      data: results,
     });
   } catch (err) {
     return jsonOutput({
@@ -859,7 +881,7 @@ function savePushSubscription(data) {
     const p256dh = String(keys.p256dh || payload.p256dh || "").trim();
     const auth = String(keys.auth || payload.auth || "").trim();
     const fcmToken = String(payload.fcm_token || "").trim();
-    const provider = String(payload.provider || (fcmToken ? "FCM" : "WEB_PUSH")).trim().toUpperCase();
+    const provider = String(payload.provider || "").trim().toUpperCase() || "FCM";
     const userAgent = String(payload.user_agent || "").trim();
     const nowIso = new Date().toISOString();
     const matchColumnKey = provider === "FCM" ? "fcm_token" : "endpoint";
@@ -1035,7 +1057,7 @@ function getActivePushSubscriptionsByUserId_(userId) {
       p256dh: String(row.p256dh || "").trim(),
       auth: String(row.auth || "").trim(),
       fcm_token: String(row.fcm_token || "").trim(),
-      provider: String(row.provider || "").trim().toUpperCase(),
+      provider: String(row.provider || "").trim().toUpperCase() || "FCM",
       user_agent: String(row.user_agent || "").trim(),
       status: String(row.status || "").trim().toUpperCase(),
       created_at: String(row.created_at || "").trim(),
@@ -2039,7 +2061,8 @@ function completeTrip(data) {
           actual_return_datetime: actualReturnDatetime,
           actual_return_by: actualReturnBy,
           updated_at: new Date().toISOString()
-        }
+        },
+        created_notifications: getCreatedNotifications_(),
       });
     }
   }
@@ -2405,6 +2428,7 @@ function requestDriverCancelJob(data) {
       driver_cancel_reviewed_at: "",
       updated_at: now.toISOString(),
     },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -2521,6 +2545,7 @@ function reviewDriverCancelRequest(data) {
         vehicle_plate: "",
         updated_at: now.toISOString(),
       },
+      created_notifications: getCreatedNotifications_(),
     });
   }
 
@@ -2589,6 +2614,7 @@ function reviewDriverCancelRequest(data) {
       driver_cancel_reviewed_at: now.toISOString(),
       updated_at: now.toISOString(),
     },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -2742,7 +2768,8 @@ function cancelBooking(data) {
       status: "CANCELLED",
       reason,
       cancelled_by: cancelledBy,
-    }
+    },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -6602,6 +6629,7 @@ function unassignBookingDriver(data) {
     success: true,
     message: "Unassign booking driver success",
     data: updatedBooking,
+    created_notifications: getCreatedNotifications_(),
   });
 }
 function updateDriverQueue(data) {

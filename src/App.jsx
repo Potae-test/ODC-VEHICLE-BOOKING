@@ -75,6 +75,9 @@ export default function App() {
   const [page, setPage] = useState(FEATURES.vehicleModule ? "cars" : "booking");
   const [user, setUser] = useState(null);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [canInstallApp, setCanInstallApp] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("odc_user");
@@ -144,6 +147,48 @@ export default function App() {
     if (fallbackPage) setPage(fallbackPage);
   }, [page, permissionConfig, user]);
 
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [page, user]);
+
+  useEffect(() => {
+    document.body.classList.toggle("mobile-nav-open", isMobileNavOpen);
+
+    return () => {
+      document.body.classList.remove("mobile-nav-open");
+    };
+  }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true;
+
+    if (isStandalone) {
+      setCanInstallApp(false);
+      return undefined;
+    }
+
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+      setCanInstallApp(true);
+    };
+
+    const handleAppInstalled = () => {
+      setCanInstallApp(false);
+      setInstallPromptEvent(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
   function goPage(nextPage) {
     if (!isPageFeatureEnabled(nextPage)) return;
     if (!canAccessPage(user.role, nextPage, permissionConfig)) {
@@ -169,6 +214,23 @@ export default function App() {
     localStorage.removeItem("odc_user");
     setUser(null);
     setPage(FEATURES.vehicleModule ? "cars" : "booking");
+    setIsMobileNavOpen(false);
+  }
+
+  async function handleInstallApp() {
+    if (!installPromptEvent) return;
+
+    await installPromptEvent.prompt();
+    const result = await installPromptEvent.userChoice;
+
+    if (result?.outcome !== "accepted") {
+      setCanInstallApp(false);
+      setInstallPromptEvent(null);
+      return;
+    }
+
+    setCanInstallApp(false);
+    setInstallPromptEvent(null);
   }
 
   if (!user) {
@@ -199,6 +261,15 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="gov-header">
+        <button
+          type="button"
+          className="mobile-nav-toggle"
+          aria-label="เปิดเมนู"
+          aria-expanded={isMobileNavOpen}
+          onClick={() => setIsMobileNavOpen((current) => !current)}
+        >
+          ☰
+        </button>
         <div className="brand">
           <div className="brand-logo">🚐</div>
           <div>
@@ -208,6 +279,11 @@ export default function App() {
         </div>
 
         <div className="header-actions">
+          {canInstallApp && (
+            <button type="button" className="install-app-button" onClick={handleInstallApp}>
+              ติดตั้งแอป
+            </button>
+          )}
           <NotificationBell currentUser={user} onNavigate={navigateToPath} />
           <div className="profile-box">
           <div className="profile-icon">👤</div>
@@ -222,8 +298,14 @@ export default function App() {
         </div>
       </header>
 
+      <div
+        className={`mobile-nav-backdrop${isMobileNavOpen ? " is-open" : ""}`}
+        onClick={() => setIsMobileNavOpen(false)}
+        aria-hidden="true"
+      />
+
       <div className="layout">
-        <aside className="sidebar">
+        <aside className={`sidebar${isMobileNavOpen ? " is-open" : ""}`}>
           {FEATURES.vehicleModule && canAccessPage(user.role, "cars", permissionConfig) && (
             <button className={page === "cars" ? "active" : ""} onClick={() => goPage("cars")}>
               🚐 จัดการรถ
