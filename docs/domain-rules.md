@@ -11,8 +11,11 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 ## Booking Rules
 - Valid statuses: `PENDING`, `APPROVED`, `IN_USE`, `COMPLETED`, `CANCELLED`, `DRIVER_CANCELLED`.
 - Calendar should show only `APPROVED`, `IN_USE`, and `DriverUnavailable` events.
+- Booking and calendar visibility stay global across users; do not filter shared lists by `requester_user_id`.
 - Do not overwrite `start_datetime` or `end_datetime`.
 - Use `actual_start_datetime` and `actual_return_datetime` for real usage timestamps.
+- The `CENTRAL_VEHICLE` flow is a direct `PENDING` -> `COMPLETED` transition for central office usage, must assign driver `U007`, must not create active driver work, and must not move the queue pointer.
+- New bookings created by a logged-in `USER` must write the real owner into `requester_user_id`, `requester_name`, `department`, and `phone`, and user-specific notifications must target that owner id.
 
 ## Driver and Queue Rules
 - Drivers can log in even when unavailable.
@@ -39,6 +42,9 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Permissions are managed centrally.
 - Add new permissions to the admin management UI.
 - Check permissions before rendering actions.
+- `bookings_assign_central_vehicle` defaults to `ADMIN` and `STAFF` only.
+- `bookings_assign_central_vehicle` and `bookings_backdate_complete` are action permissions and must not be hard-coded to UI roles.
+- `USER` may view all bookings and calendar entries, but may edit or cancel only their own booking.
 - `DRIVER` can access only their own records.
 - `ADMIN` and `STAFF` have full access.
 

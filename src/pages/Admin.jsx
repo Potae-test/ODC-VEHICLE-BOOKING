@@ -1,6 +1,8 @@
 ﻿import { formatThaiDateTime } from "../utils/date";
-import { useEffect, useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  backdateCompleteBooking,
   createVehicle,
   createDriver,
   createUser,
@@ -39,6 +41,8 @@ import {
   saveActionPermissionConfig,
   savePermissionConfig,
 } from "../permissions";
+import BookingFormModal from "../components/booking/BookingFormModal";
+import ThaiDateTimeField from "../components/common/ThaiDateTimeField";
 import TableSkeleton from "../components/skeletons/TableSkeleton";
 import { FEATURES } from "../config/features";
 import useMinimumLoading from "../hooks/useMinimumLoading";
@@ -146,12 +150,83 @@ function getActionPermissionGroups() {
 
 const BOOKING_PER_PAGE = 5;
 
+const BOOKING_STATUS_META = {
+  PENDING: { label: "รออนุมัติ", className: "amber" },
+  APPROVED: { label: "อนุมัติแล้ว", className: "blue" },
+  IN_USE: { label: "กำลังใช้งาน", className: "green" },
+  COMPLETED: { label: "เสร็จสิ้น", className: "gray" },
+  CANCELLED: { label: "ยกเลิก", className: "red" },
+  DRIVER_CANCEL_PENDING: { label: "รออนุมัติการยกเลิก", className: "red" },
+};
+
+function normalizeStatus(status) {
+  return String(status || "").trim().toUpperCase();
+}
+
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("odc_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function getBookingId(booking) {
+  return String(booking?.booking_id || booking?.id || booking?.bookingId || "").trim();
+}
+
+function isBackdatedFlagEnabled(booking) {
+  return normalizeStatus(booking?.is_backdated) === "TRUE";
+}
+
+function isEditableBookingStatus(status) {
+  return !["IN_USE", "COMPLETED", "CANCELLED"].includes(normalizeStatus(status));
+}
+
+function getDriverCancelRequestStatus(booking) {
+  if (normalizeStatus(booking?.status) === "COMPLETED") {
+    return "";
+  }
+
+  return normalizeStatus(booking?.driver_cancel_request_status);
+}
+
+function getBookingStatusMeta(status) {
+  return BOOKING_STATUS_META[normalizeStatus(status)] || {
+    label: status || "-",
+    className: "gray",
+  };
+}
+
+function sortLatestBookings(items) {
+  return [...items].sort((a, b) => {
+    const timeA = new Date(a.updated_at || a.created_at || a.start_datetime || 0).getTime();
+    const timeB = new Date(b.updated_at || b.created_at || b.start_datetime || 0).getTime();
+    return timeB - timeA;
+  });
+}
+
+function getBookingVehicleLabel(booking, vehicleMap) {
+  const vehicleId = String(booking?.vehicle_id || "").trim();
+  if (!vehicleId) return "-";
+
+  const vehicle = vehicleMap.get(vehicleId);
+  if (!vehicle) return vehicleId;
+
+  const vehicleName = vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id || "-";
+  const plate = vehicle.license_plate || vehicle.plate_no || "-";
+  return `${vehicleName} / ${plate}`;
+}
+
 export default function Admin() {
+  const currentUser = useMemo(() => getCurrentUser(), []);
+  const bookingFormModalRef = useRef(null);
   const [vehicles, setVehicles] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [bookingAction, setBookingAction] = useState(null);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
   const [actionPermissionConfig, setActionPermissionConfig] = useState(loadActionPermissionConfig);
   const actionPermissionGroups = useMemo(() => getActionPermissionGroups(), []);
@@ -655,17 +730,48 @@ async function handleDeleteUser(u) {
     [users]
   );
 
+  const sortedBookings = useMemo(() => sortLatestBookings(bookings), [bookings]);
+
   const bookingPageCount = useMemo(
-    () => Math.max(1, Math.ceil(bookings.length / BOOKING_PER_PAGE)),
-    [bookings.length]
+    () => Math.max(1, Math.ceil(sortedBookings.length / BOOKING_PER_PAGE)),
+    [sortedBookings.length]
   );
 
   const bookingPageItems = useMemo(
-    () => bookings.slice((bookingPage - 1) * BOOKING_PER_PAGE, bookingPage * BOOKING_PER_PAGE),
-    [bookings, bookingPage]
+    () => sortedBookings.slice((bookingPage - 1) * BOOKING_PER_PAGE, bookingPage * BOOKING_PER_PAGE),
+    [sortedBookings, bookingPage]
   );
 
   const normalizedVehicles = useMemo(() => vehicles.map(normalizeVehicle), [vehicles]);
+  const vehicleMap = useMemo(() => {
+    const map = new Map();
+
+    normalizedVehicles.forEach((vehicle) => {
+      map.set(String(vehicle.vehicle_id || "").trim(), vehicle);
+    });
+
+    return map;
+  }, [normalizedVehicles]);
+  const vehicleTypes = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          normalizedVehicles
+            .map((vehicle) => String(vehicle.vehicle_type || "").trim())
+            .filter(Boolean)
+        )
+      ),
+    [normalizedVehicles]
+  );
+  const activeDriverUsers = useMemo(
+    () =>
+      users.filter(
+        (user) =>
+          normalizeStatus(user.role) === "DRIVER" &&
+          normalizeStatus(user.status || "ACTIVE") === "ACTIVE"
+      ),
+    [users]
+  );
 
   const summaryCards = useMemo(
     () => [
@@ -685,6 +791,10 @@ async function handleDeleteUser(u) {
   const canCreateDrivers = hasPermission(null, "drivers_create");
   const canEditDrivers = hasPermission(null, "drivers_edit");
   const canDeleteDrivers = hasPermission(null, "drivers_delete");
+  const canViewBookings = hasPermission(null, "bookings_view");
+  const canCreateBookings = hasPermission(null, "bookings_create");
+  const canEditBookings = hasPermission(null, "bookings_edit");
+  const canBackdateBookings = hasPermission(null, "bookings_approve");
   const canViewVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_view");
   const canCreateVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_create");
   const canEditVehicles = FEATURES.vehicleModule && hasPermission(null, "vehicles_edit");
@@ -790,6 +900,242 @@ async function handleDeleteUser(u) {
     const savedConfig = saveDriverSummaryCardScopeConfig(DEFAULT_DRIVER_SUMMARY_CARD_SCOPE);
     setDriverSummaryCardScopeConfig(savedConfig);
     await showSuccess("คืนค่ากล่องสรุปคนขับเริ่มต้นสำเร็จ");
+  }
+
+  function mergeBooking(nextBooking) {
+    if (!nextBooking) return;
+
+    const nextBookingId = getBookingId(nextBooking);
+    if (!nextBookingId) return;
+
+    setBookings((current) => {
+      const existingIndex = current.findIndex((booking) => getBookingId(booking) === nextBookingId);
+
+      if (existingIndex === -1) {
+        return [nextBooking, ...current];
+      }
+
+      return current.map((booking) =>
+        getBookingId(booking) === nextBookingId ? { ...booking, ...nextBooking } : booking
+      );
+    });
+  }
+
+  async function handleCreateBooking() {
+    if (bookingAction) return;
+
+    setBookingAction({ bookingId: "", type: "create" });
+    await bookingFormModalRef.current?.openCreate();
+    setBookingAction(null);
+  }
+
+  async function handleEditBooking(booking) {
+    if (bookingAction) return;
+
+    const bookingId = getBookingId(booking);
+    if (!bookingId) {
+      showError("ไม่พบรหัสรายการจอง");
+      return;
+    }
+
+    setBookingAction({ bookingId, type: "edit" });
+    await bookingFormModalRef.current?.openEdit(booking);
+    setBookingAction(null);
+  }
+
+  async function handleBackdateBooking(booking) {
+    if (bookingAction) return;
+
+    let backdateActualStart = "";
+    let backdateActualReturn = "";
+    let actualStartRoot = null;
+    let actualReturnRoot = null;
+
+    const result = await Swal.fire({
+      title: "บันทึกงานย้อนหลัง",
+      html: `
+        <div class="swal-form">
+          <label>คนขับ</label>
+          <select id="backdate_assigned_user_id" class="swal2-select">
+            <option value="">-- เลือกคนขับ --</option>
+            ${activeDriverUsers
+              .map(
+                (driver) =>
+                  `<option value="${escapeHtml(driver.user_id)}">${escapeHtml(driver.name || "-")}</option>`
+              )
+              .join("")}
+          </select>
+
+          ${
+            FEATURES.vehicleModule
+              ? `
+          <label>รถ</label>
+          <select id="backdate_vehicle_id" class="swal2-select">
+            <option value="">-- เลือกรถ --</option>
+            ${normalizedVehicles
+              .map((vehicle) => {
+                const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
+                  vehicle.license_plate || vehicle.plate_no || "-"
+                }`;
+                return `<option value="${escapeHtml(vehicle.vehicle_id)}">${escapeHtml(label)}</option>`;
+              })
+              .join("")}
+          </select>
+          `
+              : ""
+          }
+
+          <div id="backdate_actual_start_container"></div>
+          <div id="backdate_actual_return_container"></div>
+
+          <label>หมายเหตุ</label>
+          <textarea id="backdate_note" class="swal2-textarea" rows="4">บันทึกรายการย้อนหลัง</textarea>
+        </div>
+      `,
+      width: 760,
+      showCancelButton: true,
+      confirmButtonText: "บันทึก",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#f59e0b",
+      cancelButtonColor: "#64748b",
+      didOpen: () => {
+        const startEl = document.getElementById("backdate_actual_start_container");
+        const returnEl = document.getElementById("backdate_actual_return_container");
+
+        if (startEl) {
+          actualStartRoot = createRoot(startEl);
+          actualStartRoot.render(
+            <ThaiDateTimeField
+              label="เวลาออกรถจริง"
+              value={backdateActualStart}
+              onChange={(value) => {
+                backdateActualStart = value || "";
+              }}
+            />
+          );
+        }
+
+        if (returnEl) {
+          actualReturnRoot = createRoot(returnEl);
+          actualReturnRoot.render(
+            <ThaiDateTimeField
+              label="เวลากลับจริง"
+              value={backdateActualReturn}
+              onChange={(value) => {
+                backdateActualReturn = value || "";
+              }}
+            />
+          );
+        }
+      },
+      willClose: () => {
+        actualStartRoot?.unmount?.();
+        actualReturnRoot?.unmount?.();
+      },
+      preConfirm: () => {
+        const assigned_user_id = document.getElementById("backdate_assigned_user_id").value.trim();
+        const vehicle_id = FEATURES.vehicleModule
+          ? document.getElementById("backdate_vehicle_id")?.value.trim() || ""
+          : "";
+        const note = document.getElementById("backdate_note").value.trim();
+        const actual_start_datetime = backdateActualStart || "";
+        const actual_return_datetime = backdateActualReturn || "";
+
+        if (!assigned_user_id) {
+          Swal.showValidationMessage("กรุณาเลือกคนขับ");
+          return false;
+        }
+
+        const driver = activeDriverUsers.find(
+          (item) => String(item.user_id || "").trim() === assigned_user_id
+        );
+        const vehicle = FEATURES.vehicleModule
+          ? normalizedVehicles.find((item) => String(item.vehicle_id || "").trim() === vehicle_id)
+          : null;
+
+        if (!driver) {
+          Swal.showValidationMessage("ไม่พบข้อมูลคนขับ");
+          return false;
+        }
+
+        if (FEATURES.vehicleModule && !vehicle) {
+          Swal.showValidationMessage("ไม่พบข้อมูลรถ");
+          return false;
+        }
+
+        if (actual_start_datetime && actual_return_datetime) {
+          const startTime = new Date(actual_start_datetime).getTime();
+          const returnTime = new Date(actual_return_datetime).getTime();
+
+          if (!Number.isNaN(startTime) && !Number.isNaN(returnTime) && returnTime < startTime) {
+            Swal.showValidationMessage("เวลากลับจริงต้องไม่น้อยกว่าเวลาออกรถจริง");
+            return false;
+          }
+        }
+
+        return {
+          assigned_user_id,
+          assigned_user_name: driver.name || "",
+          vehicle_id: FEATURES.vehicleModule ? vehicle_id : "",
+          note,
+          actual_start_datetime,
+          actual_return_datetime,
+        };
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    const bookingId = getBookingId(booking);
+    if (!bookingId) {
+      showError("ไม่พบรหัสรายการจอง");
+      return;
+    }
+
+    try {
+      const nowIso = new Date().toISOString();
+      const actor = currentUser?.name || currentUser?.email || "";
+      const payload = {
+        booking_id: bookingId,
+        booking_no: booking.booking_no || "",
+        assigned_user_id: result.value.assigned_user_id,
+        assigned_user_name: result.value.assigned_user_name,
+        vehicle_id: result.value.vehicle_id,
+        actual_start_datetime: result.value.actual_start_datetime || "",
+        actual_return_datetime: result.value.actual_return_datetime || "",
+        actual_start_by: actor,
+        actual_return_by: actor,
+        status: "COMPLETED",
+        staff_note: result.value.note
+          ? `บันทึกรายการย้อนหลัง: ${result.value.note}`
+          : "โปรดระบุหมายเหตุเพิ่มเติม",
+        is_backdated: "TRUE",
+        backdated_completed_at: nowIso,
+        backdated_completed_by: actor,
+        updated_by: actor,
+      };
+
+      setBookingAction({ bookingId, type: "backdate" });
+      const response = await backdateCompleteBooking(payload);
+
+      if (response?.success === false) {
+        showError(response?.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+        return;
+      }
+
+      mergeBooking({
+        ...(response || {}),
+        ...payload,
+        booking_id: bookingId,
+        status: "COMPLETED",
+        updated_at: nowIso,
+      });
+      await showSuccess("บันทึกงานย้อนหลังสำเร็จ");
+    } catch (err) {
+      showError(err.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+    } finally {
+      setBookingAction(null);
+    }
   }
 
 async function handleEditDriver(d) {
@@ -1096,6 +1442,12 @@ async function handleDeleteVehicle(vehicle) {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (bookingPage > bookingPageCount) {
+      setBookingPage(bookingPageCount);
+    }
+  }, [bookingPage, bookingPageCount]);
+
   return (
     <div>
       <div className="page-header">
@@ -1106,6 +1458,15 @@ async function handleDeleteVehicle(vehicle) {
 
         <button onClick={loadData}>รีเฟรชข้อมูล</button>
       </div>
+
+      <BookingFormModal
+        ref={bookingFormModalRef}
+        overlapCandidates={bookings}
+        vehicleTypes={vehicleTypes}
+        currentUser={currentUser}
+        onSuccess={(savedBooking) => mergeBooking(savedBooking)}
+        showBackdatedCheckbox={hasPermission(null, "bookings_create_backdated")}
+      />
 
       <div className="summary-grid">
         {summaryCards.map((card) => (
@@ -1490,51 +1851,126 @@ async function handleDeleteVehicle(vehicle) {
       </div>
       )}
 
-      <div className="form-card">
-        <h3>รายการจองทั้งหมด</h3>
+      {canViewBookings && (
+        <div className="form-card">
+          <div className="section-header">
+            <div>
+              <h3>จัดการรายการจอง</h3>
+              <p>เพิ่ม แก้ไข และบันทึกรายการย้อนหลังจากหน้า Admin ได้โดยตรง</p>
+            </div>
+            <div className="section-toolbar admin-booking-toolbar">
+              {canCreateBookings && (
+                <button
+                  type="button"
+                  disabled={bookingAction?.type === "create"}
+                  onClick={handleCreateBooking}
+                >
+                  {bookingAction?.type === "create" ? "กำลังเปิดฟอร์ม..." : "เพิ่มรายการจอง"}
+                </button>
+              )}
+            </div>
+          </div>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>เลขที่</th>
-                <th>ผู้จอง</th>
-                <th>ปลายทาง</th>
-                <th>รถ</th>
-                <th>คนขับ</th>
-                <th>สถานะ</th>
-                <th>หมายเหตุ</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {bookingPageItems.map((b) => (
-                <tr key={b.booking_id}>
-                  <td>{b.booking_no}</td>
-                  <td>{b.requester_name}</td>
-                  <td>{b.destination}</td>
-                  <td>{b.vehicle_id || "-"}</td>
-                  <td>{b.assigned_user_name || "-"}</td>
-                  <td>{b.status}</td>
-                  <td>{b.staff_note || "-"}</td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>เลขที่</th>
+                  <th>ผู้จอง</th>
+                  <th>เวลาไป</th>
+                  <th>เวลากลับ</th>
+                  <th>ปลายทาง</th>
+                  {FEATURES.vehicleModule && <th>รถ</th>}
+                  <th>คนขับ</th>
+                  <th>สถานะ</th>
+                  <th>หมายเหตุ</th>
+                  <th>จัดการ</th>
                 </tr>
+              </thead>
+
+              <tbody>
+                {bookingPageItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={FEATURES.vehicleModule ? "10" : "9"}>ไม่มีรายการจอง</td>
+                  </tr>
+                ) : (
+                  bookingPageItems.map((booking) => {
+                    const bookingId = getBookingId(booking);
+                    const status = normalizeStatus(booking.status);
+                    const statusMeta = getBookingStatusMeta(status);
+                    const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
+                    const disabled = bookingAction?.bookingId === bookingId;
+                    const canShowEdit =
+                      canEditBookings &&
+                      isEditableBookingStatus(status) &&
+                      driverCancelRequestStatus !== "PENDING";
+                    const canShowBackdate =
+                      canBackdateBookings &&
+                      isBackdatedFlagEnabled(booking) &&
+                      !["COMPLETED", "CANCELLED"].includes(status);
+
+                    return (
+                      <tr key={bookingId || booking.booking_no}>
+                        <td>{booking.booking_no || "-"}</td>
+                        <td>{booking.requester_name || "-"}</td>
+                        <td>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</td>
+                        <td>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</td>
+                        <td>{booking.destination || "-"}</td>
+                        {FEATURES.vehicleModule && (
+                          <td>{getBookingVehicleLabel(booking, vehicleMap)}</td>
+                        )}
+                        <td>{booking.assigned_user_name || booking.driver_name || "-"}</td>
+                        <td>
+                          <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+                        </td>
+                        <td>{booking.staff_note || "-"}</td>
+                        <td className="action-buttons">
+                          {canShowEdit && (
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => handleEditBooking(booking)}
+                            >
+                              {bookingAction?.bookingId === bookingId && bookingAction?.type === "edit"
+                                ? "กำลังเปิด..."
+                                : "แก้ไข"}
+                            </button>
+                          )}
+                          {canShowBackdate && (
+                            <button
+                              type="button"
+                              className="warning-button"
+                              disabled={disabled}
+                              onClick={() => handleBackdateBooking(booking)}
+                            >
+                              {bookingAction?.bookingId === bookingId && bookingAction?.type === "backdate"
+                                ? "กำลังบันทึก..."
+                                : "บันทึกย้อนหลัง"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            <div className="pagination">
+              {Array.from({ length: bookingPageCount }).map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={bookingPage === index + 1 ? "active-page" : ""}
+                  onClick={() => setBookingPage(index + 1)}
+                >
+                  {index + 1}
+                </button>
               ))}
-            </tbody>
-          </table>
-          <div className="pagination">
-          {Array.from({ length: bookingPageCount }).map((_, index) => (
-            <button
-              key={index}
-              type="button"
-              className={bookingPage === index + 1 ? "active-page" : ""}
-              onClick={() => setBookingPage(index + 1)}
-            >
-              {index + 1}
-            </button>
-          ))}
+            </div>
+          </div>
         </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

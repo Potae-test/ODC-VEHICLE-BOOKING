@@ -33,6 +33,7 @@ const postRouteActions: Record<string, string> = {
   "/api/notifications/read": "markNotificationRead",
   "/api/notifications/read-all": "markAllNotificationsRead",
   "/api/bookings/approve": "approveBooking",
+  "/api/bookings/assign-central-vehicle": "assignCentralVehicle",
   "/api/bookings/start-trip": "startTrip",
   "/api/bookings/complete-trip": "completeTrip",
   "/api/backdate_complete_booking": "backdate_complete_booking",

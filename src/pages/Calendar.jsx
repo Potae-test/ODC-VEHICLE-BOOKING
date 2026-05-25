@@ -299,6 +299,14 @@ function isToday(date) {
   return isSameCalendarDate(date, new Date());
 }
 
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("odc_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
 function eventOverlapsDay(event, day) {
   if (!event?.start || !event?.end) return false;
 
@@ -444,6 +452,7 @@ export default function CalendarPage() {
   const visibleLoading = useMinimumLoading(loading, 350);
   const bookingFormModalRef = useRef(null);
   const fullCalendarRef = useRef(null);
+  const currentUser = useMemo(() => getCurrentUser(), []);
 
   const mergeBooking = useCallback((nextBooking) => {
     if (!nextBooking?.booking_id) return;
@@ -993,7 +1002,7 @@ export default function CalendarPage() {
       <div className="page-header">
         <div>
           <h2>ปฏิทินการจอง</h2>
-          <p>แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. ปฏิบัติงาน</p>
+          <p>แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. พร้อมปฏิบัติงาน</p>
         </div>
 
         <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
@@ -1004,7 +1013,9 @@ export default function CalendarPage() {
       <BookingFormModal
         ref={bookingFormModalRef}
         overlapCandidates={activeBookings}
+        currentUser={currentUser}
         onSuccess={mergeBooking}
+        showBackdatedCheckbox={hasPermission(null, "bookings_create_backdated")}
       />
 
 
@@ -1141,11 +1152,8 @@ export default function CalendarPage() {
                   minWidth: 0,
                 }}
               >
-                <h4 style={{ marginTop: 0, marginBottom: 0 }}>พขร. ปฏิบัติงาน</h4>
+                <h4 style={{ marginTop: 0, marginBottom: 0 }}>พขร. พร้อมปฏิบัติงาน <span className="status green" style={{ fontSize: 23, padding: "6px 12px" }}>จำนวน {activeDriversNow.length} คน</span> </h4>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-                  <span className="status green" style={{ fontSize: 23, padding: "6px 12px" }}>
-                    จำนวน {activeDriversNow.length} คน
-                  </span>
                   {activeDriversNow.length > 0 ? (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                       {activeDriversNow.map((driver) => (
@@ -1158,9 +1166,9 @@ export default function CalendarPage() {
                     <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
                   )}
                 </div>
-                <div style={{ fontSize: 20, color: "#475569" }}>
+                {/* <div style={{ fontSize: 20, color: "#475569" }}>
                   นับจาก พขร. ที่มีสถานะ พร้อม และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
-                </div>
+                </div> */}
               </div>
             )}
 
@@ -1217,10 +1225,10 @@ export default function CalendarPage() {
                             <span
                               className="status blue"
                               style={{
-                                minWidth: 56,
-                                justifyContent: "center",
-                                fontSize: 15,
-                                padding: "4px 10px",
+                                // minWidth: 56,
+                                // justifyContent: "center",
+                                fontSize: 20,
+                                padding: "6px 12px",
                               }}
                             >
                               {row.queue_order}

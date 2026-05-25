@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
 import {
   approveBooking,
+  assignCentralVehicle,
   cancelBooking,
   backdateCompleteBooking,
   confirmDriverQueueAssignment,
@@ -26,6 +27,8 @@ import useMinimumLoading from "../hooks/useMinimumLoading";
 import { FEATURES } from "../config/features";
 
 const ROWS_PER_PAGE = 5;
+const CENTRAL_OFFICE_DRIVER_ID = "U007";
+const CENTRAL_OFFICE_DRIVER_NAME = "พขร.สนง.กลาง";
 
 const STATUS_META = {
   PENDING: {
@@ -380,6 +383,23 @@ function getCurrentUser() {
 
 function isBackdatedFlagEnabled(booking) {
   return String(booking.is_backdated || "").trim().toUpperCase() === "TRUE";
+}
+
+function isBookingOwnedByUser(booking, user) {
+  const currentUserId = String(user?.user_id || "").trim();
+  const currentUserName = String(user?.name || user?.email || "").trim().toLowerCase();
+  const bookingRequesterUserId = String(booking?.requester_user_id || "").trim();
+  const bookingRequesterName = String(booking?.requester_name || "").trim().toLowerCase();
+
+  if (currentUserId && bookingRequesterUserId) {
+    return currentUserId === bookingRequesterUserId;
+  }
+
+  if (currentUserName && bookingRequesterName) {
+    return currentUserName === bookingRequesterName;
+  }
+
+  return false;
 }
 
 function isStaffOrAdmin(user) {
@@ -757,7 +777,10 @@ const BookingTableRow = memo(function BookingTableRow({
   canBackdateComplete,
   canCancelBookings,
   canEditBookings,
+  canEditBooking,
+  canCancelBooking,
   canUnassignBookings,
+  canAssignCentralVehicle,
   canReviewDriverCancelRequests,
   processing,
   onViewDetail,
@@ -766,6 +789,7 @@ const BookingTableRow = memo(function BookingTableRow({
   onEdit,
   onCancel,
   onUnassign,
+  onAssignCentralVehicle,
   onApproveDriverCancel,
   onRejectDriverCancel,
 }) {
@@ -779,13 +803,20 @@ const BookingTableRow = memo(function BookingTableRow({
   const canShowDetail = canViewBookingDetail;
   const canShowBackdateComplete =
     canBackdateComplete &&
-    isBackdatedFlagEnabled(booking) &&
+    rowBookingId &&
     !["COMPLETED", "CANCELLED"].includes(status);
-  const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
-  const canShowEdit = canEditBookings && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
+  const canShowProcess =
+    canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
+  const canShowEdit =
+    canEditBookings && canEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
   const canShowCancel =
-    canCancelBookings && !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) && !hasPendingDriverCancelRequest;
+    canCancelBookings &&
+    canCancelBooking &&
+    !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
+    !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
+  const canShowAssignCentralVehicle =
+    canAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
 
   const actionButtons = (
     <>
@@ -794,7 +825,7 @@ const BookingTableRow = memo(function BookingTableRow({
           ดูรายละเอียด
         </button>
       )}
-      {canShowBackdateComplete ? (
+      {canShowBackdateComplete && (
         <button
           type="button"
           className="warning-button booking-action-button"
@@ -803,74 +834,81 @@ const BookingTableRow = memo(function BookingTableRow({
         >
           {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
         </button>
-      ) : (
+      )}
+      {canShowProcess && (
+        <button
+          type="button"
+          className="primary-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onProcess(booking)}
+        >
+          {processing === "process"
+            ? "กำลังดำเนินการ..."
+            : status === "APPROVED"
+              ? FEATURES.vehicleModule
+                ? "เปลี่ยนคนขับ/รถ"
+                : "เปลี่ยนคนขับ"
+              : "อนุมัติรายการ"}
+        </button>
+      )}
+      {canShowEdit && (
+        <button
+          type="button"
+          className="warning-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onEdit(booking)}
+        >
+          {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
+        </button>
+      )}
+      {canShowUnassign && (
+        <button
+          type="button"
+          className="success-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onUnassign(booking)}
+        >
+          {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
+        </button>
+      )}
+      {canShowAssignCentralVehicle && (
+        <button
+          type="button"
+          className="warning-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onAssignCentralVehicle(booking)}
+        >
+          {processing === "assign-central-vehicle" ? "กำลังบันทึก..." : "ใช้รถ สนง.กลาง"}
+        </button>
+      )}
+      {canShowCancel && (
+        <button
+          type="button"
+          className="danger-button booking-action-button"
+          disabled={disabled}
+          onClick={() => onCancel(booking)}
+        >
+          {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
+        </button>
+      )}
+      {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
         <>
-          {canShowProcess && (
-            <button
-              type="button"
-              className="primary-button booking-action-button"
-              disabled={disabled}
-              onClick={() => onProcess(booking)}
-            >
-              {processing === "process"
-                ? "กำลังดำเนินการ..."
-                : status === "APPROVED"
-                  ? FEATURES.vehicleModule
-                    ? "เปลี่ยนคนขับ/รถ"
-                    : "เปลี่ยนคนขับ"
-                  : "อนุมัติรายการ"}
-            </button>
-          )}
-          {canShowEdit && (
-            <button
-              type="button"
-              className="warning-button booking-action-button"
-              disabled={disabled}
-              onClick={() => onEdit(booking)}
-            >
-              {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
-            </button>
-          )}
-          {canShowUnassign && (
-            <button
-              type="button"
-              className="success-button booking-action-button"
-              disabled={disabled}
-              onClick={() => onUnassign(booking)}
-            >
-              {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
-            </button>
-          )}
-          {canShowCancel && (
-            <button
-              type="button"
-              className="danger-button booking-action-button"
-              disabled={disabled}
-              onClick={() => onCancel(booking)}
-            >
-              {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
-            </button>
-          )}
-          {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
-            <>
-              <button
-                type="button"
-                className="booking-action-button"
-                disabled={disabled}
-                onClick={() => onApproveDriverCancel(booking)}
-              >
-                อนุมัติยกเลิกงานคนขับ
-              </button>
-              <button
-                type="button"
-                className="danger-button booking-action-button"
-                disabled={disabled}
-                onClick={() => onRejectDriverCancel(booking)}
-              >
-                ไม่อนุมัติ
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            className="booking-action-button"
+            disabled={disabled}
+            onClick={() => onApproveDriverCancel(booking)}
+          >
+            อนุมัติยกเลิกงานคนขับ
+          </button>
+          <button
+            type="button"
+            className="danger-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onRejectDriverCancel(booking)}
+          >
+            ไม่อนุมัติ
+          </button>
         </>
       )}
     </>
@@ -931,7 +969,10 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     canBackdateComplete,
     canCancelBookings,
     canEditBookings,
+    canEditBooking,
+    canCancelBooking,
     canUnassignBookings,
+    canAssignCentralVehicle,
     canReviewDriverCancelRequests,
     processing,
     onViewDetail,
@@ -940,6 +981,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     onEdit,
     onCancel,
     onUnassign,
+    onAssignCentralVehicle,
     onApproveDriverCancel,
     onRejectDriverCancel,
   } = props;
@@ -947,16 +989,24 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
   const status = normalizeStatus(booking.status);
   const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
   const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
+  const rowBookingId = getBookingId(booking);
   const disabled = Boolean(processing);
   const canShowBackdateComplete =
     canBackdateComplete &&
-    isBackdatedFlagEnabled(booking) &&
+    rowBookingId &&
     !["COMPLETED", "CANCELLED"].includes(status);
-  const canShowProcess = canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
-  const canShowEdit = canEditBookings && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
+  const canShowProcess =
+    canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
+  const canShowEdit =
+    canEditBookings && canEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
   const canShowCancel =
-    canCancelBookings && !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) && !hasPendingDriverCancelRequest;
+    canCancelBookings &&
+    canCancelBooking &&
+    !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
+    !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
+  const canShowAssignCentralVehicle =
+    canAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
 
   return (
     <article className="mobile-data-card booking-mobile-card">
@@ -1001,7 +1051,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
             ดูรายละเอียด
           </button>
         )}
-        {canShowBackdateComplete ? (
+        {canShowBackdateComplete && (
           <button
             type="button"
             className="warning-button booking-action-button"
@@ -1010,74 +1060,81 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
           >
             {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
           </button>
-        ) : (
+        )}
+        {canShowProcess && (
+          <button
+            type="button"
+            className="primary-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onProcess(booking)}
+          >
+            {processing === "process"
+              ? "กำลังดำเนินการ..."
+              : status === "APPROVED"
+                ? FEATURES.vehicleModule
+                  ? "เปลี่ยนคนขับ/รถ"
+                  : "เปลี่ยนคนขับ"
+                : "อนุมัติรายการ"}
+          </button>
+        )}
+        {canShowEdit && (
+          <button
+            type="button"
+            className="warning-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onEdit(booking)}
+          >
+            {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
+          </button>
+        )}
+        {canShowUnassign && (
+          <button
+            type="button"
+            className="success-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onUnassign(booking)}
+          >
+            {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
+          </button>
+        )}
+        {canShowAssignCentralVehicle && (
+          <button
+            type="button"
+            className="warning-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onAssignCentralVehicle(booking)}
+          >
+            {processing === "assign-central-vehicle" ? "กำลังบันทึก..." : "ใช้รถ สนง.กลาง"}
+          </button>
+        )}
+        {canShowCancel && (
+          <button
+            type="button"
+            className="danger-button booking-action-button"
+            disabled={disabled}
+            onClick={() => onCancel(booking)}
+          >
+            {processing === "cancel" ? "กำลังยกเลิก..." : "ยกเลิก"}
+          </button>
+        )}
+        {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
           <>
-            {canShowProcess && (
-              <button
-                type="button"
-                className="primary-button booking-action-button"
-                disabled={disabled}
-                onClick={() => onProcess(booking)}
-              >
-                {processing === "process"
-                  ? "กำลังดำเนินการ..."
-                  : status === "APPROVED"
-                    ? FEATURES.vehicleModule
-                      ? "เปลี่ยนคนขับ/รถ"
-                      : "เปลี่ยนคนขับ"
-                    : "อนุมัติรายการ"}
-              </button>
-            )}
-            {canShowEdit && (
-              <button
-                type="button"
-                className="warning-button booking-action-button"
-                disabled={disabled}
-                onClick={() => onEdit(booking)}
-              >
-                {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
-              </button>
-            )}
-            {canShowUnassign && (
-              <button
-                type="button"
-                className="success-button booking-action-button"
-                disabled={disabled}
-                onClick={() => onUnassign(booking)}
-              >
-                {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
-              </button>
-            )}
-            {canShowCancel && (
-              <button
-                type="button"
-                className="danger-button booking-action-button"
-                disabled={disabled}
-                onClick={() => onCancel(booking)}
-              >
-                {processing === "cancel" ? "กำลังยกเลิก..." : "ยกเลิก"}
-              </button>
-            )}
-            {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
-              <>
-                <button
-                  type="button"
-                  className="booking-action-button"
-                  disabled={disabled}
-                  onClick={() => onApproveDriverCancel(booking)}
-                >
-                  อนุมัติยกเลิกงานคนขับ
-                </button>
-                <button
-                  type="button"
-                  className="danger-button booking-action-button"
-                  disabled={disabled}
-                  onClick={() => onRejectDriverCancel(booking)}
-                >
-                  ไม่อนุมัติ
-                </button>
-              </>
-            )}
+            <button
+              type="button"
+              className="booking-action-button"
+              disabled={disabled}
+              onClick={() => onApproveDriverCancel(booking)}
+            >
+              อนุมัติยกเลิกงานคนขับ
+            </button>
+            <button
+              type="button"
+              className="danger-button booking-action-button"
+              disabled={disabled}
+              onClick={() => onRejectDriverCancel(booking)}
+            >
+              ไม่อนุมัติ
+            </button>
           </>
         )}
       </div>
@@ -1113,9 +1170,10 @@ export default function Booking() {
   const canProcessBookings = hasPermission(null, "bookings_approve");
   const canCancelBookings = hasPermission(null, "bookings_cancel");
   const canEditBookings = hasPermission(null, "bookings_edit");
+  const canAssignCentralVehicle = hasPermission(null, "bookings_assign_central_vehicle");
   const currentUser = getCurrentUser();
   const canReviewDriverCancelRequests = isStaffOrAdmin(currentUser);
-  const canBackdateComplete = isStaffOrAdmin(currentUser) && canProcessBookings;
+  const canBackdateComplete = hasPermission(null, "bookings_backdate_complete");
   const canUnassignBookings = isStaffOrAdmin(currentUser);
 
   const mergeBooking = useCallback((nextBooking) => {
@@ -1708,30 +1766,8 @@ export default function Booking() {
                 .join("")}
             </select>
 
-            ${
-              FEATURES.vehicleModule
-                ? `
-            <label>รถ</label>
-            <select id="backdate_vehicle_id" class="swal2-select">
-              <option value="">-- เลือกรถ --</option>
-              ${vehicles
-                .map((vehicle) => {
-                  const label = `${vehicle.vehicle_name || vehicle.vehicle_code || vehicle.vehicle_id} - ${
-                    vehicle.license_plate || vehicle.plate_no || "-"
-                  }`;
-                  return `<option value="${escapeHtml(vehicle.vehicle_id)}">${escapeHtml(label)}</option>`;
-                })
-                .join("")}
-              </select>
-              `
-                : ""
-            }
-
             <div id="backdate_actual_start_container"></div>
             <div id="backdate_actual_return_container"></div>
-
-            <label>หมายเหตุ</label>
-            <textarea id="backdate_note" class="swal2-textarea" rows="4">บันทึกรายการย้อนหลัง</textarea>
           </div>
         `,
         width: 760,
@@ -1778,10 +1814,6 @@ export default function Booking() {
         },
         preConfirm: () => {
           const assigned_user_id = document.getElementById("backdate_assigned_user_id").value.trim();
-          const vehicle_id = FEATURES.vehicleModule
-            ? document.getElementById("backdate_vehicle_id")?.value.trim() || ""
-            : "";
-          const note = document.getElementById("backdate_note").value.trim();
           const actual_start_datetime = backdateActualStart || "";
           const actual_return_datetime = backdateActualReturn || "";
 
@@ -1791,17 +1823,19 @@ export default function Booking() {
           }
 
           const driver = activeDrivers.find((item) => String(item.user_id || "").trim() === assigned_user_id);
-          const vehicle = FEATURES.vehicleModule
-            ? vehicles.find((item) => String(item.vehicle_id || "").trim() === vehicle_id)
-            : null;
 
           if (!driver) {
             Swal.showValidationMessage("ไม่พบข้อมูลคนขับ");
             return false;
           }
 
-          if (FEATURES.vehicleModule && !vehicle) {
-            Swal.showValidationMessage("ไม่พบข้อมูลรถ");
+          if (!actual_start_datetime) {
+            Swal.showValidationMessage("กรุณาระบุเวลาออกรถจริง");
+            return false;
+          }
+
+          if (!actual_return_datetime) {
+            Swal.showValidationMessage("กรุณาระบุเวลากลับจริง");
             return false;
           }
 
@@ -1818,8 +1852,6 @@ export default function Booking() {
           return {
             assigned_user_id,
             assigned_user_name: driver.name || "",
-            vehicle_id: FEATURES.vehicleModule ? vehicle_id : "",
-            note,
             actual_start_datetime,
             actual_return_datetime,
           };
@@ -1844,13 +1876,11 @@ export default function Booking() {
           booking_no: booking.booking_no || "",
           assigned_user_id: result.value.assigned_user_id,
           assigned_user_name: result.value.assigned_user_name,
-          vehicle_id: result.value.vehicle_id,
           actual_start_datetime: result.value.actual_start_datetime || "",
           actual_return_datetime: result.value.actual_return_datetime || "",
           actual_start_by: actor,
           actual_return_by: actor,
           status: "COMPLETED",
-          staff_note: result.value.note ? `บันทึกรายการย้อนหลัง: ${result.value.note}` : "โปรดระบุหมายเหตุเพิ่มเติม",
           is_backdated: "TRUE",
           backdated_completed_at: nowIso,
           backdated_completed_by: actor,
@@ -1878,7 +1908,7 @@ export default function Booking() {
         setProcessingAction(null);
       }
     },
-    [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, mergeBooking, processingAction, vehicles]
+    [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, mergeBooking, processingAction]
   );
 
   const handleViewBookingDetail = useCallback(
@@ -2044,6 +2074,81 @@ export default function Booking() {
       setProcessingAction(null);
     }
   }, [currentUser?.email, currentUser?.name, mergeBooking, processingAction]);
+
+  const handleAssignCentralVehicle = useCallback(async (booking) => {
+    if (processingAction) return;
+
+    const reasonDefault = "ใช้รถ สนง.กลาง (รถไม่ว่าง)";
+    const result = await Swal.fire({
+      title: "ใช้รถ สนง.กลาง",
+      html: `
+        <div class="swal-form">
+          <div style="text-align:left; line-height:1.7; margin-bottom: 8px;">
+            <div>รายการนี้จะถูกปิดงานทันทีโดยมอบหมายให้ <b>${escapeHtml(CENTRAL_OFFICE_DRIVER_NAME)}</b></div>
+          </div>
+          <label>เหตุผล</label>
+          <textarea id="central_vehicle_reason" class="swal2-textarea" rows="4">${escapeHtml(reasonDefault)}</textarea>
+        </div>
+      `,
+      width: 720,
+      showCancelButton: true,
+      confirmButtonText: "ยืนยันใช้รถ สนง.กลาง",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#f59e0b",
+      cancelButtonColor: "#64748b",
+      preConfirm: () => {
+        const reason = document.getElementById("central_vehicle_reason")?.value.trim() || "";
+        if (!reason) {
+          Swal.showValidationMessage("กรุณาระบุเหตุผล");
+          return false;
+        }
+        return reason;
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      const bookingId = getBookingId(booking);
+      if (!bookingId) {
+        showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+        return;
+      }
+
+      const actor = currentUser?.name || currentUser?.email || "";
+      setProcessingAction({ bookingId, type: "assign-central-vehicle" });
+
+      const response = await assignCentralVehicle({
+        booking_id: bookingId,
+        reason: result.value,
+        completed_by: actor,
+        completed_by_user_id: currentUser?.user_id || "",
+      });
+
+      if (response?.success === false) {
+        showError(response?.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
+        return;
+      }
+
+      mergeBooking({
+        ...(response || {}),
+        booking_id: bookingId,
+        assigned_user_id: CENTRAL_OFFICE_DRIVER_ID,
+        assigned_user_name: CENTRAL_OFFICE_DRIVER_NAME,
+        driver_user_id: CENTRAL_OFFICE_DRIVER_ID,
+        driver_name: CENTRAL_OFFICE_DRIVER_NAME,
+        status: "COMPLETED",
+        assignment_mode: "CENTRAL_VEHICLE",
+        central_vehicle_reason: result.value,
+      });
+
+      await showSuccess("บันทึกใช้รถ สนง.กลาง สำเร็จ");
+    } catch (err) {
+      showError(err.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
+    }
+  }, [currentUser?.email, currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
 
   const handleReviewDriverCancelRequest = useCallback(async (booking, decision) => {
     if (processingAction) return;
@@ -2334,6 +2439,10 @@ export default function Booking() {
                       </tr>
                     ) : (
                       pageItems.map((booking, rowIndex) => (
+                        (() => {
+                          const canManageBooking = isStaffOrAdmin(currentUser) || isBookingOwnedByUser(booking, currentUser);
+
+                          return (
                         <BookingTableRow
                           key={getBookingId(booking) || booking.booking_no}
                           booking={booking}
@@ -2345,7 +2454,10 @@ export default function Booking() {
                           canBackdateComplete={canBackdateComplete}
                           canCancelBookings={canCancelBookings}
                           canEditBookings={canEditBookings}
+                          canEditBooking={canManageBooking}
+                          canCancelBooking={canManageBooking}
                           canUnassignBookings={canUnassignBookings}
+                          canAssignCentralVehicle={canAssignCentralVehicle}
                           canReviewDriverCancelRequests={canReviewDriverCancelRequests}
                           processing={
                             processingAction?.bookingId === getBookingId(booking)
@@ -2358,9 +2470,12 @@ export default function Booking() {
                           onEdit={handleEditBooking}
                           onCancel={handleCancelBooking}
                           onUnassign={handleUnassignBooking}
+                          onAssignCentralVehicle={handleAssignCentralVehicle}
                           onApproveDriverCancel={handleApproveDriverCancel}
                           onRejectDriverCancel={handleRejectDriverCancel}
                         />
+                          );
+                        })()
                       ))
                     )}
                   </tbody>
@@ -2372,6 +2487,10 @@ export default function Booking() {
                   <div className="mobile-empty-card">ไม่พบรายการจอง</div>
                 ) : (
                   pageItems.map((booking, rowIndex) => (
+                    (() => {
+                      const canManageBooking = isStaffOrAdmin(currentUser) || isBookingOwnedByUser(booking, currentUser);
+
+                      return (
                     <BookingMobileCard
                       key={`mobile-${getBookingId(booking) || booking.booking_no}`}
                       booking={booking}
@@ -2383,7 +2502,10 @@ export default function Booking() {
                       canBackdateComplete={canBackdateComplete}
                       canCancelBookings={canCancelBookings}
                       canEditBookings={canEditBookings}
+                      canEditBooking={canManageBooking}
+                      canCancelBooking={canManageBooking}
                       canUnassignBookings={canUnassignBookings}
+                      canAssignCentralVehicle={canAssignCentralVehicle}
                       canReviewDriverCancelRequests={canReviewDriverCancelRequests}
                       processing={
                         processingAction?.bookingId === getBookingId(booking)
@@ -2396,9 +2518,12 @@ export default function Booking() {
                       onEdit={handleEditBooking}
                       onCancel={handleCancelBooking}
                       onUnassign={handleUnassignBooking}
+                      onAssignCentralVehicle={handleAssignCentralVehicle}
                       onApproveDriverCancel={handleApproveDriverCancel}
                       onRejectDriverCancel={handleRejectDriverCancel}
                     />
+                      );
+                    })()
                   ))
                 )}
               </div>

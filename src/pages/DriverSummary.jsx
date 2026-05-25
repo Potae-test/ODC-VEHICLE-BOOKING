@@ -1,12 +1,11 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { getDriverJobLogs, getUsers } from "../api";
+import { getBookings, getDriverJobLogs, getUsers } from "../api";
 import { formatThaiDateTime } from "../utils/date";
 import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
 
-const COUNTED_STATUSES = new Set(["APPROVED", "IN_USE", "COMPLETED"]);
 const TABLE_PAGE_SIZE = 5;
 
 function toDateInputValue(date) {
@@ -302,11 +301,33 @@ function driverKeyFromName(name) {
   return `name:${name}`;
 }
 
-function isCountedStatus(booking) {
-  return (
-    COUNTED_STATUSES.has(normalizeStatus(booking.status)) &&
-    normalizeDriverName(booking.assigned_user_name)
-  );
+function isPendingDriverCancel(booking) {
+  return normalizeStatus(booking?.driver_cancel_request_status) === "PENDING";
+}
+
+function isDriverWorkloadBooking(booking) {
+  const status = normalizeStatus(booking?.status);
+  const assignedUserId = String(booking?.assigned_user_id || booking?.driver_user_id || "").trim();
+  const assignedUserName = normalizeDriverName(booking?.assigned_user_name);
+  const driverName = normalizeDriverName(booking?.driver_name);
+  const hasAssignedDriver = Boolean(assignedUserId || assignedUserName || driverName);
+
+  if (!hasAssignedDriver) return false;
+  if (status === "CANCELLED") return false;
+  if (status === "PENDING") return false;
+
+  return ["APPROVED", "IN_USE", "COMPLETED"].includes(status);
+}
+
+function getDriverWorkloadCategory(booking) {
+  if (!isDriverWorkloadBooking(booking)) return "";
+  if (isPendingDriverCancel(booking)) return "";
+
+  const status = normalizeStatus(booking.status);
+  if (status === "COMPLETED") return "completed";
+  if (status === "IN_USE") return "in_use";
+  if (status === "APPROVED") return "approved";
+  return "";
 }
 
 function isSummaryStatus(booking) {
@@ -388,6 +409,7 @@ const DriverSummaryTableRow = memo(function DriverSummaryTableRow({ row, onDetai
 
 export default function DriverSummary() {
   const [bookings, setBookings] = useState([]);
+  const [jobLogs, setJobLogs] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -411,10 +433,12 @@ export default function DriverSummary() {
       }
       setError("");
 
-      const [bookingData, userData] = await Promise.all([
+      const [jobLogData, bookingData, userData] = await Promise.all([
         getDriverJobLogs(options.refreshOnly ? { fresh: true } : {}),
+        getBookings(options.refreshOnly ? { fresh: true } : {}),
         getUsers().catch(() => []),
       ]);
+      setJobLogs(Array.isArray(jobLogData) ? jobLogData : []);
       setBookings(Array.isArray(bookingData) ? bookingData : []);
       setDrivers(
         Array.isArray(userData)
@@ -483,29 +507,30 @@ export default function DriverSummary() {
     });
 
     function getBookingDriverKey(booking) {
-      const driverId = normalizeDriverId(booking.driver_user_id || booking.assigned_user_id);
-      const name = normalizeDriverName(booking.driver_name || booking.assigned_user_name);
+      const driverId = normalizeDriverId(booking.assigned_user_id || booking.driver_user_id);
+      const assignedUserName = normalizeDriverName(booking.assigned_user_name);
+      const driverName = normalizeDriverName(booking.driver_name);
+
       if (driverId && driverById.has(driverId)) return driverById.get(driverId);
-      return driverByName.get(name);
+      if (assignedUserName && driverByName.has(assignedUserName)) return driverByName.get(assignedUserName);
+      if (driverName && driverByName.has(driverName)) return driverByName.get(driverName);
+      return "";
     }
 
-    const latestBookingActionMap = new Map();
+    const latestJobLogByBookingId = new Map();
 
-    bookings.forEach((booking) => {
-      if (!isSummaryStatus(booking)) return;
+    jobLogs.forEach((log) => {
+      const bookingId = String(log.booking_id || "").trim();
+      if (!bookingId) return;
 
-      const key = getBookingDriverKey(booking);
-      if (!key) return;
-
-      const summaryKey = `${key}::${booking.booking_id}`;
-      const currentTime = new Date(booking.created_at || booking.updated_at || 0).getTime();
-      const existing = latestBookingActionMap.get(summaryKey);
+      const currentTime = new Date(log.created_at || log.updated_at || 0).getTime();
+      const existing = latestJobLogByBookingId.get(bookingId);
       const existingTime = existing
         ? new Date(existing.created_at || existing.updated_at || 0).getTime()
         : 0;
 
       if (!existing || currentTime >= existingTime) {
-        latestBookingActionMap.set(summaryKey, booking);
+        latestJobLogByBookingId.set(bookingId, log);
       }
     });
 
@@ -527,31 +552,44 @@ export default function DriverSummary() {
       });
     });
 
-    latestBookingActionMap.forEach((booking, summaryKey) => {
-      const [driverKey] = summaryKey.split("::");
+    bookings.forEach((booking) => {
+      const driverKey = getBookingDriverKey(booking);
+      if (!driverKey) return;
+
       const stats = statsByDriverKey.get(driverKey);
       if (!stats) return;
 
-      stats.allDetailBookings.push(booking);
+      if (isPendingDriverCancel(booking)) {
+        stats.cancelledCount += 1;
+        return;
+      }
+
+      const category = getDriverWorkloadCategory(booking);
+      if (!category) return;
+
+      const bookingId = String(booking.booking_id || "").trim();
+      const latestLog = bookingId ? latestJobLogByBookingId.get(bookingId) : null;
+      const detailBooking = latestLog ? { ...latestLog, ...booking } : booking;
+
+      stats.allDetailBookings.push(detailBooking);
 
       if (isInRange(booking, todayRange)) stats.todayCount += 1;
       if (isInRange(booking, weekRange)) stats.weekCount += 1;
       if (isInRange(booking, monthRange)) stats.monthCount += 1;
       if (isInRange(booking, selectedRange)) stats.selectedCount += 1;
 
-      const category = getDriverJobActionCategoryV2(booking);
       if (category === "completed") stats.completedCount += 1;
       if (category === "approved") stats.approvedCount += 1;
       if (category === "in_use") stats.inUseCount += 1;
-      if (category === "rejected") stats.cancelledCount += 1;
-      if (category === "requested") stats.requestedCount += 1;
 
-      const bookingTime = parseBookingDate(booking.created_at || booking.updated_at || booking.start_datetime)?.getTime() || 0;
+      const bookingTime = parseBookingDate(
+        booking.created_at || booking.updated_at || booking.start_datetime
+      )?.getTime() || 0;
       const latestTime = parseBookingDate(
         stats.latest?.created_at || stats.latest?.updated_at || stats.latest?.start_datetime
       )?.getTime() || 0;
       if (!stats.latest || bookingTime >= latestTime) {
-        stats.latest = booking;
+        stats.latest = detailBooking;
       }
     });
 
@@ -594,7 +632,7 @@ export default function DriverSummary() {
       })
       .filter((row) => selectedDriver === "ALL" || row.key === selectedDriver)
       .sort((a, b) => b.selectedCount - a.selectedCount || a.name.localeCompare(b.name, "th"));
-  }, [bookings, driverOptions, monthRange, selectedDriver, selectedRange, todayRange, weekRange]);
+  }, [bookings, driverOptions, jobLogs, monthRange, selectedDriver, selectedRange, todayRange, weekRange]);
 
   const visibleDriverRows = useMemo(() => {
     if (cardScope === "NONE") return [];

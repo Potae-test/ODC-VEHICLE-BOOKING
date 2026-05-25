@@ -84,6 +84,7 @@ function doPost(e) {
     if (action === "createBooking") return createBooking(body.data);
     if (action === "updateBooking") return updateBooking(body.data);
     if (action === "approveBooking") return approveBooking(body.data);
+    if (action === "assignCentralVehicle") return assignCentralVehicle(body.data);
     if (action === "startTrip") return startTrip(body.data);
     if (action === "completeTrip") return completeTrip(body.data);
     if (action === "backdate_complete_booking") return backdateCompleteBooking(body.data);
@@ -234,6 +235,9 @@ function appendDriverJobLog_(payload) {
   if (!sheet) return;
 
   const headers = getHeaders_(sheet);
+  ensureColumn(sheet, headers, "status");
+  ensureColumn(sheet, headers, "assigned_user_id");
+  ensureColumn(sheet, headers, "assigned_user_name");
   ensureColumn(sheet, headers, "assigned_by_name");
   ensureColumn(sheet, headers, "assigned_by");
   const row = headers.map((header) => payload[header] ?? "");
@@ -262,6 +266,9 @@ function createDriverJobLogPayload_(data) {
     driver_user_id: data.driver_user_id || "",
     driver_name: data.driver_name || "",
     vehicle_id: data.vehicle_id || "",
+    status: data.status || "",
+    assigned_user_id: data.assigned_user_id || data.driver_user_id || "",
+    assigned_user_name: data.assigned_user_name || data.driver_name || "",
     action: data.action || "",
     reason: data.reason || "",
     requester_name: data.requester_name || "",
@@ -466,6 +473,10 @@ function ensureBookingsSheet() {
   ];
   const headers = [
     ...baseHeaders,
+    "assignment_mode",
+    "central_vehicle_reason",
+    "central_vehicle_completed_at",
+    "central_vehicle_completed_by",
     "driver_cancel_request_status",
     "driver_cancel_request_reason",
     "driver_cancel_requested_by",
@@ -1573,10 +1584,12 @@ function updateBooking(data) {
   const sheet = ensureBookingsSheet();
   const table = readSheetTable(sheet);
   const headers = table.headers;
-  const columnMap = table.columnMap;
   ensureTextColumn_(sheet, headers, "phone");
+  ensureColumn(sheet, headers, "requester_user_id");
+  const columnMap = getHeaderMap(headers);
 
   const editableFields = [
+    "requester_user_id",
     "requester_name",
     "department",
     "phone",
@@ -1590,6 +1603,7 @@ function updateBooking(data) {
     "is_backdated",
   ];
   const updatedAtCol = columnMap.updated_at;
+  const statusCol = columnMap.status;
 
   if (!data.booking_id) {
     return jsonOutput({ success: false, message: "booking_id is required" });
@@ -1620,12 +1634,43 @@ function updateBooking(data) {
   }
   setRowValues(sheet, row, rowValues);
 
+  const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
+  const updatedBy = String(data.updated_by || data.created_by || "").trim();
+  const updatedByRole = String(data.updated_by_role || "").trim().toUpperCase();
+
+  try {
+    const requesterUserId = resolveRequesterNotificationUserId_(updatedBooking);
+    const shouldNotifyOwner =
+      Boolean(requesterUserId) &&
+      (updatedByRole === "STAFF" || updatedByRole === "ADMIN");
+
+    if (shouldNotifyOwner) {
+      createNotification({
+        target_user_id: requesterUserId,
+        target_role: "",
+        title: "รายการจองมีการเปลี่ยนแปลง",
+        message: buildNotificationMessageForBooking_(updatedBooking, "รายการจองของคุณมีการเปลี่ยนแปลง"),
+        type: "BOOKING_UPDATED",
+        booking_id: updatedBooking.booking_id || data.booking_id,
+        url: "/booking",
+        created_by: updatedBy,
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          status: statusCol !== undefined && statusCol !== -1 ? rowValues[statusCol] || "" : "",
+        }),
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("updateBooking notification failed", notificationErr);
+  }
+
   return jsonOutput({
     success: true,
     message: "Update booking success",
     data: {
-      booking_id: data.booking_id
-    }
+      ...updatedBooking,
+      booking_id: data.booking_id,
+    },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 function approveBooking(data) {
@@ -1813,6 +1858,189 @@ function approveBooking(data) {
     created_notifications: getCreatedNotifications_(),
   });
 }
+
+function assignCentralVehicle(data) {
+  const bookingId = String(data && data.booking_id || "").trim();
+  const reason = String(data && data.reason || "").trim();
+  const completedBy = String(data && data.completed_by || "").trim();
+  const completedByUserId = String(data && data.completed_by_user_id || "").trim();
+
+  if (!bookingId) {
+    return jsonOutput({
+      success: false,
+      message: "booking_id is required",
+    });
+  }
+
+  if (!reason) {
+    return jsonOutput({
+      success: false,
+      message: "reason is required",
+    });
+  }
+
+  if (!completedBy) {
+    return jsonOutput({
+      success: false,
+      message: "completed_by is required",
+    });
+  }
+
+  if (!completedByUserId) {
+    return jsonOutput({
+      success: false,
+      message: "completed_by_user_id is required",
+    });
+  }
+
+  const centralDriverUserId = "U007";
+  const centralDriverName = "พขร.สนง.กลาง";
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const sheet = ensureBookingsSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const rowNumber = findRowByBookingId(table, bookingId);
+
+  logBookingAction("assignCentralVehicle", bookingId, rowNumber);
+
+  if (rowNumber <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Booking not found",
+    });
+  }
+
+  const rowValues = table.rows[rowNumber - 2].slice();
+  const statusCol = columnMap.status;
+  const bookingNoCol = columnMap.booking_no;
+  const requesterNameCol = columnMap.requester_name;
+  const startDatetimeCol = columnMap.start_datetime;
+  const endDatetimeCol = columnMap.end_datetime;
+  const destinationCol = columnMap.destination;
+  const purposeCol = columnMap.purpose;
+  const vehicleIdCol = ensureColumn(sheet, headers, "vehicle_id");
+  const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
+  const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
+  const driverUserIdCol = ensureColumn(sheet, headers, "driver_user_id");
+  const driverNameCol = ensureColumn(sheet, headers, "driver_name");
+  const staffNoteCol = ensureColumn(sheet, headers, "staff_note");
+  const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
+  const updatedByCol = ensureColumn(sheet, headers, "updated_by");
+  const assignmentModeCol = ensureColumn(sheet, headers, "assignment_mode");
+  const centralVehicleReasonCol = ensureColumn(sheet, headers, "central_vehicle_reason");
+  const centralVehicleCompletedAtCol = ensureColumn(sheet, headers, "central_vehicle_completed_at");
+  const centralVehicleCompletedByCol = ensureColumn(sheet, headers, "central_vehicle_completed_by");
+  const actualStartDatetimeCol = ensureColumn(sheet, headers, "actual_start_datetime");
+  const actualStartByCol = ensureColumn(sheet, headers, "actual_start_by");
+  const actualReturnDatetimeCol = ensureColumn(sheet, headers, "actual_return_datetime");
+  const actualReturnByCol = ensureColumn(sheet, headers, "actual_return_by");
+  const driverCancelRequestStatusCol = ensureColumn(sheet, headers, "driver_cancel_request_status");
+
+  const currentStatus = String(statusCol !== undefined ? rowValues[statusCol] : "").trim().toUpperCase();
+  if (currentStatus !== "PENDING") {
+    return jsonOutput({
+      success: false,
+      message: "อนุญาตให้ใช้รถ สนง.กลาง เฉพาะรายการที่รออนุมัติเท่านั้น",
+    });
+  }
+
+  const driverCancelRequestStatus = String(
+    driverCancelRequestStatusCol !== undefined && driverCancelRequestStatusCol !== -1
+      ? rowValues[driverCancelRequestStatusCol]
+      : ""
+  ).trim().toUpperCase();
+
+  if (driverCancelRequestStatus === "PENDING") {
+    return jsonOutput({
+      success: false,
+      message: "รายการนี้มีคำขอยกเลิกงานคนขับที่รออนุมัติอยู่",
+    });
+  }
+
+  rowValues[assignedUserIdCol] = centralDriverUserId;
+  rowValues[assignedUserNameCol] = centralDriverName;
+  rowValues[driverUserIdCol] = centralDriverUserId;
+  rowValues[driverNameCol] = centralDriverName;
+  rowValues[statusCol] = "COMPLETED";
+  rowValues[assignmentModeCol] = "CENTRAL_VEHICLE";
+  rowValues[centralVehicleReasonCol] = reason;
+  rowValues[centralVehicleCompletedAtCol] = nowIso;
+  rowValues[centralVehicleCompletedByCol] = completedBy;
+  rowValues[actualStartDatetimeCol] = nowIso;
+  rowValues[actualStartByCol] = completedBy;
+  rowValues[actualReturnDatetimeCol] = nowIso;
+  rowValues[actualReturnByCol] = completedBy;
+  rowValues[updatedAtCol] = now;
+  rowValues[updatedByCol] = completedBy;
+
+  const existingNote = String(rowValues[staffNoteCol] || "").trim();
+  rowValues[staffNoteCol] = existingNote
+    ? `${existingNote}\n[ใช้รถ สนง.กลาง] ${reason}`
+    : `[ใช้รถ สนง.กลาง] ${reason}`;
+
+  setRowValues(sheet, rowNumber, rowValues);
+
+  const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
+  const bookingNo = bookingNoCol !== undefined && bookingNoCol !== -1 ? String(rowValues[bookingNoCol] || "").trim() : "";
+
+  appendDriverJobLog_(
+    createDriverJobLogPayload_({
+      booking_id: bookingId,
+      booking_no: bookingNo,
+      driver_user_id: centralDriverUserId,
+      driver_name: centralDriverName,
+      assigned_user_id: centralDriverUserId,
+      assigned_user_name: centralDriverName,
+      vehicle_id: vehicleIdCol !== undefined && vehicleIdCol !== -1 ? rowValues[vehicleIdCol] || "" : "",
+      status: "COMPLETED",
+      action: "COMPLETED",
+      reason: reason,
+      requester_name: requesterNameCol !== undefined && requesterNameCol !== -1 ? rowValues[requesterNameCol] || "" : "",
+      start_datetime: startDatetimeCol !== undefined && startDatetimeCol !== -1 ? rowValues[startDatetimeCol] || "" : "",
+      end_datetime: endDatetimeCol !== undefined && endDatetimeCol !== -1 ? rowValues[endDatetimeCol] || "" : "",
+      destination: destinationCol !== undefined && destinationCol !== -1 ? rowValues[destinationCol] || "" : "",
+      purpose: purposeCol !== undefined && purposeCol !== -1 ? rowValues[purposeCol] || "" : "",
+      created_by: completedBy,
+      assigned_by_name: completedBy,
+      assigned_by: completedByUserId,
+    })
+  );
+
+  try {
+    const requesterUserId = resolveRequesterNotificationUserId_(updatedBooking);
+    if (requesterUserId) {
+      createNotification({
+        target_user_id: requesterUserId,
+        target_role: "",
+        title: String(updatedBooking.destination || "").trim() || "ใช้รถ สนง.กลาง",
+        message: reason,
+        type: "CENTRAL_VEHICLE_ASSIGNED",
+        booking_id: bookingId,
+        url: "/booking",
+        created_by: completedBy,
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          driver_user_id: centralDriverUserId,
+          driver_name: centralDriverName,
+          assignment_mode: "CENTRAL_VEHICLE",
+          reason: reason,
+          status: "COMPLETED",
+        }),
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("assignCentralVehicle notification failed", notificationErr);
+  }
+
+  return jsonOutput({
+    success: true,
+    message: "Assign central vehicle success",
+    data: updatedBooking,
+    created_notifications: getCreatedNotifications_(),
+  });
+}
+
 function startTrip(data) {
   const bookingSheet = ensureBookingsSheet();
   const logSheet = ensureVehicleLogsSheet();

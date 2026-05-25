@@ -348,6 +348,18 @@ export async function approveBooking(data) {
   return json.data;
 }
 
+export async function assignCentralVehicle(payload) {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings/assign-central-vehicle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+
+  invalidateApiCache(["bookings", "notifications", "driver_summary", "driver_job_logs"]);
+  emitNotificationsRefresh();
+  return json.data || json;
+}
+
 export async function backdateCompleteBooking(payload) {
   invalidateApiCache(["bookings", "driver_job_logs"]);
   const json = await fetchJson(`${API_BASE_URL}/api/backdate_complete_booking`, {

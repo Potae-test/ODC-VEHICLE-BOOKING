@@ -25,6 +25,11 @@ body.mobile-nav-open {
   overflow: hidden;
 }
 
+:root {
+  --app-header-height: 120px;
+  --app-mobile-header-height: 76px;
+}
+
 button,
 input,
 select,
@@ -80,17 +85,23 @@ button:hover {
 }
 
 .app-shell {
+  flex: 1;
+  width: 100%;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .gov-header {
-  height: 120px;
+  height: var(--app-header-height);
   background: linear-gradient(90deg, #073b8e, #1455c8);
   color: white;
   padding: 22px 32px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .brand {
@@ -605,7 +616,9 @@ button:hover {
 .layout {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: calc(100vh - 120px);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
@@ -615,6 +628,9 @@ button:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebar button {
@@ -642,7 +658,12 @@ button:hover {
 }
 
 .main-content {
+  min-width: 0;
+  min-height: 0;
   padding: 36px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 .page-header {
@@ -1069,10 +1090,12 @@ td {
 
 /* Login */
 .login-page {
+  width: 100%;
   min-height: 100vh;
   display: grid;
   place-items: center;
   background: #eaf2ff;
+  overflow-y: auto;
 }
 
 .login-card {
@@ -1164,11 +1187,12 @@ html,
 body,
 #root {
   width: 100%;
+  height: 100%;
   min-height: 100vh;
 }
 
 body {
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .app-shell {
@@ -2279,6 +2303,10 @@ label {
   margin-bottom: 24px;
 }
 
+.admin-booking-toolbar {
+  margin-bottom: 0;
+}
+
 .permission-toolbar {
   gap: 12px;
   flex-wrap: wrap;
@@ -3200,7 +3228,6 @@ label {
 .fc .fc-col-header-cell-cushion {
   color: #073b8e;
   font-weight: 800;
-  font-size: 18px;
   padding: 10px 4px;
   text-decoration: none;
 }
@@ -3212,7 +3239,7 @@ label {
 }
 
 .calendar-shell .fc .fc-daygrid-day-frame {
-  min-height: 140px;
+  /* min-height: 140px; */
   padding: 6px;
   position: relative;
   overflow: visible !important;
@@ -3694,7 +3721,8 @@ label {
   }
 
   .app-shell {
-    padding-top: 76px;
+    padding-top: var(--app-mobile-header-height);
+    min-height: 100vh;
   }
 
   .gov-header {
@@ -3703,7 +3731,7 @@ label {
     left: 0;
     right: 0;
     z-index: 40;
-    min-height: 76px;
+    min-height: var(--app-mobile-header-height);
     padding: 12px;
     gap: 12px;
     flex-direction: row;
@@ -3803,12 +3831,13 @@ label {
 
   .layout {
     display: block;
-    min-height: auto;
+    height: calc(100vh - var(--app-mobile-header-height));
+    min-height: 0;
   }
 
   .sidebar {
     position: fixed;
-    top: 76px;
+    top: var(--app-mobile-header-height);
     left: 0;
     bottom: 0;
     width: min(320px, calc(100vw - 44px));
@@ -3837,6 +3866,7 @@ label {
 
   .main-content {
     padding: 12px;
+    height: 100%;
   }
 
   .page-header {

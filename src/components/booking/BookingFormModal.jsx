@@ -9,9 +9,8 @@ import { FEATURES } from "../../config/features";
 
 const DEFAULT_VEHICLE_TYPES = ["VAN", "SEDAN", "MOTORCYCLE", "OTHER"];
 
-function isStaffOrAdmin(user) {
-  const role = String(user?.role || "").trim().toUpperCase();
-  return role === "STAFF" || role === "ADMIN";
+function isStandardUser(user) {
+  return String(user?.role || "").trim().toUpperCase() === "USER";
 }
 
 function escapeHtml(value) {
@@ -218,20 +217,36 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
 }
 
 const BookingFormModal = forwardRef(function BookingFormModal(
-  { overlapCandidates = [], vehicleTypes = DEFAULT_VEHICLE_TYPES, onSuccess, currentUser },
+  { overlapCandidates = [], vehicleTypes = DEFAULT_VEHICLE_TYPES, onSuccess, currentUser, showBackdatedCheckbox = false },
   ref
 ) {
   const open = useCallback(
     async ({ booking = null } = {}) => {
+      const userOwnedCreateFlow = !booking && isStandardUser(currentUser);
+      const initialBooking = {
+        ...booking,
+        requester_name: userOwnedCreateFlow
+          ? currentUser?.name || currentUser?.email || booking?.requester_name || ""
+          : booking?.requester_name || "",
+        requester_user_id: userOwnedCreateFlow
+          ? currentUser?.user_id || booking?.requester_user_id || ""
+          : booking?.requester_user_id || "",
+        department: userOwnedCreateFlow
+          ? currentUser?.department || booking?.department || ""
+          : booking?.department || "",
+        phone: userOwnedCreateFlow
+          ? currentUser?.phone || booking?.phone || ""
+          : booking?.phone || "",
+      };
       const datetimeState = {
-        start_datetime: booking?.start_datetime || createEmptyThaiDateTime(),
-        end_datetime: booking?.end_datetime || createEmptyThaiDateTime(),
+        start_datetime: initialBooking.start_datetime || createEmptyThaiDateTime(),
+        end_datetime: initialBooking.end_datetime || createEmptyThaiDateTime(),
       };
       let datetimeRoot = null;
 
       const result = await Swal.fire({
         title: booking ? "แก้ไขรายการจอง" : "เพิ่มรายการจอง",
-        html: buildModalHtml(booking, vehicleTypes, isStaffOrAdmin(currentUser)),
+        html: buildModalHtml(initialBooking, vehicleTypes, Boolean(showBackdatedCheckbox)),
         width: 780,
         showCancelButton: true,
         confirmButtonText: booking ? "บันทึก" : "ส่งคำขอจองรถ",
@@ -257,7 +272,7 @@ const BookingFormModal = forwardRef(function BookingFormModal(
           const updateWarning = () => {
             const overlaps = getOverlapBookings(
               overlapCandidates,
-              getBookingId(booking),
+              getBookingId(initialBooking),
               datetimeState.start_datetime,
               datetimeState.end_datetime
             );
@@ -296,8 +311,20 @@ const BookingFormModal = forwardRef(function BookingFormModal(
           const destination = document.getElementById("destination")?.value.trim();
           const purpose = document.getElementById("purpose")?.value.trim();
           const isBackdatedInput = document.getElementById("is_backdated");
+          const resolvedRequesterName = isStandardUser(currentUser)
+            ? currentUser?.name || currentUser?.email || requester_name
+            : requester_name;
+          const resolvedRequesterUserId = isStandardUser(currentUser)
+            ? currentUser?.user_id || initialBooking.requester_user_id || ""
+            : initialBooking.requester_user_id || "";
+          const resolvedDepartment = isStandardUser(currentUser)
+            ? currentUser?.department || department || initialBooking.department || ""
+            : department;
+          const resolvedPhone = isStandardUser(currentUser)
+            ? currentUser?.phone || phone || initialBooking.phone || ""
+            : phone;
 
-          if (!requester_name || !phone || !start_datetime || !end_datetime || !destination) {
+          if (!resolvedRequesterName || !resolvedPhone || !start_datetime || !end_datetime || !destination) {
             Swal.showValidationMessage("กรุณากรอกข้อมูลที่จำเป็นให้ครบ");
             return false;
           }
@@ -309,10 +336,10 @@ const BookingFormModal = forwardRef(function BookingFormModal(
 
           return {
             booking_id: booking?.booking_id || "",
-            requester_name,
-            requester_user_id: currentUser?.user_id || "",
-            department,
-            phone,
+            requester_name: resolvedRequesterName,
+            requester_user_id: resolvedRequesterUserId,
+            department: resolvedDepartment,
+            phone: resolvedPhone,
             start_datetime,
             end_datetime,
             vehicle_type_request,
@@ -321,6 +348,9 @@ const BookingFormModal = forwardRef(function BookingFormModal(
             vehicle_id: booking?.vehicle_id || "",
             created_by_user_id: currentUser?.user_id || "",
             created_by: currentUser?.name || currentUser?.email || "",
+            updated_by_user_id: currentUser?.user_id || "",
+            updated_by: currentUser?.name || currentUser?.email || "",
+            updated_by_role: currentUser?.role || "",
             is_backdated: isBackdatedInput
               ? isBackdatedInput.checked
                 ? "TRUE"

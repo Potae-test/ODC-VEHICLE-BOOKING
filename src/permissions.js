@@ -1,7 +1,7 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
 export const PERMISSION_CONFIG_VERSION = "2026-05-16.3";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-17.1";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-26.3";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
@@ -60,9 +60,12 @@ export const ACTION_PERMISSION_GROUPS = [
       { id: "bookings_view", label: "ดูรายการจอง" },
       { id: "bookings_detail", label: "ดูรายละเอียดรายการจอง" },
       { id: "bookings_create", label: "สร้างรายการจอง" },
+      { id: "bookings_create_backdated", label: "เห็น checkbox บันทึกรายการย้อนหลัง" },
+      { id: "bookings_backdate_complete", label: "บันทึกงานย้อนหลัง" },
       { id: "bookings_edit", label: "แก้ไขรายการจอง" },
       { id: "bookings_delete", label: "ลบรายการจอง" },
       { id: "bookings_approve", label: "อนุมัติรายการจอง" },
+      { id: "bookings_assign_central_vehicle", label: "ใช้รถ สนง.กลาง" },
       { id: "bookings_cancel", label: "ยกเลิกรายการจอง" },
     ],
   },
@@ -145,12 +148,16 @@ export const ACTION_PERMISSION_GROUPS = [
   {
     id: "booking_manual_override",
     label: "เลือกคนขับเอง",
-    permissions: [{ id: "booking_manual_driver_override", label: "เลือกคนขับเองตอนอนุมัติ" }],
+    permissions: [
+      { id: "booking_manual_driver_override", label: "เลือกคนขับเองตอนอนุมัติ" },
+    ],
   },
   {
     id: "settings",
     label: "ตั้งค่า",
-    permissions: [{ id: "settings_manage", label: "จัดการการตั้งค่า" }],
+    permissions: [
+      { id: "settings_manage", label: "จัดการการตั้งค่า" },
+    ],
   },
 ];
 
@@ -163,7 +170,11 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "bookings_detail",
     "bookings_edit",
     "bookings_create",
+    "bookings_create_backdated",
+    "bookings_backdate_complete",
     "bookings_approve",
+    "bookings_assign_central_vehicle",
+    "bookings_backdate_complete",
     "bookings_cancel",
     "bookings_delete",
     "drivers_view",
@@ -200,6 +211,9 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "bookings_cancel",
     "driver_jobs_complete",
     "calendar_active_drivers_view",
+    "bookings_create_backdated",
+    "bookings_assign_central_vehicle",
+    "bookings_backdate_complete",
   ],
   DRIVER: [
     "bookings_view",

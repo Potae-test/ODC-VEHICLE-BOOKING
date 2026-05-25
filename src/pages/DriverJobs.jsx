@@ -242,6 +242,10 @@ function getDriverCancelRequestStatus(booking) {
   return normalizeStatus(booking.driver_cancel_request_status);
 }
 
+function isPendingDriverCancel(booking) {
+  return getDriverCancelRequestStatus(booking) === "PENDING";
+}
+
 function getDriverCancelRequestStateLabel(booking) {
   if (isCompletedBooking(booking)) {
     return "";
@@ -297,8 +301,7 @@ function DriverJobTableActions({
   canComplete,
 }) {
   const status = normalizeStatus(booking.status);
-  const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
-  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
+  const hasPendingDriverCancelRequest = isPendingDriverCancel(booking);
   const disabled = Boolean(processing);
 
   return (
@@ -349,7 +352,7 @@ const JobCard = memo(function JobCard({
   const endLabel = formatThaiDateTime(booking.end_datetime);
   const assignedUserLabel = getAssignedUserLabel(booking);
   const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
-  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
+  const hasPendingDriverCancelRequest = isPendingDriverCancel(booking);
   const hasRejectedDriverCancelRequest = driverCancelRequestStatus === "REJECTED";
   const managingOnBehalf =
     (currentRole === "ADMIN" || currentRole === "STAFF") && isManagingOnBehalf(booking, currentUser);
@@ -537,12 +540,7 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
-          return (
-            isToday(booking.start_datetime, todayKey) &&
-            status === "APPROVED" &&
-            driverCancelRequestStatus !== "PENDING"
-          );
+          return isToday(booking.start_datetime, todayKey) && status === "APPROVED" && !isPendingDriverCancel(booking);
         })
       ),
     [assignedBookings, todayKey]
@@ -553,8 +551,7 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
-          return status === "APPROVED" && driverCancelRequestStatus !== "PENDING";
+          return status === "APPROVED" && !isPendingDriverCancel(booking);
         })
       ),
     [assignedBookings]
@@ -616,14 +613,17 @@ export default function DriverJobs() {
       setProcessingAction({ bookingId: booking.booking_id, type: "start" });
       const nowIso = new Date().toISOString();
       const startBy = currentUser?.name || currentUser?.email || "";
+      const assignedUserId = booking.assigned_user_id || currentUser?.user_id || "";
+      const assignedUserName =
+        booking.assigned_user_name || booking.driver_name || currentUser?.name || currentUser?.email || "";
       const response = await startTrip({
         booking_id: booking.booking_id,
         out_time: nowIso,
         actual_start_datetime: nowIso,
         actual_start_by: startBy,
         out_mileage: "",
-        assigned_user_id: currentUser?.user_id || "",
-        assigned_user_name: currentUser?.name || currentUser?.email || "",
+        assigned_user_id: assignedUserId,
+        assigned_user_name: assignedUserName,
       });
 
       if (response?.success === false) {
@@ -633,7 +633,11 @@ export default function DriverJobs() {
 
       await showSuccess("เริ่มงานและบันทึกการออกรถสำเร็จ");
       mergeBooking(booking.booking_id, {
+        ...(response || {}),
         status: "IN_USE",
+        assigned_user_id: assignedUserId,
+        assigned_user_name: assignedUserName,
+        driver_name: booking.driver_name || assignedUserName,
         actual_start_datetime: nowIso,
         actual_start_by: startBy,
         updated_at: nowIso,
@@ -676,6 +680,9 @@ export default function DriverJobs() {
       setProcessingAction({ bookingId: booking.booking_id, type: "complete" });
       const nowIso = new Date().toISOString();
       const returnBy = currentUser?.name || currentUser?.email || "";
+      const assignedUserId = booking.assigned_user_id || currentUser?.user_id || "";
+      const assignedUserName =
+        booking.assigned_user_name || booking.driver_name || currentUser?.name || currentUser?.email || "";
       await completeTrip({
         booking_id: booking.booking_id,
         in_time: nowIso,
@@ -683,8 +690,8 @@ export default function DriverJobs() {
         actual_return_by: returnBy,
         in_mileage: "",
         remark: "",
-        assigned_user_id: currentUser?.user_id || "",
-        assigned_user_name: currentUser?.name || "",
+        assigned_user_id: assignedUserId,
+        assigned_user_name: assignedUserName,
       });
 
       await showSuccess("จบงานและบันทึกการคืนรถสำเร็จ");
@@ -892,7 +899,7 @@ export default function DriverJobs() {
                           {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
                           <td>
                             {renderStatusBadge(job.status)}
-                            {getDriverCancelRequestStatus(job) === "PENDING" && (
+                            {isPendingDriverCancel(job) && (
                               <div style={{ marginTop: 6 }}>
                                 <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
                               </div>
@@ -905,7 +912,7 @@ export default function DriverJobs() {
                           </td>
                           <td>
                             {job.staff_note || job.note || "-"}
-                            {getDriverCancelRequestStatus(job) === "PENDING" && job.driver_cancel_request_reason && (
+                            {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
                               <div className="driver-job-cancel-note">
                                 เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
                               </div>
@@ -1022,7 +1029,7 @@ export default function DriverJobs() {
                           {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
                           <td>
                             {renderStatusBadge(job.status)}
-                            {getDriverCancelRequestStatus(job) === "PENDING" && (
+                            {isPendingDriverCancel(job) && (
                               <div style={{ marginTop: 6 }}>
                                 <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
                               </div>
@@ -1035,7 +1042,7 @@ export default function DriverJobs() {
                           </td>
                           <td>
                             {job.staff_note || job.note || "-"}
-                            {getDriverCancelRequestStatus(job) === "PENDING" && job.driver_cancel_request_reason && (
+                            {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
                               <div className="driver-job-cancel-note">
                                 เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
                               </div>
