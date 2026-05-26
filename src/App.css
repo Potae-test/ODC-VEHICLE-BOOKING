@@ -3343,11 +3343,11 @@ label {
 }
 
 .fc .fc-day-today-custom {
-  background: #eef4ff !important;
+  background: #f8fbff !important;
 }
 
 .fc .fc-day-today-custom .fc-daygrid-day-frame {
-  box-shadow: inset 0 0 0 2px #2563eb;
+  box-shadow: inset 0 0 0 1px #93c5fd;
   border-radius: 14px;
 }
 
@@ -3372,18 +3372,30 @@ label {
 }
 
 .calendar-shell .fc .fc-daygrid-more-link {
-  display: block !important;
+  display: inline-flex !important;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
   text-decoration: none !important;
+  color: #1455c8;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
 }
 
 .calendar-shell .fc .fc-daygrid-more-link:hover {
-  text-decoration: underline;
+  background: transparent !important;
+  color: #0f429f;
+  text-decoration: none;
 }
 
 .calendar-shell .fc .fc-daygrid-event {
   display: flex !important;
   align-items: center !important;
-  min-height: 32px;
+  min-height: 26px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #dbe4f0 !important;
@@ -3397,7 +3409,7 @@ label {
   align-items: center !important;
   height: 100%;
   width: 100%;
-  padding: 0 8px;
+  padding: 0 6px;
   line-height: 1;
 }
 
@@ -3405,7 +3417,7 @@ label {
   position: relative;
   display: block;
   width: 100%;
-  padding: 0 8px 0 12px;
+  padding: 0 6px 0 10px;
 }
 
 .fc .fc-daygrid-event .fc-event-main-frame::before {
@@ -3421,9 +3433,9 @@ label {
 .calendar-shell .fc .fc-event-title {
   display: block;
   width: 100%;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.05;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3461,7 +3473,7 @@ label {
 }
 
 .fc .fc-daygrid-day-events:has(.fc-daygrid-event) {
-  padding-bottom: 2px;
+  padding-bottom: 0;
 }
 
 .fc .fc-daygrid-day-bottom {
@@ -3469,13 +3481,44 @@ label {
 }
 
 .calendar-more-pill {
-  background: #f1f1f1;
-  color: #111827;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #1455c8;
   text-align: center;
-  padding: 4px 6px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
   cursor: pointer;
+}
+
+.calendar-shell .fc .calendar-pending-pill,
+.calendar-shell .fc button.calendar-pending-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 24px;
+  max-width: 100%;
+  width: auto;
+  padding: 2px 8px;
+  border-width: 1px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.15;
+  box-shadow: none !important;
+  white-space: nowrap;
+}
+
+.calendar-shell .fc .calendar-pending-pill:hover,
+.calendar-shell .fc button.calendar-pending-pill:hover {
+  background: #fde68a;
+  box-shadow: none !important;
 }
 
 .calendar-modal-status-badge {
@@ -4155,12 +4198,12 @@ label {
   }
 
   .calendar-shell .fc .fc-daygrid-day-frame {
-    min-height: 96px;
+    min-height: 88px;
   }
 
   .calendar-shell .fc .fc-event-title {
-    white-space: normal;
-    line-height: 1.15;
+    white-space: nowrap;
+    line-height: 1.05;
   }
 
   .calendar-info-grid {
@@ -4456,5 +4499,222 @@ label {
 
   .mobile-data-card {
     padding: 16px 14px;
+  }
+}
+
+/* Shared controls refresh */
+.form-grid label,
+.booking-filter-row-3 label,
+.booking-filter-row-4 label,
+.driver-unavailable-filters label,
+.permission-action-header label,
+.staff-info-grid span,
+.mobile-data-card-grid span {
+  color: #334155;
+  font-weight: 800;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea,
+.booking-filter-row-3 input,
+.booking-filter-row-3 select,
+.booking-filter-row-4 input,
+.booking-filter-row-4 select,
+.driver-unavailable-filters input,
+.driver-unavailable-filters select,
+.permission-action-header select,
+.login-card input {
+  border: 1px solid #cbd5e1;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.form-grid input:focus,
+.form-grid select:focus,
+.form-grid textarea:focus,
+.booking-filter-row-3 input:focus,
+.booking-filter-row-3 select:focus,
+.booking-filter-row-4 input:focus,
+.booking-filter-row-4 select:focus,
+.driver-unavailable-filters input:focus,
+.driver-unavailable-filters select:focus,
+.permission-action-header select:focus,
+.login-card input:focus {
+  outline: 3px solid #dbeafe;
+  border-color: #60a5fa;
+}
+
+.page-header > button,
+.section-toolbar button,
+.section-header button,
+.booking-create-wrapper button,
+.driver-unavailable-actions button,
+.mobile-data-card-actions button,
+.driver-job-actions button,
+.staff-card button,
+.permission-toolbar button,
+.login-card button,
+.pagination button {
+  min-height: 48px;
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.page-header > button:hover:not(:disabled),
+.section-toolbar button:hover:not(:disabled),
+.section-header button:hover:not(:disabled),
+.booking-create-wrapper button:hover:not(:disabled),
+.driver-unavailable-actions button:hover:not(:disabled),
+.mobile-data-card-actions button:hover:not(:disabled),
+.driver-job-actions button:hover:not(:disabled),
+.staff-card button:hover:not(:disabled),
+.permission-toolbar button:hover:not(:disabled),
+.login-card button:hover:not(:disabled),
+.pagination button:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+}
+
+.warning-button,
+.info-button,
+.success-button,
+.success-button-2,
+.danger-button,
+.danger-dark-button,
+.edit-button,
+.cyan-button {
+  min-height: 48px;
+  border-radius: 18px;
+}
+
+.status,
+.section-counter,
+.booking-status-count,
+.driver-job-cancel-request-badge,
+.driver-job-cancel-request-inline,
+.calendar-modal-status-badge {
+  font-weight: 800;
+}
+
+.pagination {
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.pagination button {
+  min-width: 48px;
+  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e3a8a;
+  font-weight: 800;
+}
+
+.pagination button.active-page {
+  border-color: #1455c8;
+  background: #1455c8;
+  color: #ffffff;
+}
+
+.staff-section {
+  border: 1px solid #dbe6f3;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(15, 47, 92, 0.06);
+  overflow: hidden;
+}
+
+.staff-card-list {
+  gap: 16px;
+}
+
+.staff-card {
+  border: 1px solid #dbe6f3;
+  border-radius: 22px;
+  background: #f8fbff;
+  box-shadow: 0 4px 14px rgba(15, 47, 92, 0.05);
+}
+
+.staff-card-header {
+  gap: 12px;
+}
+
+.staff-card-title {
+  color: #0f3d91;
+}
+
+.staff-info-grid {
+  gap: 14px;
+}
+
+.staff-info-grid b {
+  color: #0f172a;
+}
+
+.login-page {
+  background: linear-gradient(180deg, #dbeafe 0%, #eff6ff 48%, #f8fbff 100%);
+}
+
+.login-card {
+  border: 1px solid #dbe6f3;
+  box-shadow: 0 18px 36px rgba(15, 47, 92, 0.12);
+}
+
+.login-card label {
+  color: #173b69;
+}
+
+.skeleton-card,
+.skeleton-calendar-card,
+.skeleton-table {
+  border-color: #dbe6f3;
+  box-shadow: 0 6px 18px rgba(15, 47, 92, 0.05);
+}
+
+.skeleton-calendar-cell {
+  border-radius: 20px;
+}
+
+.permission-card,
+.permission-action-header,
+.permission-toolbar {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .page-header > button,
+  .section-toolbar button,
+  .section-header button,
+  .booking-create-wrapper button,
+  .driver-unavailable-actions button,
+  .mobile-data-card-actions button,
+  .driver-job-actions button,
+  .staff-card button,
+  .permission-toolbar button,
+  .login-card button,
+  .pagination button,
+  .warning-button,
+  .info-button,
+  .success-button,
+  .success-button-2,
+  .danger-button,
+  .danger-dark-button,
+  .edit-button,
+  .cyan-button {
+    min-height: 44px;
+  }
+
+  .staff-section {
+    border-radius: 22px;
+  }
+
+  .staff-card {
+    border-radius: 18px;
+  }
+
+  .login-card {
+    box-shadow: 0 10px 24px rgba(15, 47, 92, 0.1);
   }
 }

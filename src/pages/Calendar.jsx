@@ -42,6 +42,77 @@ const CALENDAR_MESSAGES = {
   noEventsInRange: "ไม่มีรายการในช่วงนี้",
 };
 
+function CalendarIcon({ children, className = "h-5 w-5" }) {
+  return (
+    <span className={`inline-flex items-center justify-center ${className}`} aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
+function RefreshIcon(props) {
+  return (
+    <CalendarIcon {...props}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+        <path d="M21 3v6h-6" />
+      </svg>
+    </CalendarIcon>
+  );
+}
+
+function PlusIcon(props) {
+  return (
+    <CalendarIcon {...props}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
+        <path d="M12 5v14" />
+        <path d="M5 12h14" />
+      </svg>
+    </CalendarIcon>
+  );
+}
+
+function CalendarMonthIcon(props) {
+  return (
+    <CalendarIcon {...props}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <path d="M16 2v4" />
+        <path d="M8 2v4" />
+        <path d="M3 10h18" />
+      </svg>
+    </CalendarIcon>
+  );
+}
+
+function UsersIcon(props) {
+  return (
+    <CalendarIcon {...props}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+        <circle cx="9" cy="7" r="4" />
+        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    </CalendarIcon>
+  );
+}
+
+function ListOrderedIcon(props) {
+  return (
+    <CalendarIcon {...props}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-full w-full">
+        <path d="M10 6h11" />
+        <path d="M10 12h11" />
+        <path d="M10 18h11" />
+        <path d="M4 6h1v4" />
+        <path d="M4 10h2" />
+        <path d="M6 18H4c0-1 2-2 2-3a1 1 0 0 0-2 0" />
+      </svg>
+    </CalendarIcon>
+  );
+}
+
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
@@ -364,84 +435,50 @@ const CalendarToolbar = memo(function CalendarToolbar({
 }) {
   const toolbarDate = date instanceof Date ? date : new Date(date || Date.now());
   const label = formatCalendarToolbarLabel(toolbarDate, calendarLang);
-
-  const buttonStyle = {
-    border: "1px solid #cbd5e1",
-    background: "#fff",
-    color: "#0f172a",
-    borderRadius: 10,
-    padding: "8px 12px",
-    fontSize: 20,
-    fontWeight: "bold",
-    cursor: "pointer",
-  };
-
-  const activeButtonStyle = {
-    background: "#16a34a",
-    borderColor: "#16a34a",
-    color: "#fff",
-  };
+  const navButtonClassName =
+    "inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[22px] font-bold text-slate-800 shadow-sm transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800";
+  const langButtonClassName =
+    "inline-flex min-h-11 min-w-[56px] items-center justify-center rounded-xl border px-4 py-2.5 text-[20px] font-bold shadow-sm transition";
+  const getLangButtonClassName = (lang) =>
+    calendarLang === lang
+      ? `${langButtonClassName} border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700`
+      : `${langButtonClassName} border-slate-200 bg-white text-slate-800 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800`;
 
   return (
-    <div
-      className="calendar-toolbar"
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        marginBottom: 12,
-      }}
-    >
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        <button type="button" style={buttonStyle} onClick={() => onNavigate("TODAY")}>
+    <div className="calendar-toolbar flex flex-col gap-3 rounded-2xl border border-sky-100 bg-slate-50/80 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={navButtonClassName} onClick={() => onNavigate("TODAY")}>
           {CALENDAR_MESSAGES[calendarLang].today}
         </button>
-        <button type="button" style={buttonStyle} onClick={() => onNavigate("PREV")}>
+        <button type="button" className={navButtonClassName} onClick={() => onNavigate("PREV")}>
           {CALENDAR_MESSAGES[calendarLang].previous}
         </button>
-        <button type="button" style={buttonStyle} onClick={() => onNavigate("NEXT")}>
+        <button type="button" className={navButtonClassName} onClick={() => onNavigate("NEXT")}>
           {CALENDAR_MESSAGES[calendarLang].next}
         </button>
       </div>
 
-      <div
-        className="calendar-toolbar-label"
-        style={{
-          flex: "1 1 240px",
-          textAlign: "center",
-          color: "#0f172a",
-          fontSize: 30,
-          fontWeight: 700,
-          lineHeight: 1.2,
-        }}
-      >
+      <div className="calendar-toolbar-label flex min-w-0 flex-1 items-center justify-center gap-2 text-center text-[28px] font-bold leading-tight text-blue-900 sm:text-[32px]">
+        <CalendarMonthIcon className="h-6 w-6 text-sky-700 sm:h-7 sm:w-7" />
         {label}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto">
         <button
           type="button"
-          style={{
-            ...buttonStyle,
-            ...(calendarLang === "th" ? activeButtonStyle : null),
-            minWidth: 52,
-          }}
+          className={getLangButtonClassName("th")}
           onClick={() => onChangeCalendarLang("th")}
         >
           TH
         </button>
         <button
           type="button"
-          style={{
-            ...buttonStyle,
-            ...(calendarLang === "en" ? activeButtonStyle : null),
-            minWidth: 52,
-          }}
+          className={getLangButtonClassName("en")}
           onClick={() => onChangeCalendarLang("en")}
         >
           EN
         </button>
+      </div>
     </div>
   );
 });
@@ -979,7 +1016,7 @@ export default function CalendarPage() {
       const pendingCount = pendingCountByDate.get(dateKey);
 
       return (
-        <div style={{ display: "grid", gap: 4 }}>
+        <div className="grid gap-1">
           <div className="fc-daygrid-day-number">{arg.dayNumberText}</div>
           {pendingCount > 0 && (
             <button
@@ -989,19 +1026,7 @@ export default function CalendarPage() {
                 event.stopPropagation();
                 handlePendingBadgeClick(arg.date);
               }}
-              style={{
-                border: "none",
-                borderRadius: 6,
-                background: "#fef3c7",
-                color: "#000000",
-                padding: "2px 6px",
-                minHeight: 0,
-                fontSize: 12,
-                fontWeight: 700,
-                lineHeight: 1.3,
-                textAlign: "left",
-                cursor: "pointer",
-              }}
+              className="calendar-pending-pill inline-flex min-h-0 items-center rounded-md border border-amber-200 bg-amber-100 px-2 py-1 text-left text-[12px] font-bold leading-tight text-amber-950 transition hover:bg-amber-200"
             >
               +{pendingCount} รออนุมัติ
             </button>
@@ -1013,14 +1038,29 @@ export default function CalendarPage() {
   );
 
   return (
-    <div>
-      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
-        <div>
-          <h2>ปฏิทินการจอง</h2>
-          <p>แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. พร้อมปฏิบัติงาน</p>
+    <div className="space-y-4 overflow-x-hidden sm:space-y-6">
+      <div className="page-header flex flex-col gap-4 rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between lg:px-7">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-800 shadow-sm">
+              <CalendarMonthIcon className="h-6 w-6" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-[34px] font-bold leading-tight text-blue-900">ปฏิทินการจอง</h2>
+              <p className="mt-1 text-[23px] leading-snug text-slate-500">
+                แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. พร้อมปฏิบัติงาน
+              </p>
+            </div>
+          </div>
         </div>
 
-        <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
+        <button
+          type="button"
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-4 py-2.5 text-[24px] font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+          disabled={refreshing || loading}
+          onClick={() => loadData({ refreshOnly: true })}
+        >
+          <RefreshIcon className="h-5 w-5" />
           รีเฟรชข้อมูล
         </button>
       </div>
@@ -1033,188 +1073,167 @@ export default function CalendarPage() {
         showBackdatedCheckbox={hasPermission(null, "bookings_create_backdated")}
       />
 
-
-
-      <div
-        className="form-card"
-        style={{
-          fontSize: "18px",
-          lineHeight: 1.7,
-        }}
-      >
+      <div className="form-card overflow-hidden rounded-3xl border border-sky-100 bg-white px-4 py-4 text-[18px] leading-[1.7] shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-6">
         {visibleLoading ? (
           <CalendarSkeleton />
         ) : (
           <>
-            <div style={{ marginBottom: 16 }}>
-              <div className="calendar-status-legend" style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-                <span className="status amber" style={{ fontSize: 16, padding: "6px 12px" }}>
+            <div className="mb-4 rounded-2xl border border-sky-100 bg-slate-50/80 p-4 sm:p-5">
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-800">
+                    <CalendarMonthIcon className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="m-0 text-[27px] font-bold leading-tight text-blue-900">สถานะที่แสดงในปฏิทิน</h3>
+                    <p className="mt-1 text-[22px] leading-snug text-slate-500">แสดงรายการจองตามสถานะทั้งหมด</p>
+                  </div>
+                </div>
+              </div>
+              <div className="calendar-status-legend flex flex-wrap gap-3">
+                <span className="status amber border border-amber-200 text-[20px] font-bold">
                   รออนุมัติ
                 </span>
-                <span className="status blue" style={{ fontSize: 16, padding: "6px 12px" }}>
+                <span className="status blue border border-blue-200 text-[20px] font-bold">
                   อนุมัติแล้ว
                 </span>
-                <span className="status green" style={{ fontSize: 16, padding: "6px 12px" }}>
+                <span className="status green border border-emerald-200 text-[20px] font-bold">
                   กำลังใช้งาน
                 </span>
-                <span className="status red" style={{ fontSize: 16, padding: "6px 12px" }}>
+                <span className="status red border border-red-200 text-[20px] font-bold">
                   พขร. ติดภารกิจอื่นๆ
                 </span>
               </div>
-              <div style={{ color: "#475569" }}>
-                แสดงรายการจองตามสถานะทั้งหมด
+            </div>
+
+            {error && !visibleLoading && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-[23px] font-bold text-red-700">
+                {error}
               </div>
-            </div>
-
-        {error && !visibleLoading && <div style={{ padding: "24px 0", color: "#b91c1c" }}>{error}</div>}
-
-        {!visibleLoading && !error && (
-          <div
-            className="calendar-shell"
-            style={{
-              background: "#fff",
-              border: "1px solid #e2e8f0",
-              borderRadius: 16,
-              padding: 12,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-              <button
-                type="button"
-                style={{
-                  backgroundColor: "#1455c8",
-                  color: "#fff",
-                  border: "none",
-                }}
-                className="calendar-create-button"
-                disabled={!canCreateBookings}
-                onClick={() =>
-                  openBookingForm({
-                    defaultStart: new Date(),
-                    defaultEnd: new Date(Date.now() + 60 * 60 * 1000),
-                  })
-                }
-              >
-                ➕ เพิ่มรายการจองใหม่
-              </button>
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <CalendarToolbar
-                date={calendarDate}
-                onNavigate={handleNavigate}
-                calendarLang={calendarLang}
-                onChangeCalendarLang={setCalendarLang}
-              />
-            </div>
-
-            <FullCalendar
-              ref={fullCalendarRef}
-              plugins={[dayGridPlugin, interactionPlugin]}
-              initialView="dayGridMonth"
-              height="auto"
-              locale={calendarLang === "th" ? "th" : "en"}
-              locales={[thLocale]}
-              firstDay={0}
-              events={fullCalendarEvents}
-              eventClick={handleFullCalendarEventClick}
-              moreLinkClick={handleMoreLinkClick}
-              dayMaxEvents={3}
-              eventDisplay="block"
-              expandRows={true}
-              stickyHeaderDates={true}
-              moreLinkContent={(args) => ({
-                html: `<div class="calendar-more-pill">+${args.num}</div>`,
-              })}
-              moreLinkDidMount={(arg) => {
-                arg.el.title = "ดูรายการทั้งหมดของวันนี้";
-              }}
-              fixedWeekCount={false}
-              showNonCurrentDates={true}
-              headerToolbar={false}
-              dayCellContent={dayCellContent}
-              dayCellClassNames={dayCellClassNames}
-            />
-
-            {calendarEvents.length === 0 && (
-              <div style={{ marginTop: 12, color: "#475569" }}>ไม่มีรายการที่ต้องแสดงในช่วงนี้</div>
             )}
-          </div>
-        )}
+
+            {!visibleLoading && !error && (
+              <div className="calendar-shell overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="mb-3 flex justify-end">
+                  <button
+                    type="button"
+                    className="calendar-create-button inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-4 py-2.5 text-[24px] font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+                    disabled={!canCreateBookings}
+                    onClick={() =>
+                      openBookingForm({
+                        defaultStart: new Date(),
+                        defaultEnd: new Date(Date.now() + 60 * 60 * 1000),
+                      })
+                    }
+                  >
+                    <PlusIcon className="h-5 w-5" />
+                    เพิ่มรายการจองใหม่
+                  </button>
+                </div>
+                <div className="mb-3">
+                  <CalendarToolbar
+                    date={calendarDate}
+                    onNavigate={handleNavigate}
+                    calendarLang={calendarLang}
+                    onChangeCalendarLang={setCalendarLang}
+                  />
+                </div>
+
+                <FullCalendar
+                  ref={fullCalendarRef}
+                  plugins={[dayGridPlugin, interactionPlugin]}
+                  initialView="dayGridMonth"
+                  height="auto"
+                  locale={calendarLang === "th" ? "th" : "en"}
+                  locales={[thLocale]}
+                  firstDay={0}
+                  events={fullCalendarEvents}
+                  eventClick={handleFullCalendarEventClick}
+                  moreLinkClick={handleMoreLinkClick}
+                  dayMaxEvents={3}
+                  eventDisplay="block"
+                  expandRows={true}
+                  stickyHeaderDates={true}
+                  moreLinkContent={(args) => ({
+                    html: `<div class="calendar-more-pill">+${args.num}</div>`,
+                  })}
+                  moreLinkDidMount={(arg) => {
+                    arg.el.title = "ดูรายการทั้งหมดของวันนี้";
+                  }}
+                  fixedWeekCount={false}
+                  showNonCurrentDates={true}
+                  headerToolbar={false}
+                  dayCellContent={dayCellContent}
+                  dayCellClassNames={dayCellClassNames}
+                />
+
+                {calendarEvents.length === 0 && (
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-[22px] text-slate-500">
+                    ไม่มีรายการที่ต้องแสดงในช่วงนี้
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
       {(canViewActiveDriversSummary || canViewNextQueueDriver) && (
-        <div className="form-card" style={{ marginBottom: 24 }}>
+        <div className="form-card rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           <div
-            className="calendar-info-grid"
-            style={{
-              display: "grid",
-              gap: 16,
-              gridTemplateColumns:
-                canViewActiveDriversSummary && canViewNextQueueDriver ? "repeat(2, minmax(0, 1fr))" : "1fr",
-            }}
+            className={`calendar-info-grid grid gap-4 ${
+              canViewActiveDriversSummary && canViewNextQueueDriver ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
+            }`}
           >
             {canViewActiveDriversSummary && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 16,
-                  padding: 18,
-                  minWidth: 0,
-                }}
-              >
-                <h4 style={{ marginTop: 0, marginBottom: 0 }}>พขร. พร้อมปฏิบัติงาน <span className="status green" style={{ fontSize: 23, padding: "6px 12px" }}>จำนวน {activeDriversNow.length} คน</span> </h4>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+              <div className="flex min-w-0 flex-col gap-4 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 shadow-sm sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+                      <UsersIcon className="h-6 w-6" />
+                    </span>
+                    <h4 className="m-0 text-[28px] font-bold leading-tight text-blue-900">พขร. พร้อมปฏิบัติงาน</h4>
+                  </div>
+                  <span className="status green border border-emerald-200 text-[22px] font-bold">
+                    จำนวน {activeDriversNow.length} คน
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
                   {activeDriversNow.length > 0 ? (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <div className="flex flex-wrap gap-2">
                       {activeDriversNow.map((driver) => (
-                        <span key={driver.user_id} className="status blue" style={{ fontSize: 23, padding: "6px 12px" }}>
+                        <span key={driver.user_id} className="status blue border border-blue-200 text-[21px] font-bold">
                           {driver.name}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <span style={{ color: "#64748b" }}>ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
+                    <span className="text-[22px] text-slate-500">ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
                   )}
                 </div>
-                {/* <div style={{ fontSize: 20, color: "#475569" }}>
-                  นับจาก พขร. ที่มีสถานะ พร้อม และไม่มีช่วงวันไม่รับงานที่ทับกับเวลาปัจจุบัน
-                </div> */}
               </div>
             )}
 
             {canViewNextQueueDriver && (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                  background: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 16,
-                  padding: 18,
-                  minWidth: 0,
-                }}
-              >
-                {/* <h4 style={{ marginTop: 0, marginBottom: 0 }}>คนขับคิวถัดไป</h4> */}
-                {/* <strong style={{ fontSize: 25, lineHeight: 1.2 }}>
-                  {nextQueueDriver ? nextQueueDriver.driver_name : "-"}
-                </strong> */}
+              <div className="flex min-w-0 flex-col gap-4 rounded-3xl border border-sky-100 bg-sky-50/70 p-4 shadow-sm sm:p-5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-800">
+                    <ListOrderedIcon className="h-6 w-6" />
+                  </span>
+                  <div>
+                    <h4 className="m-0 text-[28px] font-bold leading-tight text-blue-900">ลำดับคิวทั้งหมด</h4>
+                    <p className="mt-1 text-[22px] leading-snug text-slate-500">แสดงคิวปัจจุบันและคิวถัดไปของ พขร.</p>
+                  </div>
+                </div>
 
-              <div style={{ display: "grid", gap: 10, marginTop: 6 }}>
-                  <div style={{ color: "#334155", fontWeight: 700 }}>ลำดับคิวทั้งหมด</div>
-                <div style={{ fontSize: 20, color: "#475569" }}>
-                  คิวปัจจุบัน: {currentQueueDriver ? currentQueueDriver.driver_name : "-"}
-                </div>
-                <div style={{ fontSize: 20, color: "#475569" }}>
-                  คิวถัดไป: {nextQueueDriver ? nextQueueDriver.driver_name : "-"}
-                </div>
+                <div className="grid gap-3">
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[21px] text-slate-600 shadow-sm">
+                    คิวปัจจุบัน: <span className="font-bold text-slate-900">{currentQueueDriver ? currentQueueDriver.driver_name : "-"}</span>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[21px] text-slate-600 shadow-sm">
+                    คิวถัดไป: <span className="font-bold text-slate-900">{nextQueueDriver ? nextQueueDriver.driver_name : "-"}</span>
+                  </div>
                   {activeQueueRows.length > 0 ? (
-                    <div style={{ display: "grid", gap: 8 }}>
+                    <div className="grid gap-2.5">
                       {activeQueueRows.map((row) => {
                         const isCurrent =
                           currentQueueDriver &&
@@ -1226,50 +1245,27 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={row.queue_id || `${row.driver_user_id || ""}-${row.queue_order || ""}`}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              flexWrap: "wrap",
-                              gap: 10,
-                              padding: "10px 12px",
-                              background: "#fff",
-                              border: `1px solid ${isCurrent ? "#16a34a" : isNext ? "#60a5fa" : "#e2e8f0"}`,
-                              borderRadius: 12,
-                            }}
+                            className={`flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm ${
+                              isCurrent
+                                ? "border-emerald-300"
+                                : isNext
+                                  ? "border-sky-300"
+                                  : "border-slate-200"
+                            }`}
                           >
-                            <span
-                              className="status blue"
-                              style={{
-                                // minWidth: 56,
-                                // justifyContent: "center",
-                                fontSize: 20,
-                                padding: "6px 12px",
-                              }}
-                            >
+                            <span className="status blue border border-blue-200 text-[20px] font-bold">
                               {row.queue_order}
                             </span>
-                            <span style={{ color: "#0f172a", fontWeight: 700, flex: "1 1 auto" }}>
+                            <span className="flex-1 text-[22px] font-bold text-slate-900">
                               {row.driver_name}
                             </span>
                             {isCurrent && (
-                              <span
-                                className="status green"
-                                style={{
-                                  fontSize: 15,
-                                  padding: "4px 10px",
-                                }}
-                              >
+                              <span className="status green border border-emerald-200 text-[18px] font-bold">
                                 คิวปัจจุบัน
                               </span>
                             )}
                             {isNext && (
-                              <span
-                                className="status green"
-                                style={{
-                                  fontSize: 15,
-                                  padding: "4px 10px",
-                                }}
-                              >
+                              <span className="status blue border border-blue-200 text-[18px] font-bold">
                                 คิวถัดไป
                               </span>
                             )}
@@ -1278,7 +1274,7 @@ export default function CalendarPage() {
                       })}
                     </div>
                   ) : (
-                    <div style={{ color: "#64748b" }}>ยังไม่มีข้อมูลคิวคนขับ</div>
+                    <div className="text-[22px] text-slate-500">ยังไม่มีข้อมูลคิวคนขับ</div>
                   )}
                 </div>
               </div>

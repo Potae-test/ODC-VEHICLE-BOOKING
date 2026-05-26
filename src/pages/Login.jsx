@@ -28,8 +28,8 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={handleLogin}>
+    <div className="login-page px-3 py-4 sm:px-4 sm:py-6">
+      <form className="login-card border border-sky-100 bg-white/95 shadow-sm" onSubmit={handleLogin}>
         <h1>ระบบงานจองรถ</h1>
         <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
 

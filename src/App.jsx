@@ -610,9 +610,9 @@ export default function App() {
               <CloseIcon className="h-5 w-5" />
             </button>
           </div>
-          <div className="mb-1 px-2 text-[18px] font-bold uppercase tracking-[0.12em] text-slate-500 md:text-[16px]">
+          {/* <div className="mb-1 px-2 text-[18px] font-bold uppercase tracking-[0.12em] text-slate-500 md:text-[16px]">
             Navigation
-          </div>
+          </div> */}
           {sidebarItems.map((item) => (
             <ShellNavButton key={item.page} active={page === item.page} icon={item.icon} onClick={() => goPage(item.page)}>
               {item.label}
