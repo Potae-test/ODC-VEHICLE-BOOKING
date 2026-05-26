@@ -94,7 +94,7 @@ function getVehicleStatusClass(status) {
 
 function SummaryCard({ title, value, className = "" }) {
   return (
-    <div className={`summary-card ${className}`.trim()}>
+    <div className={`summary-card rounded-3xl border border-sky-100 bg-white shadow-sm ${className}`.trim()}>
       <h3>{title}</h3>
       <strong>{value}</strong>
     </div>
@@ -1450,7 +1450,7 @@ async function handleDeleteVehicle(vehicle) {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>Admin / Dashboard</h2>
           <p>สรุปภาพรวมระบบจองรถทั้งหมด</p>
@@ -1476,7 +1476,7 @@ async function handleDeleteVehicle(vehicle) {
  <br></br>
       <div className="form-card permission-card">
         <h3>จัดการสิทธิ์</h3>
-        <div className="section-toolbar permission-toolbar">
+        <div className="section-toolbar permission-toolbar gap-3">
           <button type="button" onClick={handleSavePermissions}>
             บันทึกสิทธิ์
           </button>
@@ -1485,7 +1485,7 @@ async function handleDeleteVehicle(vehicle) {
           </button>
         </div>
 
-        <div className="table-wrap">
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
           <table className="permission-table">
             <thead>
               <tr>
@@ -1538,7 +1538,7 @@ async function handleDeleteVehicle(vehicle) {
               ))}
             </select>
           </div>
-          <div className="section-toolbar permission-toolbar">
+          <div className="section-toolbar permission-toolbar gap-3">
             <button type="button" onClick={handleSaveActionPermissions}>
               บันทึกสิทธิ์ Action
             </button>
@@ -1579,7 +1579,7 @@ async function handleDeleteVehicle(vehicle) {
       {canManageSettings && (
         <div className="form-card permission-card">
           <h3>สิทธิ์การเห็นกล่องสรุปคนขับ</h3>
-          <div className="section-toolbar permission-toolbar">
+          <div className="section-toolbar permission-toolbar gap-3">
             <button type="button" onClick={handleSaveDriverSummaryCardScope}>
               บันทึกสิทธิ์กล่องสรุปคนขับ
             </button>
@@ -1592,7 +1592,7 @@ async function handleDeleteVehicle(vehicle) {
             </button>
           </div>
 
-          <div className="table-wrap">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table className="permission-table">
               <thead>
                 <tr>
@@ -1626,7 +1626,7 @@ async function handleDeleteVehicle(vehicle) {
       {canViewVehicles && (
       <div className="form-card">
         <h3>จัดการรถ</h3>
-        <div className="section-toolbar">
+        <div className="section-toolbar gap-3">
           {canCreateVehicles && (
           <button type="button" onClick={handleOpenCreateVehicle}>
             เพิ่มรถ
@@ -1637,7 +1637,7 @@ async function handleDeleteVehicle(vehicle) {
         {visibleLoading ? (
           <TableSkeleton rows={6} columns={8} />
         ) : (
-        <div className="table-wrap" style={{ marginTop: 24 }}>
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
           <table>
             <thead>
               <tr>
@@ -1702,14 +1702,14 @@ async function handleDeleteVehicle(vehicle) {
       {canViewDrivers && (
       <div className="form-card">
         <h3>จัดการคนขับ</h3>
-        <div className="section-toolbar">
+        <div className="section-toolbar gap-3">
         {canCreateDrivers && (
         <button type="button" onClick={handleOpenCreateDriver}>
           เพิ่มข้อมูลคนขับ
         </button>
         )}
       </div>
-        <div className="table-wrap" style={{ marginTop: 24 }}>
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
           <table>
             <thead>
               <tr>
@@ -1775,14 +1775,14 @@ async function handleDeleteVehicle(vehicle) {
       {canViewUsers && (
       <div className="form-card">
         <h3>จัดการผู้ใช้งาน</h3>
-      <div className="section-toolbar">
+      <div className="section-toolbar gap-3">
         {canCreateUsers && (
         <button type="button" onClick={handleOpenCreateUser}>
           เพิ่มผู้ใช้งาน
         </button>
         )}
       </div>
-        <div className="table-wrap" style={{ marginTop: 24 }}>
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
           <table>
             <thead>
               <tr>
@@ -1853,12 +1853,12 @@ async function handleDeleteVehicle(vehicle) {
 
       {canViewBookings && (
         <div className="form-card">
-          <div className="section-header">
+          <div className="section-header gap-3 border-b border-sky-100 pb-4">
             <div>
               <h3>จัดการรายการจอง</h3>
               <p>เพิ่ม แก้ไข และบันทึกรายการย้อนหลังจากหน้า Admin ได้โดยตรง</p>
             </div>
-            <div className="section-toolbar admin-booking-toolbar">
+            <div className="section-toolbar admin-booking-toolbar gap-3">
               {canCreateBookings && (
                 <button
                   type="button"
@@ -1871,7 +1871,7 @@ async function handleDeleteVehicle(vehicle) {
             </div>
           </div>
 
-          <div className="table-wrap">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table>
               <thead>
                 <tr>

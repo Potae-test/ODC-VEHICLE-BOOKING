@@ -341,7 +341,7 @@ export default function Cars() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>จัดการรถ</h2>
           <p>ข้อมูลจาก Google Sheet ผ่าน Cloudflare Worker API</p>
@@ -366,7 +366,7 @@ export default function Cars() {
         <div className="form-card">
           <h3>รายการรถทั้งหมด</h3>
 
-          <div className="table-wrap">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table>
               <thead>
                 <tr>

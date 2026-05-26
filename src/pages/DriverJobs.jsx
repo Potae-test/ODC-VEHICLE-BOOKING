@@ -805,12 +805,12 @@ export default function DriverJobs() {
   }, [vehicleMap]);
 
   if (!canViewPage) {
-    return <div className="form-card">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+    return <div className="form-card text-slate-700">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
 
   return (
     <div className="driver-jobs-page">
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>งานคนขับ</h2>
           <p>ดูและจัดการงานที่ถูกมอบหมายให้คนขับ</p>
@@ -821,13 +821,13 @@ export default function DriverJobs() {
         </button>
       </div>
 
-      {loading && <div className="form-card">กำลังโหลดงานคนขับ...</div>}
-      {error && !loading && <div className="form-card">{error}</div>}
+      {loading && <div className="form-card text-slate-700">กำลังโหลดงานคนขับ...</div>}
+      {error && !loading && <div className="form-card text-slate-700">{error}</div>}
 
       {!loading && !error && (
         <>
           <div className="form-card">
-            <div className="section-header">
+            <div className="section-header gap-3 border-b border-sky-100 pb-4">
               <h3>งานที่กำลังใช้งาน</h3>
               <span className="section-counter">{currentJobs.length} งาน</span>
             </div>
@@ -863,12 +863,12 @@ export default function DriverJobs() {
 
           <div className="form-card">
             <div className="driver-jobs-table-section">
-              <div className="section-header">
+              <div className="section-header gap-3 border-b border-sky-100 pb-4">
                 <h3>งานวันนี้</h3>
                 <span className="section-counter">{todayJobs.length} รายการ</span>
               </div>
 
-              <div className="table-wrap mobile-hide-table">
+              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <table>
                   <thead>
                     <tr>
@@ -946,7 +946,7 @@ export default function DriverJobs() {
                 </table>
               </div>
 
-              <div className="mobile-card-list driver-job-mobile-list">
+              <div className="mobile-card-list driver-job-mobile-list mt-6">
                 {paginatedTodayJobs.length === 0 ? (
                   <div className="mobile-empty-card">ไม่มีงานวันนี้</div>
                 ) : (
@@ -983,7 +983,7 @@ export default function DriverJobs() {
 
           <div className="form-card">
             <div className="driver-jobs-table-section">
-              <div className="section-header">
+              <div className="section-header gap-3 border-b border-sky-100 pb-4">
                 <h3>งานที่รออยู่ทั้งหมด</h3>
                 <span className="section-counter">{pendingJobs.length} รายการ</span>
               </div>
@@ -998,7 +998,7 @@ export default function DriverJobs() {
                 />
               </div>
 
-              <div className="table-wrap mobile-hide-table">
+              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <table>
                   <thead>
                     <tr>
@@ -1076,7 +1076,7 @@ export default function DriverJobs() {
                 </table>
               </div>
 
-              <div className="mobile-card-list driver-job-mobile-list">
+              <div className="mobile-card-list driver-job-mobile-list mt-6">
                 {paginatedPendingJobs.length === 0 ? (
                   <div className="mobile-empty-card">ไม่มีงานที่รออยู่</div>
                 ) : (

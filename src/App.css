@@ -4255,3 +4255,206 @@ label {
     overflow-x: clip;
   }
 }
+
+/* Shared card system refresh */
+.form-card,
+.card,
+.calendar-card,
+.car-card,
+.summary-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  background: #ffffff;
+  border: 1px solid #dbe6f3;
+  border-radius: 24px;
+  box-shadow: 0 6px 18px rgba(15, 47, 92, 0.06);
+}
+
+.form-card,
+.calendar-card,
+.car-card {
+  padding: clamp(16px, 2vw, 28px);
+}
+
+.form-card {
+  margin-bottom: clamp(16px, 2vw, 28px);
+  overflow-x: clip;
+}
+
+.calendar-card {
+  overflow: hidden;
+}
+
+.card,
+.car-card,
+.summary-card {
+  overflow: hidden;
+}
+
+.summary-card {
+  min-height: 120px;
+  padding: clamp(14px, 1.8vw, 22px) clamp(12px, 1.6vw, 18px);
+  border-radius: 20px;
+}
+
+.form-card h3 {
+  margin-top: 0;
+  font-size: clamp(24px, 2.2vw, 30px);
+  color: #073b8e;
+}
+
+.car-card h3 {
+  margin: 18px 0 8px;
+  font-size: clamp(26px, 2.3vw, 32px);
+}
+
+.summary-card h3 {
+  margin-bottom: 8px;
+  font-size: clamp(18px, 1.7vw, 22px);
+}
+
+.summary-card strong {
+  font-size: clamp(34px, 3vw, 42px);
+}
+
+.form-grid,
+.car-grid,
+.summary-grid {
+  display: grid;
+  min-width: 0;
+  gap: clamp(12px, 1.8vw, 22px);
+}
+
+.form-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.car-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(10px, 1.5vw, 16px);
+}
+
+.form-grid > *,
+.car-grid > *,
+.summary-grid > * {
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .form-card,
+  .calendar-card,
+  .car-card {
+    border-radius: 28px;
+  }
+
+  .form-grid,
+  .car-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .form-grid,
+  .car-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+/* Shared page content refresh */
+.page-header {
+  width: 100%;
+  gap: 16px;
+}
+
+.page-header h2 {
+  font-size: clamp(28px, 2.8vw, 36px);
+  line-height: 1.15;
+}
+
+.page-header p {
+  font-size: clamp(18px, 1.8vw, 22px);
+  line-height: 1.45;
+}
+
+.section-header,
+.section-toolbar {
+  gap: 12px;
+}
+
+.section-header {
+  width: 100%;
+}
+
+.section-counter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table {
+  min-width: max(900px, 100%);
+}
+
+.mobile-card-list {
+  width: 100%;
+}
+
+.mobile-data-card {
+  border-color: #dbe6f3;
+  border-radius: 22px;
+  box-shadow: 0 6px 18px rgba(15, 47, 92, 0.06);
+}
+
+.mobile-data-card-header h3 {
+  font-size: clamp(24px, 2.2vw, 28px);
+}
+
+.mobile-data-card-grid b {
+  font-size: clamp(21px, 2vw, 24px);
+}
+
+.status {
+  font-size: clamp(18px, 1.8vw, 22px);
+  line-height: 1.15;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    border-radius: 22px;
+  }
+
+  .section-counter {
+    font-size: 16px;
+  }
+
+  .mobile-data-card {
+    padding: 16px 14px;
+  }
+}

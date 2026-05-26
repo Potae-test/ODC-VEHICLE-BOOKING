@@ -491,13 +491,13 @@ export default function DriverUnavailable() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>แจ้งข้อมูลการปฏิบัติงานของคนขับ</h2>
           <p>กำหนดช่วงเวลาที่คนขับไม่สามารถรับงานได้</p>
         </div>
 
-        <div className="section-toolbar">
+        <div className="section-toolbar gap-3">
           <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
             {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
           </button>
@@ -509,8 +509,8 @@ export default function DriverUnavailable() {
         </div>
       </div>
 
-      {loading && <div className="form-card">กำลังโหลดข้อมูล...</div>}
-      {error && !loading && <div className="form-card">{error}</div>}
+      {loading && <div className="form-card text-slate-700">กำลังโหลดข้อมูล...</div>}
+      {error && !loading && <div className="form-card text-slate-700">{error}</div>}
 
       {!loading && !error && (
         <div className="form-card">
@@ -571,7 +571,7 @@ export default function DriverUnavailable() {
             </div>
           </div>
 
-          <div className="table-wrap mobile-hide-table">
+          <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table>
               <thead>
                 <tr>
@@ -625,12 +625,12 @@ export default function DriverUnavailable() {
             </table>
           </div>
 
-          <div className="mobile-card-list driver-unavailable-mobile-list">
+          <div className="mobile-card-list driver-unavailable-mobile-list mt-6">
             {filteredItems.length === 0 ? (
               <div className="mobile-empty-card">ไม่พบรายการตามเงื่อนไขที่ค้นหา</div>
             ) : (
               pageItems.map((record) => (
-                <article key={`mobile-${record.unavailable_id}`} className="mobile-data-card">
+                <article key={`mobile-${record.unavailable_id}`} className="mobile-data-card border-sky-100 bg-white shadow-sm">
                   <div className="mobile-data-card-header">
                     <div>
                       <span className="mobile-data-card-index">คนขับ</span>

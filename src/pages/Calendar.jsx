@@ -1014,7 +1014,7 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>ปฏิทินการจอง</h2>
           <p>แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. พร้อมปฏิบัติงาน</p>

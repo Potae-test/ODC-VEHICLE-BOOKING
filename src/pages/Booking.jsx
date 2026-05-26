@@ -2311,7 +2311,7 @@ export default function Booking() {
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>รายการจองรถ</h2>
           <p>จองรถและติดตามรายการจอง</p>
@@ -2333,11 +2333,11 @@ export default function Booking() {
 
       {visibleLoading && <PageSkeleton />}
 
-      {error && !visibleLoading && <div className="form-card">{error}</div>}
+      {error && !visibleLoading && <div className="form-card text-slate-700">{error}</div>}
 
       {canViewBookings && (
         <div className="form-card">
-            <div className="section-header">
+            <div className="section-header gap-3 border-b border-sky-100 pb-4">
               <h3>ค้นหารายการจองรถ</h3>
 
               <button
@@ -2434,7 +2434,7 @@ export default function Booking() {
             </div>
           </div>
 
-          <div className="booking-table-toolbar">
+          <div className="booking-table-toolbar gap-4 rounded-2xl bg-slate-50/80 px-3 py-3 sm:px-4">
             <div className="booking-status-counts">
               {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
                 <span
@@ -2472,7 +2472,7 @@ export default function Booking() {
           ) : (
             <>
 
-              <div className="table-wrap mobile-hide-table" style={{ marginTop: 24 }}>
+              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
                 <table>
                   
                   <thead>
@@ -2561,7 +2561,7 @@ export default function Booking() {
                 </table>
               </div>
 
-              <div className="mobile-card-list booking-mobile-list" style={{ marginTop: 24 }}>
+              <div className="mobile-card-list booking-mobile-list mt-6" style={{ marginTop: 24 }}>
                 {pageItems.length === 0 ? (
                   <div className="mobile-empty-card">ไม่พบรายการจอง</div>
                 ) : (

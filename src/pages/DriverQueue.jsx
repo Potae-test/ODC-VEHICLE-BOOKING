@@ -299,12 +299,12 @@ export default function DriverQueue() {
   }, [loadData]);
 
   if (!canViewQueue) {
-    return <div className="form-card">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+    return <div className="form-card text-slate-700">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>คิวคนขับ</h2>
           <p>จัดลำดับคิวและตัวชี้คิวแบบวงกลม</p>
@@ -336,12 +336,12 @@ export default function DriverQueue() {
         </div>
       </div>
 
-      {loading && <div className="form-card">กำลังโหลดข้อมูล...</div>}
-      {error && !loading && <div className="form-card">{error}</div>}
+      {loading && <div className="form-card text-slate-700">กำลังโหลดข้อมูล...</div>}
+      {error && !loading && <div className="form-card text-slate-700">{error}</div>}
 
       {!loading && !error && (
         <div className="form-card">
-          <div className="table-wrap">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
                     {canManageQueue && (
             <button type="button"   style={{ marginLeft: "auto", display: "block" }} disabled={!isDirty || saving} onClick={handleSaveQueue}>
               {saving ? "กำลังบันทึก..." : "บันทึกคิว"}

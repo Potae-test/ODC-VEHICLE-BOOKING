@@ -700,18 +700,18 @@ export default function DriverSummary() {
   }, [visibleDriverRows]);
 
   if (!canViewDriverSummary) {
-    return <div className="form-card">ไม่มีสิทธิ์เข้าถึงสรุปงานคนขับ</div>;
+    return <div className="form-card text-slate-700">ไม่มีสิทธิ์เข้าถึงสรุปงานคนขับ</div>;
   }
 
   return (
     <div>
-      <div className="page-header">
+      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>สรุปงานคนขับ</h2>
           <p>นับจำนวนงานจากรายการจองที่อนุมัติแล้ว กำลังใช้งาน หรือเสร็จสิ้น</p>
         </div>
 
-        <div className="section-toolbar">
+        <div className="section-toolbar gap-3">
           <button
             type="button"
             className="warning-button"
@@ -727,15 +727,15 @@ export default function DriverSummary() {
       </div>
 
       {!loading && !error && cardScope !== "NONE" && (
-        <div className="driver-summary-card-grid">
+        <div className="driver-summary-card-grid rounded-3xl border border-sky-100 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
           {driverCardRows.map((row) => (
-            <div className="driver-summary-card" key={row.key}>
-              <div className="driver-summary-card-header">
+            <div className="driver-summary-card rounded-2xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm" key={row.key}>
+              <div className="driver-summary-card-header gap-3">
                 <h3>{row.name}</h3>
                 <strong>{row.cardTotal}</strong>
               </div>
 
-              <div className="driver-summary-card-stats">
+              <div className="driver-summary-card-stats gap-3">
                 <div className="driver-summary-stat blue-box">
                   <span>งานทั้งหมด</span>
                   <b>{row.cardTotal}</b>
@@ -869,7 +869,7 @@ export default function DriverSummary() {
         {error && !visibleLoading && <p className="driver-summary-error">{error}</p>}
 
         {!visibleLoading && !error && (
-          <div className="table-wrap">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table>
               <thead>
                 <tr>
@@ -982,7 +982,7 @@ export default function DriverSummary() {
               </button>
             </div>
 
-            <div className="table-wrap">
+            <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
               <table>
                 <thead>
                   <tr>
