@@ -1697,7 +1697,7 @@ label {
 }
 
 .sidebar button {
-  font-size: 30px;
+  font-size: 25px;
 }
 
 .brand h1 {
@@ -2297,100 +2297,6 @@ label {
   margin: 0 !important;
 }
 
-/* Booking action semantics */
-.info-button,
-.primary-button,
-.success-button,
-.warning-button,
-.edit-button,
-.restore-button,
-.danger-button,
-.danger-dark-button {
-  margin-left: 8px;
-}
-
-.info-button {
-  background: #ffffff;
-  color: #1455c8;
-  border: 2px solid #1455c8;
-}
-
-.info-button:hover {
-  background: #dbeafe;
-  color: #0f429f;
-  border-color: #0f429f;
-}
-
-.primary-button {
-  background: #1455c8;
-  color: #ffffff;
-}
-
-.primary-button:hover {
-  background: #0f429f;
-  color: #ffffff;
-}
-
-.success-button {
-  background: #15803d;
-  color: #ffffff;
-}
-
-.success-button:hover {
-  background: #166534;
-  color: #ffffff;
-}
-
-.warning-button {
-  background: #d97706;
-  color: #ffffff;
-}
-
-.warning-button:hover {
-  background: #b45309;
-  color: #ffffff;
-}
-
-.edit-button {
-  background: #f59e0b;
-  color: #1f2937;
-}
-
-.edit-button:hover {
-  background: #d97706;
-  color: #111827;
-}
-
-.restore-button {
-  background: #0f766e;
-  color: #ffffff;
-}
-
-.restore-button:hover {
-  background: #115e59;
-  color: #ffffff;
-}
-
-.danger-button {
-  background: #dc2626;
-  color: #ffffff;
-}
-
-.danger-button:hover {
-  background: #b91c1c;
-  color: #ffffff;
-}
-
-.danger-dark-button {
-  background: #991b1b;
-  color: #ffffff;
-}
-
-.danger-dark-button:hover {
-  background: #7f1d1d;
-  color: #ffffff;
-}
-
 .action-buttons .booking-action-button {
   padding: 10px 16px;
   min-width: auto;
@@ -2398,6 +2304,86 @@ label {
   min-height: auto;
   border-radius: 10px;
   font-size: 24px;
+}
+
+.booking-action-button {
+  margin-left: 8px;
+  border: 0;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.booking-action-button:hover:not(:disabled) {
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+}
+
+.booking-action-button:focus-visible {
+  outline: 2px solid #cbd5e1;
+  outline-offset: 2px;
+}
+
+.booking-action-button.info-button {
+  background: #1455c8;
+}
+
+.booking-action-button.info-button:hover:not(:disabled) {
+  background: #0f429f;
+}
+
+.booking-action-button.success-button {
+  background: #178840;
+}
+
+.booking-action-button.success-button:hover:not(:disabled) {
+  background: #166534;
+}
+.booking-action-button.success-button-2 {
+  background: #b904aa;
+}
+
+.booking-action-button.success-button-2:hover:not(:disabled) {
+  background: #8a047f;
+}
+
+.booking-action-button.warning-button {
+  background: #d97706;
+}
+
+.booking-action-button.warning-button:hover:not(:disabled) {
+  background: #b45309;
+}
+
+.booking-action-button.edit-button {
+  background: #d4a017;
+}
+
+.booking-action-button.edit-button:hover:not(:disabled) {
+  background: #b58914;
+}
+
+.booking-action-button.cyan-button {
+  background: #0f766e;
+}
+
+.booking-action-button.cyan-button:hover:not(:disabled) {
+  background: #115e59;
+}
+
+.booking-action-button.danger-button {
+  background: #dc2626;
+}
+
+.booking-action-button.danger-button:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.booking-action-button.danger-dark-button {
+  background: #991b1b;
+}
+
+.booking-action-button.danger-dark-button:hover:not(:disabled) {
+  background: #7f1d1d;
 }
 
 .section-toolbar {

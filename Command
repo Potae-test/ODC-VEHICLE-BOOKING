@@ -19,6 +19,7 @@ npm install \
 npm install xlsx
 npm install firebase | npm install -g npm@11.15.0
 npm install vite-plugin-pwa
+npm install tailwindcss @tailwindcss/vite
 
 3) Login Cloudflare ใหม่
 npx wrangler login

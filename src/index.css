@@ -1,3 +1,7 @@
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
 @font-face {
   font-family: "TH Sarabun New";
   src: url("./assets/fonts/THSarabunNew.ttf") format("truetype");

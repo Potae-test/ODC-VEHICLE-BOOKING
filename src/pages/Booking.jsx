@@ -126,6 +126,33 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function normalizeBookingNote(note) {
+  return String(note || "")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => String(line || "").trim().replace(/[ \t]+/g, " "))
+    .map((line) =>
+      line
+        .replace(/\[ใช้รถ สนง\.กลาง\]\s*\[ใช้รถ สนง\.กลาง\]/g, "[ใช้รถ สนง.กลาง]")
+        .replace(/\[ใช้รถ สนง\.กลาง\]\s*ใช้รถ สนง\.กลาง/g, "[ใช้รถ สนง.กลาง]")
+        .replace(/(?:ใช้รถ สนง\.กลาง)(?:\s+ใช้รถ สนง\.กลาง)+/g, "ใช้รถ สนง.กลาง")
+        .replace(/(?:บันทึกรายการย้อนหลัง)(?:\s*[:：-]?\s*บันทึกรายการย้อนหลัง)+/g, "บันทึกรายการย้อนหลัง")
+        .replace(/(?:ไม่อนุมัติการยกเลิก)(?:\s*[:：-]?\s*ไม่อนุมัติการยกเลิก)+/g, "ไม่อนุมัติการยกเลิก")
+        .replace(/(?:อนุมัติการยกเลิกงานคนขับ)(?:\s*[:：-]?\s*อนุมัติการยกเลิกงานคนขับ)+/g, "อนุมัติการยกเลิกงานคนขับ")
+        .replace(/(?:รอการอนุมัติการยกเลิก)(?:\s*[:：-]?\s*รอการอนุมัติการยกเลิก)+/g, "รอการอนุมัติการยกเลิก")
+    )
+    .filter(Boolean)
+    .filter((line, index, lines) => {
+      const canonical = line.replace(/\[ใช้รถ สนง\.กลาง\]/g, "ใช้รถ สนง.กลาง").replace(/\s+/g, " ").trim();
+      return lines.findIndex(
+        (item) =>
+          item.replace(/\[ใช้รถ สนง\.กลาง\]/g, "ใช้รถ สนง.กลาง").replace(/\s+/g, " ").trim() === canonical
+      ) === index;
+    })
+    .join("\n")
+    .trim();
+}
+
 function pad2(value) {
   return String(value).padStart(2, "0");
 }
@@ -148,6 +175,26 @@ const THAI_SHORT_MONTHS = [
 const ALL_DETAIL_ROLES = ["USER", "DRIVER", "STAFF", "ADMIN"];
 const STAFF_DETAIL_ROLES = ["STAFF", "ADMIN"];
 const ADMIN_DETAIL_ROLES = ["ADMIN"];
+
+const BOOKING_ACTION_BUTTON_BASE_CLASSNAME = "booking-action-button";
+
+const BOOKING_ACTION_BUTTON_VARIANTS = {
+  detail: "info-button",
+  process: "success-button",
+  central: "success-button-2",
+  backdate: "warning-button",
+  edit: "edit-button",
+  unassign: "cyan-button",
+  cancel: "danger-button",
+  approveCancel: "success-button",
+  rejectCancel: "danger-dark-button",
+};
+
+function getBookingActionButtonClassName(variant) {
+  return `${BOOKING_ACTION_BUTTON_BASE_CLASSNAME} ${
+    BOOKING_ACTION_BUTTON_VARIANTS[variant] || BOOKING_ACTION_BUTTON_VARIANTS.process
+  }`;
+}
 
 function getBookingDetailFields({ booking, vehicleMap }) {
   const statusLabel = isCompletedBooking(booking)
@@ -229,7 +276,7 @@ function getBookingDetailFields({ booking, vehicleMap }) {
       key: "staff_note",
       label: "หมายเหตุ",
       roles: ALL_DETAIL_ROLES,
-      value: booking.staff_note || "-",
+      value: normalizeBookingNote(booking.staff_note) || "-",
     },
     {
       key: "is_backdated",
@@ -834,14 +881,14 @@ const BookingTableRow = memo(function BookingTableRow({
   const actionButtons = (
     <>
       {canShowDetail && (
-        <button type="button" className="info-button booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
+        <button type="button" className={getBookingActionButtonClassName("detail")} disabled={disabled} onClick={() => onViewDetail(booking)}>
           ดูรายละเอียด
         </button>
       )}
       {canShowBackdateComplete && (
         <button
           type="button"
-          className="warning-button booking-action-button"
+          className={getBookingActionButtonClassName("backdate")}
           disabled={disabled}
           onClick={() => onBackdateComplete(booking)}
         >
@@ -851,7 +898,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowProcess && (
         <button
           type="button"
-          className="primary-button booking-action-button"
+          className={getBookingActionButtonClassName("process")}
           disabled={disabled}
           onClick={() => onProcess(booking)}
         >
@@ -867,7 +914,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowEdit && (
         <button
           type="button"
-          className="edit-button booking-action-button"
+          className={getBookingActionButtonClassName("edit")}
           disabled={disabled}
           onClick={() => onEdit(booking)}
         >
@@ -877,7 +924,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowUnassign && (
         <button
           type="button"
-          className="restore-button booking-action-button"
+          className={getBookingActionButtonClassName("unassign")}
           disabled={disabled}
           onClick={() => onUnassign(booking)}
         >
@@ -887,7 +934,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowAssignCentralVehicle && (
         <button
           type="button"
-          className="success-button booking-action-button"
+          className={getBookingActionButtonClassName("central")}
           disabled={disabled}
           onClick={() => onAssignCentralVehicle(booking)}
         >
@@ -897,7 +944,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowCancel && (
         <button
           type="button"
-          className="danger-button booking-action-button"
+          className={getBookingActionButtonClassName("cancel")}
           disabled={disabled}
           onClick={() => onCancel(booking)}
         >
@@ -908,7 +955,7 @@ const BookingTableRow = memo(function BookingTableRow({
         <>
           <button
             type="button"
-            className="success-button booking-action-button"
+            className={getBookingActionButtonClassName("approveCancel")}
             disabled={disabled}
             onClick={() => onApproveDriverCancel(booking)}
           >
@@ -916,7 +963,7 @@ const BookingTableRow = memo(function BookingTableRow({
           </button>
           <button
             type="button"
-            className="danger-dark-button booking-action-button"
+            className={getBookingActionButtonClassName("rejectCancel")}
             disabled={disabled}
             onClick={() => onRejectDriverCancel(booking)}
           >
@@ -951,8 +998,8 @@ const BookingTableRow = memo(function BookingTableRow({
           </div>
         )}
       </td>
-      <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 25}}>
-        {booking.staff_note || "-"}
+                      <td style={{ maxWidth: 240, whiteSpace: "normal", wordBreak: "break-word", fontSize: 25}}>
+        {normalizeBookingNote(booking.staff_note) || "-"}
         {hasPendingDriverCancelRequest && booking.driver_cancel_request_reason && (
           <div className="booking-driver-cancel-note">
             เหตุผลที่ขอยกเลิก: {booking.driver_cancel_request_reason}
@@ -1052,19 +1099,19 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         </div>
         <div>
           <span>หมายเหตุ</span>
-          <b>{booking.staff_note || "-"}</b>
+          <b>{normalizeBookingNote(booking.staff_note) || "-"}</b>
         </div>
       </div>
       <div className="mobile-data-card-actions">
         {canViewBookingDetail && (
-          <button type="button" className="info-button booking-action-button" disabled={disabled} onClick={() => onViewDetail(booking)}>
+          <button type="button" className={getBookingActionButtonClassName("detail")} disabled={disabled} onClick={() => onViewDetail(booking)}>
             ดูรายละเอียด
           </button>
         )}
         {canShowBackdateComplete && (
           <button
             type="button"
-            className="warning-button booking-action-button"
+            className={getBookingActionButtonClassName("backdate")}
             disabled={disabled}
             onClick={() => onBackdateComplete(booking)}
           >
@@ -1074,7 +1121,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowProcess && (
           <button
             type="button"
-            className="primary-button booking-action-button"
+            className={getBookingActionButtonClassName("process")}
             disabled={disabled}
             onClick={() => onProcess(booking)}
           >
@@ -1090,7 +1137,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowEdit && (
           <button
             type="button"
-            className="edit-button booking-action-button"
+            className={getBookingActionButtonClassName("edit")}
             disabled={disabled}
             onClick={() => onEdit(booking)}
           >
@@ -1100,7 +1147,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowUnassign && (
           <button
             type="button"
-            className="restore-button booking-action-button"
+            className={getBookingActionButtonClassName("unassign")}
             disabled={disabled}
             onClick={() => onUnassign(booking)}
           >
@@ -1110,7 +1157,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowAssignCentralVehicle && (
           <button
             type="button"
-            className="success-button booking-action-button"
+            className={getBookingActionButtonClassName("central")}
             disabled={disabled}
             onClick={() => onAssignCentralVehicle(booking)}
           >
@@ -1120,7 +1167,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowCancel && (
           <button
             type="button"
-            className="danger-button booking-action-button"
+            className={getBookingActionButtonClassName("cancel")}
             disabled={disabled}
             onClick={() => onCancel(booking)}
           >
@@ -1131,7 +1178,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
           <>
             <button
               type="button"
-              className="success-button booking-action-button"
+              className={getBookingActionButtonClassName("approveCancel")}
               disabled={disabled}
               onClick={() => onApproveDriverCancel(booking)}
             >
@@ -1139,7 +1186,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
             </button>
             <button
               type="button"
-              className="danger-dark-button booking-action-button"
+              className={getBookingActionButtonClassName("rejectCancel")}
               disabled={disabled}
               onClick={() => onRejectDriverCancel(booking)}
             >
@@ -1471,7 +1518,7 @@ export default function Booking() {
         "รายละเอียดการใช้รถ": booking.purpose || "-",
         คนขับ: getBookingDriverLabel(booking),
         สถานะ: statusMeta.label,
-        หมายเหตุ: booking.staff_note || "-",
+        หมายเหตุ: normalizeBookingNote(booking.staff_note) || "-",
       };
 
       if (FEATURES.vehicleModule) {

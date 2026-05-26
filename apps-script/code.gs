@@ -1249,11 +1249,61 @@ function normalizeDriverCancelDecision_(decision) {
   return String(decision || "").trim().toUpperCase();
 }
 
+function normalizeKnownNotePhrase_(value) {
+  let text = String(value || "").trim().replace(/[ \t]+/g, " ");
+
+  if (!text) return "";
+
+  text = text.replace(/\[ใช้รถ สนง\.กลาง\]\s*\[ใช้รถ สนง\.กลาง\]/g, "[ใช้รถ สนง.กลาง]");
+  text = text.replace(/\[ใช้รถ สนง\.กลาง\]\s*ใช้รถ สนง\.กลาง/g, "[ใช้รถ สนง.กลาง]");
+  text = text.replace(/(?:ใช้รถ สนง\.กลาง)(?:\s+ใช้รถ สนง\.กลาง)+/g, "ใช้รถ สนง.กลาง");
+  text = text.replace(/(?:บันทึกรายการย้อนหลัง)(?:\s*[:：-]?\s*บันทึกรายการย้อนหลัง)+/g, "บันทึกรายการย้อนหลัง");
+  text = text.replace(/(?:ไม่อนุมัติการยกเลิก)(?:\s*[:：-]?\s*ไม่อนุมัติการยกเลิก)+/g, "ไม่อนุมัติการยกเลิก");
+  text = text.replace(/(?:อนุมัติการยกเลิกงานคนขับ)(?:\s*[:：-]?\s*อนุมัติการยกเลิกงานคนขับ)+/g, "อนุมัติการยกเลิกงานคนขับ");
+  text = text.replace(/(?:รอการอนุมัติการยกเลิก)(?:\s*[:：-]?\s*รอการอนุมัติการยกเลิก)+/g, "รอการอนุมัติการยกเลิก");
+
+  return text.trim();
+}
+
+function canonicalizeNoteForCompare_(value) {
+  return normalizeKnownNotePhrase_(value)
+    .replace(/\[ใช้รถ สนง\.กลาง\]/g, "ใช้รถ สนง.กลาง")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeNoteParts(parts) {
+  const seen = {};
+  const normalizedParts = [];
+
+  (parts || []).forEach((part) => {
+    String(part || "")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .forEach((line) => {
+        const normalizedLine = normalizeKnownNotePhrase_(line);
+        if (!normalizedLine) return;
+
+        const canonical = canonicalizeNoteForCompare_(normalizedLine);
+        if (!canonical || seen[canonical]) return;
+
+        seen[canonical] = true;
+        normalizedParts.push(normalizedLine);
+      });
+  });
+
+  return normalizedParts;
+}
+
+function appendUniqueNote(existingNote, newNote) {
+  return normalizeNoteParts([existingNote, newNote]).join("\n");
+}
+
 function applyDriverCancelResolution_(sheet, table, row, data, options) {
   const headers = table.headers;
   const columnMap = table.columnMap;
   const now = options && options.now ? options.now : new Date();
-  const reason = String(data.reason || options.reason || "").trim();
+  const reason = normalizeNoteParts([data.reason || options.reason || ""]).join("\n");
   const actor = String(data.cancelled_by || data.reviewed_by || options.actor || "").trim();
   const noteActor = String(options && options.noteActor ? options.noteActor : actor).trim();
   const currentBooking = rowsToObjects(headers, [table.rows[row - 2]])[0] || {};
@@ -1273,7 +1323,7 @@ function applyDriverCancelResolution_(sheet, table, row, data, options) {
 
   const currentVehicleId = String(table.rows[row - 2][vehicleIdCol] || "").trim();
   const cancelledUserId = String(data.cancelled_user_id || "").trim();
-  const staffNote = "คนขับยกเลิกงานโดย " + noteActor + ": " + reason;
+  const staffNote = normalizeNoteParts(["คนขับยกเลิกงานโดย " + noteActor + ": " + reason]).join("\n");
 
   const rowValues = table.rows[row - 2].slice();
   rowValues[vehicleIdCol] = "";
@@ -1282,7 +1332,7 @@ function applyDriverCancelResolution_(sheet, table, row, data, options) {
   rowValues[vehiclePlateCol] = "";
   rowValues[assignedUserIdCol] = "";
   rowValues[assignedUserNameCol] = "";
-  rowValues[staffNoteCol] = staffNote;
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], staffNote);
   rowValues[driverCancelReasonCol] = reason;
   rowValues[driverCancelledByCol] = actor;
   rowValues[driverCancelledAtCol] = now;
@@ -1629,6 +1679,10 @@ function updateBooking(data) {
     }
   });
 
+  if (columnMap.staff_note !== undefined && data.staff_note !== undefined) {
+    rowValues[columnMap.staff_note] = appendUniqueNote(rowValues[columnMap.staff_note], data.staff_note);
+  }
+
   if (updatedAtCol !== undefined) {
     rowValues[updatedAtCol] = new Date();
   }
@@ -1769,7 +1823,7 @@ function approveBooking(data) {
   rowValues[assignedUserIdCol] = assignedDriverUserId;
   rowValues[assignedUserNameCol] = assignedDriver ? String(assignedDriver.name || "").trim() || assignedDriverName : assignedDriverName;
   rowValues[statusCol] = "APPROVED";
-  rowValues[staffNoteCol] = data.staff_note || "";
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], data.staff_note || "");
   rowValues[updatedAtCol] = new Date();
   setRowValues(sheet, row, rowValues);
 
@@ -1861,7 +1915,7 @@ function approveBooking(data) {
 
 function assignCentralVehicle(data) {
   const bookingId = String(data && data.booking_id || "").trim();
-  const reason = String(data && data.reason || "").trim();
+  const reason = normalizeNoteParts([data && data.reason || ""]).join("\n");
   const completedBy = String(data && data.completed_by || "").trim();
   const completedByUserId = String(data && data.completed_by_user_id || "").trim();
 
@@ -1975,10 +2029,7 @@ function assignCentralVehicle(data) {
   rowValues[updatedAtCol] = now;
   rowValues[updatedByCol] = completedBy;
 
-  const existingNote = String(rowValues[staffNoteCol] || "").trim();
-  rowValues[staffNoteCol] = existingNote
-    ? `${existingNote}\n[ใช้รถ สนง.กลาง] ${reason}`
-    : `[ใช้รถ สนง.กลาง] ${reason}`;
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], `[ใช้รถ สนง.กลาง] ${reason}`);
 
   setRowValues(sheet, rowNumber, rowValues);
 
@@ -2387,7 +2438,7 @@ function backdateCompleteBooking(data) {
   const assignedUserId = String(data.assigned_user_id || "").trim();
   const assignedUserName = String(data.assigned_user_name || "").trim();
   const vehicleId = String(data.vehicle_id || "").trim();
-  const note = String(data.staff_note || "").trim();
+  const note = normalizeNoteParts([data.staff_note || ""]).join("\n");
 
   const rowValues = table.rows[row - 2].slice();
   rowValues[assignedUserIdCol] = assignedUserId;
@@ -2398,7 +2449,7 @@ function backdateCompleteBooking(data) {
   rowValues[actualStartByCol] = data.actual_start_by || actor;
   rowValues[actualReturnByCol] = data.actual_return_by || actor;
   rowValues[statusCol] = "COMPLETED";
-  rowValues[staffNoteCol] = note;
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], note);
   rowValues[isBackdatedCol] = "TRUE";
   rowValues[backdatedCompletedAtCol] = data.backdated_completed_at || now.toISOString();
   rowValues[backdatedCompletedByCol] = data.backdated_completed_by || actor;
@@ -2451,7 +2502,7 @@ function backdateCompleteBooking(data) {
       actual_start_by: rowValues[actualStartByCol] || actor,
       actual_return_by: rowValues[actualReturnByCol] || actor,
       status: "COMPLETED",
-      staff_note: note,
+      staff_note: rowValues[staffNoteCol] || "",
       is_backdated: "TRUE",
       backdated_completed_at: rowValues[backdatedCompletedAtCol] || now.toISOString(),
       backdated_completed_by: rowValues[backdatedCompletedByCol] || actor,
@@ -2474,7 +2525,7 @@ function driverCancelJob(data) {
     });
   }
 
-  const reason = String(data.reason || "").trim();
+  const reason = normalizeNoteParts([data.reason || ""]).join("\n");
   const cancelledBy = String(data.cancelled_by || "").trim();
 
   if (!reason) {
@@ -2709,7 +2760,7 @@ function reviewDriverCancelRequest(data) {
   }
 
   const reviewedBy = String(data.reviewed_by || "").trim();
-  const reviewReason = String(data.review_reason || "").trim();
+  const reviewReason = normalizeNoteParts([data.review_reason || ""]).join("\n");
   const now = new Date();
   const currentAssignedUserId = String(currentRowValues[columnMap.assigned_user_id] || "").trim();
 
@@ -2909,13 +2960,13 @@ function cancelBooking(data) {
   }
 
   const now = new Date();
-  const reason = String(data.reason || "").trim();
+  const reason = normalizeNoteParts([data.reason || ""]).join("\n");
   const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
   const booking = values[row - 1];
 
   const rowValues = table.rows[row - 2].slice();
   rowValues[statusCol] = "CANCELLED";
-  rowValues[staffNoteCol] = reason;
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], reason);
   rowValues[updatedAtCol] = now;
   setRowValues(sheet, row, rowValues);
   const cancelledBooking = rowsToObjects(headers, [rowValues])[0] || {};
@@ -6777,10 +6828,7 @@ function unassignBookingDriver(data) {
     rowValues[statusCol] = "PENDING";
   }
 
-  const existingNote = String(rowValues[staffNoteCol] || "").trim();
-  rowValues[staffNoteCol] = existingNote
-    ? `${existingNote}\n[ดึงงานกลับ] ${reason}`
-    : `[ดึงงานกลับ] ${reason}`;
+  rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], `[ดึงงานกลับ] ${reason}`);
   rowValues[updatedAtCol] = new Date();
   rowValues[updatedByCol] = updatedBy;
 

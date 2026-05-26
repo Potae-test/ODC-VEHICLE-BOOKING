@@ -307,6 +307,16 @@ function getCurrentUser() {
   }
 }
 
+function isCentralOfficeDriver(user) {
+  const userId = String(user?.user_id || "").trim();
+  const name = String(user?.name || user?.full_name || user?.display_name || "").trim();
+
+  if (userId === "U007") return true;
+  if (!name) return false;
+
+  return name.includes("พขร.สนง.กลาง") || name.includes("สนง.กลาง");
+}
+
 function eventOverlapsDay(event, day) {
   if (!event?.start || !event?.end) return false;
 
@@ -734,7 +744,12 @@ export default function CalendarPage() {
 
   const activeDriversNow = useMemo(() => {
     const now = new Date();
-    const activeDrivers = users.filter((user) => normalizeStatus(user.role) === "DRIVER" && normalizeStatus(user.status) === "ACTIVE");
+    const activeDrivers = users.filter(
+      (user) =>
+        normalizeStatus(user.role) === "DRIVER" &&
+        normalizeStatus(user.status) === "ACTIVE" &&
+        !isCentralOfficeDriver(user)
+    );
 
     const unavailableNow = driverUnavailableRecords.filter((record) => {
       return (
