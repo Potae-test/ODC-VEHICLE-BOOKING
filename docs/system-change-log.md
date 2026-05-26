@@ -3,6 +3,7 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-05-26
+- Fixed the Booking row action dropdown so the `ดำเนินการ` menu renders as a floating portal-backed card positioned from the trigger button, opens upward when space below is limited, and closes on outside click, Escape, or scroll without changing any booking permissions or handlers.
 - Tightened FullCalendar month-view styling for `src/pages/Calendar.jsx` and `src/App.css` so day cells, event pills, pending-count pills, more links, and today highlighting stay compact and proportional after the Tailwind page refresh, without changing any Calendar logic or permissions.
 - Redesigned `src/pages/Calendar.jsx` page content with Tailwind-based layout, toolbar, legend, calendar shell, and driver summary cards plus inline SVG icons, while keeping FullCalendar behavior, Thai labels, active-driver filtering, booking flow, permissions, and app-shell navigation unchanged.
 - Continued the page-level Tailwind migration by refreshing shared content controls in `src/App.css` for forms, buttons, pagination, badges, staff cards, login, permission groups, and skeleton states, plus a small `src/pages/Login.jsx` wrapper update, so page UI elements look cleaner and more mobile-safe without changing business logic or shell navigation behavior.

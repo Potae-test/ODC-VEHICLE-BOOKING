@@ -1,4 +1,6 @@
 ﻿import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import Swal from "sweetalert2";
 import * as XLSX from "xlsx";
@@ -194,6 +196,107 @@ function getBookingActionButtonClassName(variant) {
   return `${BOOKING_ACTION_BUTTON_BASE_CLASSNAME} ${
     BOOKING_ACTION_BUTTON_VARIANTS[variant] || BOOKING_ACTION_BUTTON_VARIANTS.process
   }`;
+}
+
+function BookingSvgIcon({ children, className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className || "booking-action-icon"}
+    >
+      {children}
+    </svg>
+  );
+}
+
+function EyeIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M2.25 12s3.75-7.5 9.75-7.5S21.75 12 21.75 12 18 19.5 12 19.5 2.25 12 2.25 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </BookingSvgIcon>
+  );
+}
+
+function ChevronDownIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </BookingSvgIcon>
+  );
+}
+
+function CalendarIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <rect x="3" y="4.5" width="18" height="16" rx="3" />
+      <path d="M8 3v4M16 3v4M3 9h18" />
+    </BookingSvgIcon>
+  );
+}
+
+function CheckCircleIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12.25 2.4 2.4L15.8 9.75" />
+    </BookingSvgIcon>
+  );
+}
+
+function PencilIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0 0-3L16.5 4.5a2.1 2.1 0 0 0-3 0L3 15v5Z" />
+      <path d="m13.5 6.5 4 4" />
+    </BookingSvgIcon>
+  );
+}
+
+function UsersIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M17 20v-1.5a4.5 4.5 0 0 0-4.5-4.5h-1A4.5 4.5 0 0 0 7 18.5V20" />
+      <circle cx="12" cy="8" r="3" />
+      <path d="M20 20v-1.2A3.8 3.8 0 0 0 16.2 15" />
+      <path d="M17.5 6.6a2.6 2.6 0 1 1 0 5.2" />
+    </BookingSvgIcon>
+  );
+}
+
+function HomeIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M3.5 11.5 12 4l8.5 7.5" />
+      <path d="M6.5 10.75V20h11V10.75" />
+      <path d="M10 20v-6h4v6" />
+    </BookingSvgIcon>
+  );
+}
+
+function XCircleIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9 9 6 6M15 9l-6 6" />
+    </BookingSvgIcon>
+  );
+}
+
+function UndoIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M7 7H3v4" />
+      <path d="M3 11c2-3.5 5.5-5.5 9.2-5.5C17.2 5.5 21 9.2 21 14s-3.8 8.5-8.8 8.5c-2.8 0-5.3-1-7.2-2.9" />
+    </BookingSvgIcon>
+  );
 }
 
 function getBookingDetailFields({ booking, vehicleMap }) {
@@ -861,6 +964,11 @@ const BookingTableRow = memo(function BookingTableRow({
   const hasRejectedDriverCancelRequest = driverCancelRequestStatus === "REJECTED";
   const rowBookingId = getBookingId(booking);
   const disabled = Boolean(processing);
+  const actionMenuTriggerRef = useRef(null);
+  const actionMenuPanelRef = useRef(null);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 });
+  const [actionMenuPlacement, setActionMenuPlacement] = useState("bottom");
   const canShowDetail = canViewBookingDetail;
   const canShowBackdateComplete =
     canManageBackdateComplete &&
@@ -878,98 +986,227 @@ const BookingTableRow = memo(function BookingTableRow({
   const canShowAssignCentralVehicle =
     canManageAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
 
+  const actionMenuItems = [];
+
+  if (canShowBackdateComplete) {
+    actionMenuItems.push({
+      key: "backdate",
+      label: processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง",
+      color: "blue",
+      icon: CalendarIcon,
+      onClick: () => onBackdateComplete(booking),
+    });
+  }
+
+  if (canShowProcess) {
+    const isApproveAction = status !== "APPROVED";
+    actionMenuItems.push({
+      key: "process",
+      label:
+        processing === "process"
+          ? "กำลังดำเนินการ..."
+          : isApproveAction
+            ? "อนุมัติรายการ"
+            : FEATURES.vehicleModule
+              ? "เปลี่ยนคนขับ/รถ"
+              : "เปลี่ยนคนขับ",
+      color: isApproveAction ? "green" : "purple",
+      icon: isApproveAction ? CheckCircleIcon : UsersIcon,
+      onClick: () => onProcess(booking),
+    });
+  }
+
+  if (canShowEdit) {
+    actionMenuItems.push({
+      key: "edit",
+      label: processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข",
+      color: "orange",
+      icon: PencilIcon,
+      onClick: () => onEdit(booking),
+    });
+  }
+
+  if (canShowUnassign) {
+    actionMenuItems.push({
+      key: "unassign",
+      label: processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ",
+      color: "slate",
+      icon: UndoIcon,
+      onClick: () => onUnassign(booking),
+    });
+  }
+
+  if (canShowAssignCentralVehicle) {
+    actionMenuItems.push({
+      key: "assign-central-vehicle",
+      label: processing === "assign-central-vehicle" ? "กำลังบันทึก..." : "ใช้รถ สนง.กลาง",
+      color: "purple-dark",
+      icon: HomeIcon,
+      onClick: () => onAssignCentralVehicle(booking),
+    });
+  }
+
+  if (canShowCancel) {
+    actionMenuItems.push({
+      key: "cancel",
+      label: processing === "cancel" ? "กำลังยกเลิก..." : "ยกเลิก",
+      color: "red",
+      icon: XCircleIcon,
+      onClick: () => onCancel(booking),
+    });
+  }
+
+  if (canReviewDriverCancelRequests && hasPendingDriverCancelRequest) {
+    actionMenuItems.push(
+      {
+        key: "driver-cancel-approve",
+        label: "อนุมัติยกเลิกงานคนขับ",
+        color: "green",
+        icon: CheckCircleIcon,
+        onClick: () => onApproveDriverCancel(booking),
+      },
+      {
+        key: "driver-cancel-reject",
+        label: "ไม่อนุมัติ",
+        color: "red",
+        icon: XCircleIcon,
+        onClick: () => onRejectDriverCancel(booking),
+      }
+    );
+  }
+
+  const hasActionMenuItems = actionMenuItems.length > 0;
+
+  useLayoutEffect(() => {
+    if (!isActionMenuOpen) return;
+
+    const triggerRect = actionMenuTriggerRef.current?.getBoundingClientRect();
+    if (triggerRect) {
+      const menuWidth = 320;
+      const menuRect = actionMenuPanelRef.current?.getBoundingClientRect();
+      const menuHeight = menuRect?.height || 0;
+      const viewportPadding = 12;
+      const left = Math.max(
+        viewportPadding,
+        Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - viewportPadding)
+      );
+      const spaceBelow = window.innerHeight - triggerRect.bottom - viewportPadding;
+      const spaceAbove = triggerRect.top - viewportPadding;
+      const shouldOpenUpward = menuHeight > 0
+        ? menuHeight > spaceBelow && spaceAbove > spaceBelow
+        : spaceBelow < 180 && spaceAbove > spaceBelow;
+      const top = shouldOpenUpward
+        ? Math.max(viewportPadding, triggerRect.top - (menuHeight || 220) - 8)
+        : Math.min(window.innerHeight - (menuHeight || 220) - viewportPadding, triggerRect.bottom + 8);
+
+      setActionMenuPlacement(shouldOpenUpward ? "top" : "bottom");
+      setActionMenuPosition({
+        top,
+        left,
+      });
+    }
+
+    const handleDocumentPointerDown = (event) => {
+      const target = event.target;
+      const insideTrigger = actionMenuTriggerRef.current?.contains(target);
+      const insideMenu = actionMenuPanelRef.current?.contains(target);
+
+      if (!insideTrigger && !insideMenu) {
+        setIsActionMenuOpen(false);
+      }
+    };
+
+    const handleResize = () => {
+      setIsActionMenuOpen(false);
+    };
+
+    const handleScroll = () => {
+      setIsActionMenuOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsActionMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentPointerDown);
+    document.addEventListener("touchstart", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("scroll", handleScroll, true);
+
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentPointerDown);
+      document.removeEventListener("touchstart", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [isActionMenuOpen]);
+
+  const actionMenu = isActionMenuOpen && hasActionMenuItems && !disabled
+    ? createPortal(
+        <div
+          ref={actionMenuPanelRef}
+          className={`booking-action-menu booking-action-menu--${actionMenuPlacement}`}
+          style={{
+            top: `${actionMenuPosition.top}px`,
+            left: `${actionMenuPosition.left}px`,
+          }}
+        >
+          {actionMenuItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`booking-action-menu-item booking-action-menu-item--${item.color}`}
+                disabled={disabled}
+                onClick={() => {
+                  setIsActionMenuOpen(false);
+                  item.onClick();
+                }}
+              >
+                <Icon className="booking-action-icon" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>,
+        document.body
+      )
+    : null;
+
   const actionButtons = (
     <>
       {canShowDetail && (
-        <button type="button" className={getBookingActionButtonClassName("detail")} disabled={disabled} onClick={() => onViewDetail(booking)}>
+        <button
+          type="button"
+          className={getBookingActionButtonClassName("detail")}
+          disabled={disabled}
+          onClick={() => onViewDetail(booking)}
+        >
+          <EyeIcon className="booking-action-icon booking-action-icon--white" />
           ดูรายละเอียด
         </button>
       )}
-      {canShowBackdateComplete && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("backdate")}
-          disabled={disabled}
-          onClick={() => onBackdateComplete(booking)}
-        >
-          {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
-        </button>
-      )}
-      {canShowProcess && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("process")}
-          disabled={disabled}
-          onClick={() => onProcess(booking)}
-        >
-          {processing === "process"
-            ? "กำลังดำเนินการ..."
-            : status === "APPROVED"
-              ? FEATURES.vehicleModule
-                ? "เปลี่ยนคนขับ/รถ"
-                : "เปลี่ยนคนขับ"
-              : "อนุมัติรายการ"}
-        </button>
-      )}
-      {canShowEdit && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("edit")}
-          disabled={disabled}
-          onClick={() => onEdit(booking)}
-        >
-          {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
-        </button>
-      )}
-      {canShowUnassign && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("unassign")}
-          disabled={disabled}
-          onClick={() => onUnassign(booking)}
-        >
-          {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
-        </button>
-      )}
-      {canShowAssignCentralVehicle && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("central")}
-          disabled={disabled}
-          onClick={() => onAssignCentralVehicle(booking)}
-        >
-          {processing === "assign-central-vehicle" ? "กำลังบันทึก..." : "ใช้รถ สนง.กลาง"}
-        </button>
-      )}
-      {canShowCancel && (
-        <button
-          type="button"
-          className={getBookingActionButtonClassName("cancel")}
-          disabled={disabled}
-          onClick={() => onCancel(booking)}
-        >
-          {processing === "cancel" ? "กำลังยกเลิก..." : status === "PENDING" ? "ยกเลิก" : "ยกเลิก"}
-        </button>
-      )}
-      {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
-        <>
+      {hasActionMenuItems && (
+        <div className="booking-action-dropdown">
           <button
+            ref={actionMenuTriggerRef}
             type="button"
-            className={getBookingActionButtonClassName("approveCancel")}
+            className="booking-action-button booking-action-menu-trigger"
             disabled={disabled}
-            onClick={() => onApproveDriverCancel(booking)}
+            aria-haspopup="menu"
+            aria-expanded={isActionMenuOpen}
+            onClick={() => setIsActionMenuOpen((current) => !current)}
           >
-            อนุมัติยกเลิกงานคนขับ
+            ดำเนินการ
+            <ChevronDownIcon className="booking-action-icon booking-action-icon--chevron" />
           </button>
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("rejectCancel")}
-            disabled={disabled}
-            onClick={() => onRejectDriverCancel(booking)}
-          >
-            ไม่อนุมัติ
-          </button>
-        </>
+          {actionMenu}
+        </div>
       )}
     </>
   );
@@ -1011,7 +1248,7 @@ const BookingTableRow = memo(function BookingTableRow({
           </div>
         )}
       </td>
-      <td className="action-buttons">
+      <td className="action-buttons booking-row-actions">
         {actionButtons}
       </td>
     </tr>
