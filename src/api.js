@@ -370,6 +370,7 @@ export async function backdateCompleteBooking(payload) {
     body: JSON.stringify(payload || {}),
   });
 
+  emitNotificationsRefresh();
   return json;
 }
 
@@ -466,6 +467,7 @@ export async function updateBooking(data) {
   });
 
   invalidateApiCache(["bookings"]);
+  emitNotificationsRefresh();
   return json.data;
 }
 

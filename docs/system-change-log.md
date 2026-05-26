@@ -3,10 +3,14 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-05-26
+- Remapped Booking page action buttons to semantic classes in `src/pages/Booking.jsx` and refreshed the shared button palette in `src/App.css` so detail, approve/change-driver, central-office use, backdate, edit, restore, cancel, and driver-cancel review actions each use clearer government-style colors with darker hover states, without changing booking behavior or permissions.
 - Added `bookings_create_backdated` as a managed action permission and wired the shared booking modal to show the "บันทึกรายการย้อนหลัง" checkbox in both create and edit flows only for users who have that permission, instead of hard-coding the checkbox to STAFF/ADMIN roles.
 - Preserved `requester_user_id` ownership when STAFF/ADMIN edit bookings, and restored Booking page action gating so `USER` can still see all bookings but may edit or cancel only bookings owned by that user, with requester-name fallback for legacy rows that do not yet have `requester_user_id`.
 - Restored the Booking page `ใช้รถ สนง.กลาง` action under `bookings_assign_central_vehicle`, bumped the action-permission config version to refresh cached role grants, and decoupled the `บันทึกงานย้อนหลัง` action from the create/edit `is_backdated` flag so STAFF/ADMIN can backdate-complete any eligible booking while still selecting the assigned driver in the completion form.
 - Added `bookings_backdate_complete` under booking action permissions so it appears automatically in the Admin permission UI under "รายการจอง", granted it by default to `USER` and `STAFF`, and simplified the Booking page backdated-completion popup to only collect the assigned driver and actual trip timestamps.
+
+ - Adjusted Booking page action visibility so USER rows stay visible for all bookings, detail access remains permission-based, and manage actions now require booking ownership with `requester_user_id` plus legacy email/name fallback while STAFF/ADMIN behavior stays permission-driven.
+ - Emitted notification refresh events after successful `updateBooking` and `backdateCompleteBooking` requests so edit and backdate notifications appear without a manual reload.
 
 ## 2026-05-25
 - Enforced true booking ownership through `requester_user_id` for new user-created bookings, kept Booking and Calendar globally visible, limited USER edit/cancel actions to their own bookings, and routed owner-facing booking notifications to the booking owner instead of relying on requester name.

@@ -2297,6 +2297,109 @@ label {
   margin: 0 !important;
 }
 
+/* Booking action semantics */
+.info-button,
+.primary-button,
+.success-button,
+.warning-button,
+.edit-button,
+.restore-button,
+.danger-button,
+.danger-dark-button {
+  margin-left: 8px;
+}
+
+.info-button {
+  background: #ffffff;
+  color: #1455c8;
+  border: 2px solid #1455c8;
+}
+
+.info-button:hover {
+  background: #dbeafe;
+  color: #0f429f;
+  border-color: #0f429f;
+}
+
+.primary-button {
+  background: #1455c8;
+  color: #ffffff;
+}
+
+.primary-button:hover {
+  background: #0f429f;
+  color: #ffffff;
+}
+
+.success-button {
+  background: #15803d;
+  color: #ffffff;
+}
+
+.success-button:hover {
+  background: #166534;
+  color: #ffffff;
+}
+
+.warning-button {
+  background: #d97706;
+  color: #ffffff;
+}
+
+.warning-button:hover {
+  background: #b45309;
+  color: #ffffff;
+}
+
+.edit-button {
+  background: #f59e0b;
+  color: #1f2937;
+}
+
+.edit-button:hover {
+  background: #d97706;
+  color: #111827;
+}
+
+.restore-button {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.restore-button:hover {
+  background: #115e59;
+  color: #ffffff;
+}
+
+.danger-button {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.danger-dark-button {
+  background: #991b1b;
+  color: #ffffff;
+}
+
+.danger-dark-button:hover {
+  background: #7f1d1d;
+  color: #ffffff;
+}
+
+.action-buttons .booking-action-button {
+  padding: 10px 16px;
+  min-width: auto;
+  width: auto;
+  min-height: auto;
+  border-radius: 10px;
+  font-size: 24px;
+}
+
 .section-toolbar {
   display: flex;
   justify-content: flex-end;

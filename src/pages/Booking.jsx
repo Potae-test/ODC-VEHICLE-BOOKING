@@ -385,14 +385,29 @@ function isBackdatedFlagEnabled(booking) {
   return String(booking.is_backdated || "").trim().toUpperCase() === "TRUE";
 }
 
-function isBookingOwnedByUser(booking, user) {
-  const currentUserId = String(user?.user_id || "").trim();
-  const currentUserName = String(user?.name || user?.email || "").trim().toLowerCase();
+function isStaffOrAdmin(user) {
+  const role = String(user?.role || "").trim().toUpperCase();
+  return role === "STAFF" || role === "ADMIN";
+}
+
+function isOwnBooking(booking, currentUser) {
+  const currentUserId = String(currentUser?.user_id || "").trim();
+  const currentUserEmail = String(currentUser?.email || "").trim().toLowerCase();
+  const currentUserName = String(currentUser?.name || "").trim().toLowerCase();
   const bookingRequesterUserId = String(booking?.requester_user_id || "").trim();
+  const bookingRequesterEmail = String(booking?.requester_email || "").trim().toLowerCase();
   const bookingRequesterName = String(booking?.requester_name || "").trim().toLowerCase();
 
   if (currentUserId && bookingRequesterUserId) {
     return currentUserId === bookingRequesterUserId;
+  }
+
+  if (currentUserEmail && bookingRequesterEmail) {
+    return currentUserEmail === bookingRequesterEmail;
+  }
+
+  if (currentUserEmail && bookingRequesterName) {
+    return currentUserEmail === bookingRequesterName;
   }
 
   if (currentUserName && bookingRequesterName) {
@@ -402,9 +417,10 @@ function isBookingOwnedByUser(booking, user) {
   return false;
 }
 
-function isStaffOrAdmin(user) {
-  const role = String(user?.role || "").trim().toUpperCase();
-  return role === "STAFF" || role === "ADMIN";
+function canUserManageOwnBookingAction(basePermission, booking, currentUser) {
+  if (!basePermission) return false;
+  if (isStaffOrAdmin(currentUser)) return true;
+  return isOwnBooking(booking, currentUser);
 }
 
 function isTimeOverlap(startA, endA, startB, endB) {
@@ -773,14 +789,12 @@ const BookingTableRow = memo(function BookingTableRow({
   vehicleMap,
   showVehicleColumn,
   canViewBookingDetail,
-  canProcessBookings,
-  canBackdateComplete,
-  canCancelBookings,
-  canEditBookings,
-  canEditBooking,
-  canCancelBooking,
+  canManageProcessBooking,
+  canManageBackdateComplete,
+  canManageCancelBooking,
+  canManageEditBooking,
   canUnassignBookings,
-  canAssignCentralVehicle,
+  canManageAssignCentralVehicle,
   canReviewDriverCancelRequests,
   processing,
   onViewDetail,
@@ -802,21 +816,20 @@ const BookingTableRow = memo(function BookingTableRow({
   const disabled = Boolean(processing);
   const canShowDetail = canViewBookingDetail;
   const canShowBackdateComplete =
-    canBackdateComplete &&
+    canManageBackdateComplete &&
     rowBookingId &&
     !["COMPLETED", "CANCELLED"].includes(status);
   const canShowProcess =
-    canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
+    canManageProcessBooking && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
   const canShowEdit =
-    canEditBookings && canEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
+    canManageEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
   const canShowCancel =
-    canCancelBookings &&
-    canCancelBooking &&
+    canManageCancelBooking &&
     !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
     !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
   const canShowAssignCentralVehicle =
-    canAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
+    canManageAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
 
   const actionButtons = (
     <>
@@ -854,7 +867,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowEdit && (
         <button
           type="button"
-          className="warning-button booking-action-button"
+          className="edit-button booking-action-button"
           disabled={disabled}
           onClick={() => onEdit(booking)}
         >
@@ -864,7 +877,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowUnassign && (
         <button
           type="button"
-          className="success-button booking-action-button"
+          className="restore-button booking-action-button"
           disabled={disabled}
           onClick={() => onUnassign(booking)}
         >
@@ -874,7 +887,7 @@ const BookingTableRow = memo(function BookingTableRow({
       {canShowAssignCentralVehicle && (
         <button
           type="button"
-          className="warning-button booking-action-button"
+          className="success-button booking-action-button"
           disabled={disabled}
           onClick={() => onAssignCentralVehicle(booking)}
         >
@@ -895,7 +908,7 @@ const BookingTableRow = memo(function BookingTableRow({
         <>
           <button
             type="button"
-            className="booking-action-button"
+            className="success-button booking-action-button"
             disabled={disabled}
             onClick={() => onApproveDriverCancel(booking)}
           >
@@ -903,7 +916,7 @@ const BookingTableRow = memo(function BookingTableRow({
           </button>
           <button
             type="button"
-            className="danger-button booking-action-button"
+            className="danger-dark-button booking-action-button"
             disabled={disabled}
             onClick={() => onRejectDriverCancel(booking)}
           >
@@ -965,14 +978,12 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     vehicleMap,
     showVehicleColumn,
     canViewBookingDetail,
-    canProcessBookings,
-    canBackdateComplete,
-    canCancelBookings,
-    canEditBookings,
-    canEditBooking,
-    canCancelBooking,
+    canManageProcessBooking,
+    canManageBackdateComplete,
+    canManageCancelBooking,
+    canManageEditBooking,
     canUnassignBookings,
-    canAssignCentralVehicle,
+    canManageAssignCentralVehicle,
     canReviewDriverCancelRequests,
     processing,
     onViewDetail,
@@ -992,21 +1003,20 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
   const rowBookingId = getBookingId(booking);
   const disabled = Boolean(processing);
   const canShowBackdateComplete =
-    canBackdateComplete &&
+    canManageBackdateComplete &&
     rowBookingId &&
     !["COMPLETED", "CANCELLED"].includes(status);
   const canShowProcess =
-    canProcessBookings && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
+    canManageProcessBooking && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
   const canShowEdit =
-    canEditBookings && canEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
+    canManageEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
   const canShowCancel =
-    canCancelBookings &&
-    canCancelBooking &&
+    canManageCancelBooking &&
     !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
     !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
   const canShowAssignCentralVehicle =
-    canAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
+    canManageAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
 
   return (
     <article className="mobile-data-card booking-mobile-card">
@@ -1080,7 +1090,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowEdit && (
           <button
             type="button"
-            className="warning-button booking-action-button"
+            className="edit-button booking-action-button"
             disabled={disabled}
             onClick={() => onEdit(booking)}
           >
@@ -1090,7 +1100,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowUnassign && (
           <button
             type="button"
-            className="success-button booking-action-button"
+            className="restore-button booking-action-button"
             disabled={disabled}
             onClick={() => onUnassign(booking)}
           >
@@ -1100,7 +1110,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
         {canShowAssignCentralVehicle && (
           <button
             type="button"
-            className="warning-button booking-action-button"
+            className="success-button booking-action-button"
             disabled={disabled}
             onClick={() => onAssignCentralVehicle(booking)}
           >
@@ -1121,7 +1131,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
           <>
             <button
               type="button"
-              className="booking-action-button"
+              className="success-button booking-action-button"
               disabled={disabled}
               onClick={() => onApproveDriverCancel(booking)}
             >
@@ -1129,7 +1139,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
             </button>
             <button
               type="button"
-              className="danger-button booking-action-button"
+              className="danger-dark-button booking-action-button"
               disabled={disabled}
               onClick={() => onRejectDriverCancel(booking)}
             >
@@ -2440,7 +2450,31 @@ export default function Booking() {
                     ) : (
                       pageItems.map((booking, rowIndex) => (
                         (() => {
-                          const canManageBooking = isStaffOrAdmin(currentUser) || isBookingOwnedByUser(booking, currentUser);
+                          const canManageProcessBooking = canUserManageOwnBookingAction(
+                            canProcessBookings,
+                            booking,
+                            currentUser
+                          );
+                          const canManageBackdateComplete = canUserManageOwnBookingAction(
+                            canBackdateComplete,
+                            booking,
+                            currentUser
+                          );
+                          const canManageEditBooking = canUserManageOwnBookingAction(
+                            canEditBookings,
+                            booking,
+                            currentUser
+                          );
+                          const canManageCancelBooking = canUserManageOwnBookingAction(
+                            canCancelBookings,
+                            booking,
+                            currentUser
+                          );
+                          const canManageAssignCentralVehicle = canUserManageOwnBookingAction(
+                            canAssignCentralVehicle,
+                            booking,
+                            currentUser
+                          );
 
                           return (
                         <BookingTableRow
@@ -2450,14 +2484,12 @@ export default function Booking() {
                           vehicleMap={vehicleMap}
                           showVehicleColumn={FEATURES.vehicleModule}
                           canViewBookingDetail={canViewBookingDetail}
-                          canProcessBookings={canProcessBookings}
-                          canBackdateComplete={canBackdateComplete}
-                          canCancelBookings={canCancelBookings}
-                          canEditBookings={canEditBookings}
-                          canEditBooking={canManageBooking}
-                          canCancelBooking={canManageBooking}
+                          canManageProcessBooking={canManageProcessBooking}
+                          canManageBackdateComplete={canManageBackdateComplete}
+                          canManageCancelBooking={canManageCancelBooking}
+                          canManageEditBooking={canManageEditBooking}
                           canUnassignBookings={canUnassignBookings}
-                          canAssignCentralVehicle={canAssignCentralVehicle}
+                          canManageAssignCentralVehicle={canManageAssignCentralVehicle}
                           canReviewDriverCancelRequests={canReviewDriverCancelRequests}
                           processing={
                             processingAction?.bookingId === getBookingId(booking)
@@ -2488,7 +2520,31 @@ export default function Booking() {
                 ) : (
                   pageItems.map((booking, rowIndex) => (
                     (() => {
-                      const canManageBooking = isStaffOrAdmin(currentUser) || isBookingOwnedByUser(booking, currentUser);
+                      const canManageProcessBooking = canUserManageOwnBookingAction(
+                        canProcessBookings,
+                        booking,
+                        currentUser
+                      );
+                      const canManageBackdateComplete = canUserManageOwnBookingAction(
+                        canBackdateComplete,
+                        booking,
+                        currentUser
+                      );
+                      const canManageEditBooking = canUserManageOwnBookingAction(
+                        canEditBookings,
+                        booking,
+                        currentUser
+                      );
+                      const canManageCancelBooking = canUserManageOwnBookingAction(
+                        canCancelBookings,
+                        booking,
+                        currentUser
+                      );
+                      const canManageAssignCentralVehicle = canUserManageOwnBookingAction(
+                        canAssignCentralVehicle,
+                        booking,
+                        currentUser
+                      );
 
                       return (
                     <BookingMobileCard
@@ -2498,14 +2554,12 @@ export default function Booking() {
                       vehicleMap={vehicleMap}
                       showVehicleColumn={FEATURES.vehicleModule}
                       canViewBookingDetail={canViewBookingDetail}
-                      canProcessBookings={canProcessBookings}
-                      canBackdateComplete={canBackdateComplete}
-                      canCancelBookings={canCancelBookings}
-                      canEditBookings={canEditBookings}
-                      canEditBooking={canManageBooking}
-                      canCancelBooking={canManageBooking}
+                      canManageProcessBooking={canManageProcessBooking}
+                      canManageBackdateComplete={canManageBackdateComplete}
+                      canManageCancelBooking={canManageCancelBooking}
+                      canManageEditBooking={canManageEditBooking}
                       canUnassignBookings={canUnassignBookings}
-                      canAssignCentralVehicle={canAssignCentralVehicle}
+                      canManageAssignCentralVehicle={canManageAssignCentralVehicle}
                       canReviewDriverCancelRequests={canReviewDriverCancelRequests}
                       processing={
                         processingAction?.bookingId === getBookingId(booking)
