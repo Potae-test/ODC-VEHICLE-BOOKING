@@ -4229,3 +4229,29 @@ label {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 }
+
+/* Tailwind shell fallback */
+.shell-root,
+.shell-layout,
+.shell-main {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.shell-layout,
+.shell-main {
+  min-height: 0;
+}
+
+.shell-sidebar button {
+  white-space: normal;
+}
+
+@media (max-width: 768px) {
+  .shell-root,
+  .shell-layout,
+  .shell-main {
+    overflow-x: clip;
+  }
+}

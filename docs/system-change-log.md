@@ -3,6 +3,8 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-05-26
+- Refined the Tailwind app shell in `src/App.jsx` for 320px-to-desktop responsiveness by moving the shell onto dedicated class names, tightening header/profile wrapping, adding a mobile drawer close control, and adding minimal fallback selectors in `src/App.css` so legacy shell rules no longer fight the Tailwind header/sidebar/layout styling.
+- Migrated the shared app shell in `src/App.jsx` to Tailwind-based header, sidebar, and main layout classes with inline SVG icons, while keeping the existing page routing, permission-driven navigation, notification behavior, and `src/App.css` page-level fallback styles intact for gradual rollout.
 - Added shared booking-note deduplication helpers in `apps-script/code.gs` and a frontend fallback normalizer in `src/pages/Booking.jsx` so repeated staff-note labels such as backdated, central-office, cancellation, and review text no longer accumulate or display twice while preserving unique reasons and existing note content.
 - Replaced the Booking action button outline treatment with simple solid semantic button classes in `src/pages/Booking.jsx` and scoped solid color rules in `src/App.css`, keeping the same Booking row/mobile layout and behavior while making action states more readable for the existing government-style UI.
 - Updated the Tailwind-based Booking action button helper in `src/pages/Booking.jsx` so all Booking row and mobile action buttons now use clean outline variants with light hover fills by semantic intent, while preserving the existing button layout, labels, permissions, and booking behavior.
