@@ -260,6 +260,13 @@ function formatGregorianMonthLabel(date) {
   return `${EN_MONTH_LABELS[safeDate.getMonth()]} ${safeDate.getFullYear()}`;
 }
 
+function formatSelectedThaiDate(date) {
+  const safeDate = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(safeDate.getTime())) return "-";
+
+  return `วันที่ ${safeDate.getDate()} ${THAI_MONTH_LABELS[safeDate.getMonth()]} ${safeDate.getFullYear() + 543}`;
+}
+
 function formatCalendarToolbarLabel(date, calendarLang) {
   return calendarLang === "en" ? formatGregorianMonthLabel(date) : formatBuddhistMonthLabel(date);
 }
@@ -427,6 +434,201 @@ function getHolidayTooltipText(holiday, calendarLang) {
   return type ? `${name} (${type})` : name;
 }
 
+function getCalendarMonthRange(date) {
+  const safeDate = date instanceof Date ? date : new Date(date || Date.now());
+  const monthStart = new Date(safeDate.getFullYear(), safeDate.getMonth(), 1);
+  const monthEnd = new Date(safeDate.getFullYear(), safeDate.getMonth() + 1, 0);
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+  const gridEnd = new Date(monthEnd);
+  gridEnd.setDate(monthEnd.getDate() + (6 - monthEnd.getDay()));
+
+  const days = [];
+  for (let cursor = new Date(gridStart); cursor <= gridEnd; cursor.setDate(cursor.getDate() + 1)) {
+    days.push(new Date(cursor));
+  }
+
+  return days;
+}
+
+function getMobileEventShortLabel(event) {
+  const resource = event?.resource || {};
+  const kind = String(resource.kind || "").trim().toLowerCase();
+
+  if (kind === "unavailable") {
+    const type = normalizeUnavailableType(resource.type);
+    if (type === "ลา / หยุด") return "ลา / หยุด";
+    if (type === "ติดภารกิจ (ชั่วคราว)") return "ติดภารกิจ";
+    return type || "ไม่รับงาน";
+  }
+
+  const destination = String(resource.destination || "").trim();
+  const requester = String(resource.requester_name || "").trim();
+  const fallback = destination || requester || String(event?.title || "").trim() || "รายการจอง";
+
+  return fallback.length > 18 ? `${fallback.slice(0, 18)}...` : fallback;
+}
+
+function getMobileEventStatusClassName(event) {
+  const resource = event?.resource || {};
+  if (String(resource.kind || "").trim().toLowerCase() === "unavailable") {
+    return getUnavailableCalendarStatusMeta(resource.type).className || "red";
+  }
+  return getBookingCalendarStatusMeta(resource.status).className || "blue";
+}
+
+const MobileMonthCalendar = memo(function MobileMonthCalendar({
+  calendarDate,
+  calendarLang,
+  selectedDate,
+  onSelectDate,
+  visibleCalendarEvents,
+  calendarEvents,
+  pendingCountByDate,
+  thaiHolidayMap,
+  onSelectEvent,
+}) {
+  const weekdayLabels = calendarLang === "en" ? EN_WEEKDAY_LABELS : THAI_WEEKDAY_LABELS;
+  const monthDays = useMemo(() => getCalendarMonthRange(calendarDate), [calendarDate]);
+
+  const visibleEventsByDate = useMemo(() => {
+    const map = new Map();
+
+    visibleCalendarEvents.forEach((event) => {
+      monthDays.forEach((day) => {
+        if (!eventOverlapsDay(event, day)) return;
+
+        const key = toCalendarDateKey(day);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(event);
+      });
+    });
+
+    map.forEach((items, key) => {
+      map.set(
+        key,
+        [...items].sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      );
+    });
+
+    return map;
+  }, [monthDays, visibleCalendarEvents]);
+
+  const selectedDateKey = toCalendarDateKey(selectedDate);
+  const selectedDateEvents = useMemo(() => {
+    const visibleEvents = visibleEventsByDate.get(selectedDateKey) || [];
+    const pendingEvents = calendarEvents
+      .filter((event) => {
+        const status = String(event.resource?.status || "").toUpperCase();
+        return status === "PENDING" && toCalendarDateKey(event.start) === selectedDateKey;
+      })
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+    return [...visibleEvents, ...pendingEvents];
+  }, [calendarEvents, selectedDateKey, visibleEventsByDate]);
+
+  const selectedDateLabel = formatSelectedThaiDate(selectedDate);
+
+  return (
+    <div className="mobile-month-calendar">
+      <div className="mobile-month-calendar-grid" role="grid" aria-label="ปฏิทินรายเดือนแบบย่อ">
+        {weekdayLabels.map((label) => (
+          <div key={label} className="mobile-month-calendar-weekday" role="columnheader">
+            {label}
+          </div>
+        ))}
+
+        {monthDays.map((day) => {
+          const dateKey = toCalendarDateKey(day);
+          const dayEvents = visibleEventsByDate.get(dateKey) || [];
+          const pendingCount = pendingCountByDate.get(dateKey) || 0;
+          const overflowCount = Math.max(dayEvents.length - 3, 0);
+          const holiday = getThaiHoliday(day, thaiHolidayMap);
+          const isSelected = isSameCalendarDate(day, selectedDate);
+          const isCurrentMonth = day.getMonth() === calendarDate.getMonth();
+
+          return (
+            <button
+              key={dateKey}
+              type="button"
+              className={`mobile-month-calendar-cell${isSelected ? " is-selected" : ""}${isToday(day) ? " is-today" : ""}${!isCurrentMonth ? " is-outside-month" : ""}${holiday ? " is-holiday" : ""}${isWeekend(day) ? " is-weekend" : ""}`}
+              onClick={() => onSelectDate(day)}
+              title={holiday ? getHolidayTooltipText(holiday, calendarLang) : undefined}
+            >
+              <div className="mobile-month-calendar-day-row">
+                <span className="mobile-month-calendar-day-number">{day.getDate()}</span>
+                {pendingCount > 0 && (
+                  <span className="mobile-month-calendar-pending-count">+{pendingCount}</span>
+                )}
+              </div>
+
+              <div className="mobile-month-calendar-event-stack">
+                {dayEvents.slice(0, 3).map((event) => (
+                  <button
+                    key={`${dateKey}-${event.id}`}
+                    type="button"
+                    className={`mobile-month-calendar-event-pill ${getMobileEventStatusClassName(event)}`}
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      onSelectDate(day);
+                      onSelectEvent(event);
+                    }}
+                    title={event.title || getMobileEventShortLabel(event)}
+                  >
+                    {getMobileEventShortLabel(event)}
+                  </button>
+                ))}
+
+                {overflowCount > 0 && (
+                  <span className="mobile-month-calendar-more">+{overflowCount}</span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mobile-month-calendar-selected">
+        <div className="mobile-month-calendar-selected-head">
+          <h4>รายการ</h4>
+          <span>วันที่ {selectedDateLabel}</span>
+        </div>
+
+        {selectedDateEvents.length > 0 ? (
+          <div className="mobile-month-calendar-selected-list">
+            {selectedDateEvents.map((event, index) => {
+              const resource = event.resource || {};
+              const isUnavailable = String(resource.kind || "").trim().toLowerCase() === "unavailable";
+              const meta = isUnavailable
+                ? getUnavailableCalendarStatusMeta(resource.type)
+                : getBookingCalendarStatusMeta(resource.status);
+
+              return (
+                <button
+                  key={`${selectedDateKey}-${event.id || index}`}
+                  type="button"
+                  className="mobile-month-calendar-selected-item"
+                  onClick={() => onSelectEvent(event)}
+                >
+                  <span className={`mobile-month-calendar-selected-dot ${meta.className || "gray"}`} />
+                  <span className="mobile-month-calendar-selected-body">
+                    <span className="mobile-month-calendar-selected-title">
+                      {event.title || getMobileEventShortLabel(event)}
+                    </span>
+                    <span className="mobile-month-calendar-selected-meta">{meta.label}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mobile-month-calendar-empty">ไม่มีรายการที่ต้องแสดงในวันนี้</div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 const CalendarToolbar = memo(function CalendarToolbar({
   date,
   onNavigate,
@@ -436,20 +638,20 @@ const CalendarToolbar = memo(function CalendarToolbar({
   const toolbarDate = date instanceof Date ? date : new Date(date || Date.now());
   const label = formatCalendarToolbarLabel(toolbarDate, calendarLang);
   const navButtonClassName =
-    "inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[22px] font-bold text-slate-800 shadow-sm transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800";
+    "calendar-toolbar-button inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-[17px] font-bold text-slate-800 shadow-sm transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800 sm:min-h-11 sm:px-4 sm:py-2.5 sm:text-[22px]";
   const langButtonClassName =
-    "inline-flex min-h-11 min-w-[56px] items-center justify-center rounded-xl border px-4 py-2.5 text-[20px] font-bold shadow-sm transition";
+    "calendar-toolbar-button calendar-toolbar-lang-button inline-flex min-h-10 min-w-[48px] items-center justify-center whitespace-nowrap rounded-xl border px-3 py-2 text-[16px] font-bold shadow-sm transition sm:min-h-11 sm:min-w-[56px] sm:px-4 sm:py-2.5 sm:text-[20px]";
   const getLangButtonClassName = (lang) =>
     calendarLang === lang
       ? `${langButtonClassName} border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700`
       : `${langButtonClassName} border-slate-200 bg-white text-slate-800 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-800`;
 
   return (
-    <div className="calendar-toolbar flex flex-col gap-3 rounded-2xl border border-sky-100 bg-slate-50/80 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={navButtonClassName} onClick={() => onNavigate("TODAY")}>
-          {CALENDAR_MESSAGES[calendarLang].today}
-        </button>
+      <div className="calendar-toolbar flex flex-col gap-2.5 rounded-2xl border border-sky-100 bg-slate-50/80 p-3 sm:gap-3 sm:p-4 lg:gap-4">
+        <div className="calendar-toolbar-nav flex flex-wrap items-center gap-2">
+          <button type="button" className={navButtonClassName} onClick={() => onNavigate("TODAY")}>
+            {CALENDAR_MESSAGES[calendarLang].today}
+          </button>
         <button type="button" className={navButtonClassName} onClick={() => onNavigate("PREV")}>
           {CALENDAR_MESSAGES[calendarLang].previous}
         </button>
@@ -458,26 +660,65 @@ const CalendarToolbar = memo(function CalendarToolbar({
         </button>
       </div>
 
-      <div className="calendar-toolbar-label flex min-w-0 flex-1 items-center justify-center gap-2 text-center text-[28px] font-bold leading-tight text-blue-900 sm:text-[32px]">
-        <CalendarMonthIcon className="h-6 w-6 text-sky-700 sm:h-7 sm:w-7" />
-        {label}
-      </div>
+      <div className="calendar-toolbar-bottom flex min-w-0 items-center justify-between gap-2">
+        <div className="calendar-toolbar-label flex min-w-0 flex-1 items-center justify-start gap-2 text-left text-[20px] font-bold leading-tight text-blue-900 sm:justify-center sm:text-center sm:text-[32px]">
+          <CalendarMonthIcon className="h-5 w-5 shrink-0 text-sky-700 sm:h-7 sm:w-7" />
+          <span className="calendar-toolbar-label-text block min-w-0 truncate">{label}</span>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto">
-        <button
-          type="button"
-          className={getLangButtonClassName("th")}
-          onClick={() => onChangeCalendarLang("th")}
-        >
-          TH
-        </button>
-        <button
-          type="button"
-          className={getLangButtonClassName("en")}
-          onClick={() => onChangeCalendarLang("en")}
-        >
-          EN
-        </button>
+        <div className="calendar-toolbar-lang flex flex-wrap items-center gap-2 self-start sm:self-end lg:self-auto">
+          <button
+            type="button"
+            className={getLangButtonClassName("th")}
+            onClick={() => onChangeCalendarLang("th")}
+          >
+            TH
+          </button>
+          <button
+            type="button"
+            className={getLangButtonClassName("en")}
+            onClick={() => onChangeCalendarLang("en")}
+          >
+            EN
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Desktop header
+const CalendarDesktopHeader = memo(function CalendarDesktopHeader({
+  refreshing,
+  loading,
+  onRefresh,
+}) {
+  return (
+    <div className="page-header calendar-page-header-v2 flex flex-col gap-2 rounded-2xl border border-sky-100 bg-white px-3 py-3 shadow-sm sm:gap-4 sm:rounded-3xl sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between lg:px-7">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:items-start sm:gap-3 lg:justify-start">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky-100 text-sky-800 shadow-sm sm:h-12 sm:w-12">
+              <CalendarMonthIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+            </span>
+            <div className="calendar-page-header-copy min-w-0">
+              <h2 className="truncate text-[20px] font-bold leading-tight text-blue-900 sm:text-[34px]">ปฏิทินการจอง</h2>
+            </div>
+          </div>
+
+          {/* <button
+            type="button"
+            className="calendar-page-button ml-auto inline-flex min-h-[36px] shrink-0 items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[15px] font-bold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 sm:min-h-11 sm:w-auto sm:rounded-2xl sm:border-0 sm:bg-blue-700 sm:px-4 sm:py-2.5 sm:text-[24px] sm:text-white sm:hover:bg-blue-800 sm:disabled:bg-slate-300 sm:disabled:text-white"
+            disabled={refreshing || loading}
+            onClick={onRefresh}
+          >
+            <RefreshIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
+          </button> */}
+        </div>
+        <div className="mt-2 text-sm leading-relaxed text-slate-500 sm:mt-1 sm:text-[23px] sm:leading-snug">
+          รายการจองทั้งหมด และจำนวน พขร. พร้อมปฏิบัติงาน
+        </div>
       </div>
     </div>
   );
@@ -496,6 +737,15 @@ export default function CalendarPage() {
   const [error, setError] = useState("");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [calendarLang, setCalendarLang] = useState("th");
+  const [isCompactMobileCalendar, setIsCompactMobileCalendar] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(max-width: 375px)").matches;
+  });
+  const [isMobileCalendarView, setIsMobileCalendarView] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+  const [selectedMobileDate, setSelectedMobileDate] = useState(new Date());
   const visibleLoading = useMinimumLoading(loading, 350);
   const bookingFormModalRef = useRef(null);
   const fullCalendarRef = useRef(null);
@@ -548,6 +798,56 @@ export default function CalendarPage() {
       calendarApi.gotoDate(calendarDate);
     }
   }, [calendarDate]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+
+    const mediaQuery = window.matchMedia("(max-width: 375px)");
+    const handleChange = (event) => {
+      setIsCompactMobileCalendar(event.matches);
+    };
+
+    setIsCompactMobileCalendar(mediaQuery.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const handleChange = (event) => {
+      setIsMobileCalendarView(event.matches);
+    };
+
+    setIsMobileCalendarView(mediaQuery.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    const sameMonth =
+      calendarDate instanceof Date &&
+      selectedMobileDate instanceof Date &&
+      calendarDate.getFullYear() === selectedMobileDate.getFullYear() &&
+      calendarDate.getMonth() === selectedMobileDate.getMonth();
+
+    if (!sameMonth) {
+      setSelectedMobileDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1));
+    }
+  }, [calendarDate, selectedMobileDate]);
 
   const vehicleMap = useMemo(() => {
     const map = new Map();
@@ -1037,33 +1337,44 @@ export default function CalendarPage() {
     [handlePendingBadgeClick, pendingCountByDate]
   );
 
-  return (
-    <div className="space-y-4 overflow-x-hidden sm:space-y-6">
-      <div className="page-header flex flex-col gap-4 rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between lg:px-7">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-800 shadow-sm">
-              <CalendarMonthIcon className="h-6 w-6" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-[34px] font-bold leading-tight text-blue-900">ปฏิทินการจอง</h2>
-              <p className="mt-1 text-[23px] leading-snug text-slate-500">
-                แสดงทั้งรายการจองทั้งหมดและจำนวน พขร. พร้อมปฏิบัติงาน
-              </p>
-            </div>
-          </div>
-        </div>
+  const renderCalendarEventContent = useCallback(
+    (arg) => {
+      const resource = arg.event.extendedProps?.originalEvent?.resource || {};
+      const kind = String(resource.kind || "").trim().toLowerCase();
+      let compactLabel = arg.event.title || "";
 
-        <button
-          type="button"
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-4 py-2.5 text-[24px] font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
-          disabled={refreshing || loading}
-          onClick={() => loadData({ refreshOnly: true })}
-        >
-          <RefreshIcon className="h-5 w-5" />
-          รีเฟรชข้อมูล
-        </button>
-      </div>
+      if (kind === "unavailable") {
+        compactLabel = normalizeUnavailableType(resource.type) === "ลา / หยุด" ? "ลา" : "ติดภารกิจ";
+      } else {
+        const statusMeta = getBookingCalendarStatusMeta(resource.status);
+        const statusLabel = String(statusMeta.label || "").trim();
+
+        if (statusLabel === "รออนุมัติ") compactLabel = "รอ";
+        else if (statusLabel === "อนุมัติแล้ว") compactLabel = "อนุมัติ";
+        else if (statusLabel === "กำลังใช้งาน") compactLabel = "ใช้งาน";
+        else if (statusLabel === "เสร็จสิ้น") compactLabel = "เสร็จ";
+        else compactLabel = statusLabel || arg.event.title || "";
+      }
+
+      return {
+        html: `<div class="calendar-event-title">${isCompactMobileCalendar ? compactLabel : arg.event.title || compactLabel || "-"}</div>`,
+      };
+    },
+    [isCompactMobileCalendar]
+  );
+
+  const handleSelectMobileDate = useCallback((date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return;
+    setSelectedMobileDate(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+  }, []);
+
+  return (
+    <div className="calendar-page calendar-page-v2 space-y-3 overflow-x-hidden sm:space-y-6">
+      <CalendarDesktopHeader
+        refreshing={refreshing}
+        loading={loading}
+        onRefresh={() => loadData({ refreshOnly: true })}
+      />
 
       <BookingFormModal
         ref={bookingFormModalRef}
@@ -1073,51 +1384,51 @@ export default function CalendarPage() {
         showBackdatedCheckbox={hasPermission(null, "bookings_create_backdated")}
       />
 
-      <div className="form-card overflow-hidden rounded-3xl border border-sky-100 bg-white px-4 py-4 text-[18px] leading-[1.7] shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+      <div className="form-card overflow-hidden rounded-3xl border border-sky-100 bg-white px-3 py-3 text-[16px] leading-[1.65] shadow-sm sm:px-5 sm:py-5 sm:text-[18px] sm:leading-[1.7] lg:px-6 lg:py-6">
         {visibleLoading ? (
           <CalendarSkeleton />
         ) : (
           <>
-            <div className="mb-4 rounded-2xl border border-sky-100 bg-slate-50/80 p-4 sm:p-5">
-              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-blue-800">
-                    <CalendarMonthIcon className="h-5 w-5" />
+            <div className="calendar-status-legend-card mb-3 rounded-2xl border border-sky-100 bg-slate-50/80 p-3 sm:mb-4 sm:p-5">
+              <div className="mb-2.5 flex flex-col gap-2.5 sm:mb-3 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-800 sm:h-11 sm:w-11">
+                    <CalendarMonthIcon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
                   </span>
                   <div>
-                    <h3 className="m-0 text-[27px] font-bold leading-tight text-blue-900">สถานะที่แสดงในปฏิทิน</h3>
-                    <p className="mt-1 text-[22px] leading-snug text-slate-500">แสดงรายการจองตามสถานะทั้งหมด</p>
+                    <h3 className="m-0 text-[22px] font-bold leading-tight text-blue-900 sm:text-[27px]">สถานะที่แสดงในปฏิทิน</h3>
+                    <p className="mt-1 text-[17px] leading-snug text-slate-500 sm:text-[22px]">แสดงรายการจองตามสถานะทั้งหมด</p>
                   </div>
                 </div>
               </div>
-              <div className="calendar-status-legend flex flex-wrap gap-3">
-                <span className="status amber border border-amber-200 text-[20px] font-bold">
+              <div className="calendar-status-legend grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3">
+                <span className="status amber border border-amber-200 text-[16px] font-bold sm:text-[20px]">
                   รออนุมัติ
                 </span>
-                <span className="status blue border border-blue-200 text-[20px] font-bold">
+                <span className="status blue border border-blue-200 text-[16px] font-bold sm:text-[20px]">
                   อนุมัติแล้ว
                 </span>
-                <span className="status green border border-emerald-200 text-[20px] font-bold">
+                <span className="status green border border-emerald-200 text-[16px] font-bold sm:text-[20px]">
                   กำลังใช้งาน
                 </span>
-                <span className="status red border border-red-200 text-[20px] font-bold">
+                <span className="status red border border-red-200 text-[16px] font-bold sm:text-[20px]">
                   พขร. ติดภารกิจอื่นๆ
                 </span>
               </div>
             </div>
 
             {error && !visibleLoading && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-[23px] font-bold text-red-700">
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-[18px] font-bold text-red-700 sm:px-4 sm:py-4 sm:text-[23px]">
                 {error}
               </div>
             )}
 
             {!visibleLoading && !error && (
               <div className="calendar-shell overflow-hidden rounded-3xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="mb-3 flex justify-end">
+                <div className="calendar-shell-actions mb-3 flex justify-end">
                   <button
                     type="button"
-                    className="calendar-create-button inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-4 py-2.5 text-[24px] font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+                    className="calendar-page-button calendar-create-button inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-2xl bg-blue-700 px-3.5 py-2 text-[18px] font-bold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-300 sm:min-h-11 sm:w-auto sm:px-4 sm:py-2.5 sm:text-[24px]"
                     disabled={!canCreateBookings}
                     onClick={() =>
                       openBookingForm({
@@ -1126,7 +1437,7 @@ export default function CalendarPage() {
                       })
                     }
                   >
-                    <PlusIcon className="h-5 w-5" />
+                    <PlusIcon className="h-4.5 w-4.5 sm:h-5 sm:w-5" />
                     เพิ่มรายการจองใหม่
                   </button>
                 </div>
@@ -1139,36 +1450,51 @@ export default function CalendarPage() {
                   />
                 </div>
 
-                <FullCalendar
-                  ref={fullCalendarRef}
-                  plugins={[dayGridPlugin, interactionPlugin]}
-                  initialView="dayGridMonth"
-                  height="auto"
-                  locale={calendarLang === "th" ? "th" : "en"}
-                  locales={[thLocale]}
-                  firstDay={0}
-                  events={fullCalendarEvents}
-                  eventClick={handleFullCalendarEventClick}
-                  moreLinkClick={handleMoreLinkClick}
-                  dayMaxEvents={3}
-                  eventDisplay="block"
-                  expandRows={true}
-                  stickyHeaderDates={true}
-                  moreLinkContent={(args) => ({
-                    html: `<div class="calendar-more-pill">+${args.num}</div>`,
-                  })}
-                  moreLinkDidMount={(arg) => {
-                    arg.el.title = "ดูรายการทั้งหมดของวันนี้";
-                  }}
-                  fixedWeekCount={false}
-                  showNonCurrentDates={true}
-                  headerToolbar={false}
-                  dayCellContent={dayCellContent}
-                  dayCellClassNames={dayCellClassNames}
-                />
+                {isMobileCalendarView ? (
+                  <MobileMonthCalendar
+                    calendarDate={calendarDate}
+                    calendarLang={calendarLang}
+                    selectedDate={selectedMobileDate}
+                    onSelectDate={handleSelectMobileDate}
+                    visibleCalendarEvents={visibleCalendarEvents}
+                    calendarEvents={calendarEvents}
+                    pendingCountByDate={pendingCountByDate}
+                    thaiHolidayMap={thaiHolidayMap}
+                    onSelectEvent={handleSelectEvent}
+                  />
+                ) : (
+                  <FullCalendar
+                    ref={fullCalendarRef}
+                    plugins={[dayGridPlugin, interactionPlugin]}
+                    initialView="dayGridMonth"
+                    height="auto"
+                    locale={calendarLang === "th" ? "th" : "en"}
+                    locales={[thLocale]}
+                    firstDay={0}
+                    events={fullCalendarEvents}
+                    eventClick={handleFullCalendarEventClick}
+                    moreLinkClick={handleMoreLinkClick}
+                    dayMaxEvents={3}
+                    eventDisplay="block"
+                    expandRows={true}
+                    stickyHeaderDates={true}
+                    moreLinkContent={(args) => ({
+                      html: `<div class="calendar-more-pill">+${args.num}</div>`,
+                    })}
+                    moreLinkDidMount={(arg) => {
+                      arg.el.title = "ดูรายการทั้งหมดของวันนี้";
+                    }}
+                    eventContent={renderCalendarEventContent}
+                    fixedWeekCount={false}
+                    showNonCurrentDates={true}
+                    headerToolbar={false}
+                    dayCellContent={dayCellContent}
+                    dayCellClassNames={dayCellClassNames}
+                  />
+                )}
 
                 {calendarEvents.length === 0 && (
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-[22px] text-slate-500">
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-[17px] text-slate-500 sm:px-4 sm:py-4 sm:text-[22px]">
                     ไม่มีรายการที่ต้องแสดงในช่วงนี้
                   </div>
                 )}
@@ -1178,62 +1504,62 @@ export default function CalendarPage() {
         )}
       </div>
       {(canViewActiveDriversSummary || canViewNextQueueDriver) && (
-        <div className="form-card rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+        <div className="form-card rounded-3xl border border-sky-100 bg-white px-3 py-3 shadow-sm sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           <div
-            className={`calendar-info-grid grid gap-4 ${
+            className={`calendar-info-grid grid gap-3 sm:gap-4 ${
               canViewActiveDriversSummary && canViewNextQueueDriver ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
             }`}
           >
             {canViewActiveDriversSummary && (
-              <div className="flex min-w-0 flex-col gap-4 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-4 shadow-sm sm:p-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
-                      <UsersIcon className="h-6 w-6" />
+              <div className="calendar-summary-card flex min-w-0 flex-col gap-3 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm sm:gap-4 sm:p-5">
+                <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 sm:h-12 sm:w-12">
+                      <UsersIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </span>
-                    <h4 className="m-0 text-[28px] font-bold leading-tight text-blue-900">พขร. พร้อมปฏิบัติงาน</h4>
+                    <h4 className="m-0 text-[21px] font-bold leading-tight text-blue-900 sm:text-[28px]">พขร. พร้อมปฏิบัติงาน</h4>
                   </div>
-                  <span className="status green border border-emerald-200 text-[22px] font-bold">
+                  <span className="status green calendar-summary-chip border border-emerald-200 text-[16px] font-bold sm:text-[22px]">
                     จำนวน {activeDriversNow.length} คน
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   {activeDriversNow.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {activeDriversNow.map((driver) => (
-                        <span key={driver.user_id} className="status blue border border-blue-200 text-[21px] font-bold">
+                        <span key={driver.user_id} className="status blue calendar-summary-chip border border-blue-200 text-[16px] font-bold sm:text-[21px]">
                           {driver.name}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <span className="text-[22px] text-slate-500">ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
+                    <span className="text-[17px] text-slate-500 sm:text-[22px]">ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
                   )}
                 </div>
               </div>
             )}
 
             {canViewNextQueueDriver && (
-              <div className="flex min-w-0 flex-col gap-4 rounded-3xl border border-sky-100 bg-sky-50/70 p-4 shadow-sm sm:p-5">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-800">
-                    <ListOrderedIcon className="h-6 w-6" />
+              <div className="calendar-summary-card flex min-w-0 flex-col gap-3 rounded-3xl border border-sky-100 bg-sky-50/70 p-3 shadow-sm sm:gap-4 sm:p-5">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-800 sm:h-12 sm:w-12">
+                    <ListOrderedIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                   </span>
                   <div>
-                    <h4 className="m-0 text-[28px] font-bold leading-tight text-blue-900">ลำดับคิวทั้งหมด</h4>
-                    <p className="mt-1 text-[22px] leading-snug text-slate-500">แสดงคิวปัจจุบันและคิวถัดไปของ พขร.</p>
+                    <h4 className="m-0 text-[21px] font-bold leading-tight text-blue-900 sm:text-[28px]">ลำดับคิวทั้งหมด</h4>
+                    <p className="mt-1 text-[17px] leading-snug text-slate-500 sm:text-[22px]">แสดงคิวปัจจุบันและคิวถัดไปของ พขร.</p>
                   </div>
                 </div>
 
-                <div className="grid gap-3">
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[21px] text-slate-600 shadow-sm">
+                <div className="grid gap-2.5 sm:gap-3">
+                  <div className="calendar-queue-card rounded-2xl border border-slate-200 bg-white px-3 py-3 text-[16px] text-slate-600 shadow-sm sm:px-4 sm:text-[21px]">
                     คิวปัจจุบัน: <span className="font-bold text-slate-900">{currentQueueDriver ? currentQueueDriver.driver_name : "-"}</span>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[21px] text-slate-600 shadow-sm">
+                  <div className="calendar-queue-card rounded-2xl border border-slate-200 bg-white px-3 py-3 text-[16px] text-slate-600 shadow-sm sm:px-4 sm:text-[21px]">
                     คิวถัดไป: <span className="font-bold text-slate-900">{nextQueueDriver ? nextQueueDriver.driver_name : "-"}</span>
                   </div>
                   {activeQueueRows.length > 0 ? (
-                    <div className="grid gap-2.5">
+                    <div className="grid gap-2 sm:gap-2.5">
                       {activeQueueRows.map((row) => {
                         const isCurrent =
                           currentQueueDriver &&
@@ -1245,7 +1571,7 @@ export default function CalendarPage() {
                         return (
                           <div
                             key={row.queue_id || `${row.driver_user_id || ""}-${row.queue_order || ""}`}
-                            className={`flex flex-wrap items-center gap-3 rounded-2xl border bg-white px-4 py-3 shadow-sm ${
+                            className={`calendar-queue-row flex flex-col items-start gap-2 rounded-2xl border bg-white px-3 py-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 sm:px-4 ${
                               isCurrent
                                 ? "border-emerald-300"
                                 : isNext
@@ -1253,19 +1579,19 @@ export default function CalendarPage() {
                                   : "border-slate-200"
                             }`}
                           >
-                            <span className="status blue border border-blue-200 text-[20px] font-bold">
+                            <span className="status blue calendar-summary-chip border border-blue-200 text-[15px] font-bold sm:text-[20px]">
                               {row.queue_order}
                             </span>
-                            <span className="flex-1 text-[22px] font-bold text-slate-900">
+                            <span className="flex-1 text-[17px] font-bold text-slate-900 sm:text-[22px]">
                               {row.driver_name}
                             </span>
                             {isCurrent && (
-                              <span className="status green border border-emerald-200 text-[18px] font-bold">
+                              <span className="status green calendar-summary-chip border border-emerald-200 text-[14px] font-bold sm:text-[18px]">
                                 คิวปัจจุบัน
                               </span>
                             )}
                             {isNext && (
-                              <span className="status blue border border-blue-200 text-[18px] font-bold">
+                              <span className="status blue calendar-summary-chip border border-blue-200 text-[14px] font-bold sm:text-[18px]">
                                 คิวถัดไป
                               </span>
                             )}
@@ -1274,7 +1600,7 @@ export default function CalendarPage() {
                       })}
                     </div>
                   ) : (
-                    <div className="text-[22px] text-slate-500">ยังไม่มีข้อมูลคิวคนขับ</div>
+                    <div className="text-[17px] text-slate-500 sm:text-[22px]">ยังไม่มีข้อมูลคิวคนขับ</div>
                   )}
                 </div>
               </div>

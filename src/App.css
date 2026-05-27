@@ -196,7 +196,7 @@ button:hover {
   min-height: 52px;
   min-width: 52px;
   padding: 0;
-  border-radius: 18px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.28);
   display: grid;
@@ -227,7 +227,7 @@ button:hover {
   position: absolute;
   inset: -2px;
   border-radius: 999px;
-  border: 2px solid rgba(239, 68, 68, 0.65);
+  border: 2px solid rgba(255, 255, 255, 0.863);
   animation: notification-bell-pulse 2s infinite;
   pointer-events: none;
 }
@@ -3297,49 +3297,91 @@ label {
 }
 .booking-table-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-top: 18px;
   flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid #dbe6f3;
+  border-radius: 22px;
+  background: #f8fbff;
 }
 
 .booking-status-counts {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   flex-wrap: wrap;
+  flex: 1 1 620px;
+  min-width: 0;
 }
 
 .booking-status-count {
   display: inline-flex;
   align-items: center;
-  min-height: 36px;
-  padding: 6px 12px;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 14px;
   border-radius: 999px;
+  border: 1px solid transparent;
   font-size: 18px;
   font-weight: 800;
   white-space: nowrap;
 }
 
+.booking-status-count.slate {
+  background: #edf4ff;
+  border-color: #d8e5fb;
+  color: #35527b;
+}
+
 .booking-status-count.amber {
   background: #fef3c7;
+  border-color: #fde68a;
   color: #b45309;
 }
 
 .booking-status-count.blue {
   background: #dbeafe;
+  border-color: #bfdbfe;
   color: #1455c8;
 }
 
 .booking-status-count.green {
   background: #dcfce7;
+  border-color: #bbf7d0;
   color: #15803d;
 }
 
 .booking-status-count.gray {
   background: #f1f5f9;
+  border-color: #e2e8f0;
   color: #475569;
+}
+
+.booking-status-count.red {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.booking-status-count-label,
+.booking-status-count-value {
+  line-height: 1;
+}
+
+.booking-status-count-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 17px;
 }
 
 .booking-driver-cancel-note {
@@ -3403,8 +3445,25 @@ label {
 .booking-create-wrapper{
   display:flex;
   justify-content:flex-end;
-  margin:16px 0 12px;
-  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin:0;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.booking-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.booking-toolbar-button-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .calendar-create-button {
@@ -3949,6 +4008,370 @@ label {
   width: 100%;
 }
 
+.booking-mobile-card .booking-mobile-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions > .booking-action-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions > .booking-action-dropdown {
+  flex: 0 0 auto;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-button {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 18px;
+  border-radius: 14px;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-button.info-button {
+  background: #eff6ff;
+  color: #1455c8;
+  border: 1px solid #bfdbfe;
+  box-shadow: none;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-button.info-button:hover:not(:disabled) {
+  background: #dbeafe;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-menu-trigger {
+  min-width: 44px;
+  padding-inline: 12px;
+  justify-content: center;
+  box-shadow: none;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-menu-trigger--compact {
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-icon--white {
+  color: currentColor;
+}
+
+.booking-mobile-page-header {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 10px;
+  margin-top: 57px;
+  padding: 14px;
+  border: 1px solid #dbe6f3;
+  border-radius: 24px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 26px rgba(15, 47, 92, 0.08);
+}
+
+.booking-mobile-page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.booking-mobile-page-title-wrap {
+  min-width: 0;
+}
+
+.booking-mobile-page-title-wrap h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.15;
+  color: #0f2f5c;
+}
+
+.booking-mobile-page-title-wrap p {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.booking-mobile-page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.booking-mobile-icon-button,
+.booking-mobile-toolbar-button {
+  border: 1px solid #dbe6f3;
+  background: #ffffff;
+  color: #0f3d91;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(15, 47, 92, 0.08);
+}
+
+.booking-mobile-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+
+.booking-mobile-toolbar-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.booking-mobile-top-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.booking-mobile-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.booking-mobile-filter-button {
+  background: #ffffff;
+}
+
+.booking-mobile-create-button {
+  background: #1455c8;
+  border-color: #1455c8;
+  color: #ffffff;
+}
+
+.booking-mobile-export-button {
+  width: 100%;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1455c8;
+}
+
+.booking-mobile-shell {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.booking-mobile-status-scroller {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+
+.booking-mobile-status-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.booking-mobile-status-count {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.booking-mobile-filter-panel {
+  border: 1px solid #dbe6f3;
+  border-radius: 22px;
+  background: #f8fbff;
+  padding: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.booking-mobile-filter-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.booking-mobile-filter-panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #0f2f5c;
+}
+
+.booking-mobile-filter-clear {
+  border: 0;
+  background: transparent;
+  color: #d97706;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.booking-mobile-filter-panel-actions {
+  margin-top: 12px;
+}
+
+.booking-mobile-card {
+  gap: 6px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 4px 12px rgba(15, 47, 92, 0.05);
+}
+
+.booking-mobile-card-summary {
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  box-shadow: none;
+}
+
+.booking-mobile-card-summary-index {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1455c8;
+  white-space: nowrap;
+}
+
+.booking-mobile-card-summary-requester,
+.booking-mobile-card-summary-destination {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  line-height: 1.2;
+  color: #0f2f5c;
+}
+
+.booking-mobile-card-summary-destination {
+  color: #475569;
+}
+
+.booking-mobile-card-summary-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.booking-mobile-card .mobile-data-card-index {
+  margin-top: 0;
+  font-size: 14px;
+  line-height: 1.1;
+  color: #64748b;
+}
+
+.booking-mobile-card-expand-icon {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  transition: transform 0.18s ease;
+}
+
+.booking-mobile-card-expand-icon.is-expanded {
+  transform: rotate(180deg);
+}
+
+.booking-mobile-card-expanded {
+  display: grid;
+  gap: 10px;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.booking-mobile-card-body {
+  display: grid;
+  gap: 8px;
+}
+
+.booking-mobile-card-info-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.booking-mobile-card-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #1455c8;
+}
+
+.booking-mobile-info-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.booking-mobile-card-info-copy {
+  min-width: 0;
+}
+
+.booking-mobile-card-info-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.booking-mobile-card-info-copy b {
+  display: block;
+  font-size: 16px;
+  line-height: 1.35;
+  color: #10233f;
+  word-break: break-word;
+}
+
+.booking-mobile-card-info-copy small {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #64748b;
+  word-break: break-word;
+}
+
+@media (min-width: 768px) {
+  .booking-mobile-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .booking-desktop-only {
+    display: none !important;
+  }
+}
+
 .mobile-empty-card {
   border: 1px dashed #bfd3ec;
   border-radius: 18px;
@@ -4184,14 +4607,14 @@ label {
   }
 
   .booking-status-counts {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    margin-right: -4px;
+    flex-wrap: wrap;
+    overflow: visible;
+    padding-bottom: 0;
+    margin-right: 0;
   }
 
   .booking-status-count {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
   }
 
   .booking-create-wrapper,
@@ -4211,10 +4634,18 @@ label {
   }
 
   .booking-create-wrapper {
-    position: sticky;
-    bottom: 8px;
-    z-index: 8;
-    padding-top: 8px;
+    position: static;
+    bottom: auto;
+    z-index: auto;
+    padding-top: 0;
+    width: auto;
+    display: flex;
+    justify-content: flex-end;
+    margin-left: auto;
+  }
+
+  .booking-create-wrapper button {
+    width: auto;
   }
 
   .mobile-hide-table {
@@ -4816,6 +5247,52 @@ label {
 }
 
 @media (max-width: 768px) {
+  .booking-page-card {
+    padding: 14px;
+    border-radius: 24px;
+  }
+
+  .booking-filter-row-mobile {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .booking-mobile-list {
+    gap: 12px;
+  }
+
+  .booking-mobile-card .status {
+    padding: 5px 9px;
+    font-size: 13px;
+  }
+
+  .booking-mobile-card {
+    padding: 10px;
+  }
+
+  .booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-button {
+    min-height: 38px;
+    font-size: 17px;
+    padding: 8px 10px;
+  }
+
+  .booking-mobile-card .mobile-data-card-actions.booking-mobile-actions .booking-action-menu-trigger {
+    min-width: 42px;
+    padding-inline: 10px;
+  }
+
+  .booking-mobile-card .mobile-data-card-actions.booking-mobile-actions > .booking-action-button {
+    flex: 1 1 auto;
+  }
+
+  .booking-mobile-card-summary-requester,
+  .booking-mobile-card-summary-destination,
+  .booking-mobile-card-info-copy b,
+  .booking-mobile-card-info-copy small {
+    font-size: 15px;
+  }
+
   .page-header > button,
   .section-toolbar button,
   .section-header button,
@@ -4838,6 +5315,12 @@ label {
     min-height: 44px;
   }
 
+  .booking-mobile-toolbar-button,
+  .booking-mobile-icon-button,
+  .booking-mobile-filter-clear {
+    min-height: 40px;
+  }
+
   .staff-section {
     border-radius: 22px;
   }
@@ -4848,5 +5331,630 @@ label {
 
   .login-card {
     box-shadow: 0 10px 24px rgba(15, 47, 92, 0.1);
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-page {
+    gap: 10px;
+  }
+
+  .calendar-page .page-header,
+  .calendar-page .form-card {
+    margin-bottom: 0;
+  }
+
+  .calendar-page .page-header,
+  .calendar-page .form-card,
+  .calendar-page .calendar-shell,
+  .calendar-page .calendar-summary-card {
+    border-radius: 18px;
+  }
+
+  .calendar-page .calendar-toolbar {
+    gap: 10px !important;
+    padding: 10px !important;
+    border-radius: 16px;
+  }
+
+  .calendar-page .calendar-toolbar-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .calendar-page .calendar-toolbar-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .calendar-page .calendar-toolbar-nav .calendar-toolbar-button,
+  .calendar-page .calendar-toolbar-lang .calendar-toolbar-button {
+    min-height: 38px !important;
+    padding: 6px 10px !important;
+    font-size: 15px !important;
+    line-height: 1.1;
+  }
+
+  .calendar-page .calendar-page-button {
+    min-height: 42px !important;
+    padding: 7px 12px !important;
+    font-size: 18px !important;
+    line-height: 1.1;
+  }
+
+  .calendar-page .calendar-shell-actions {
+    margin-bottom: 10px;
+  }
+
+  .calendar-page .calendar-create-button {
+    width: 100% !important;
+  }
+
+  .calendar-page .calendar-toolbar-label {
+    gap: 8px !important;
+    font-size: 19px !important;
+  }
+
+  .calendar-page .calendar-toolbar-label-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .calendar-page .calendar-toolbar-lang {
+    flex: 0 0 auto;
+  }
+
+  .calendar-page .calendar-status-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  .calendar-page .calendar-status-legend .status,
+  .calendar-page .calendar-summary-chip {
+    min-height: 30px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    justify-content: center;
+    font-size: 15px !important;
+    line-height: 1.05;
+  }
+
+  .calendar-page .calendar-info-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .calendar-page .calendar-summary-card,
+  .calendar-page .calendar-queue-card,
+  .calendar-page .calendar-queue-row {
+    border-radius: 16px;
+  }
+
+  .calendar-page .calendar-shell {
+    padding: 10px !important;
+  }
+
+  .calendar-page .calendar-shell .fc {
+    width: 100%;
+    max-width: 100%;
+    font-size: 12px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-scrollgrid,
+  .calendar-page .calendar-shell .fc .fc-scrollgrid-section,
+  .calendar-page .calendar-shell .fc .fc-scrollgrid-section table {
+    width: 100% !important;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-col-header-cell-cushion {
+    padding: 5px 2px;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-frame {
+    min-height: 68px;
+    padding: 2px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-number {
+    padding: 2px 3px;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-events {
+    margin-top: 16px;
+    min-height: 34px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-event {
+    min-height: 18px;
+    border-radius: 8px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-event-main {
+    padding: 0 3px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-event .fc-event-main-frame {
+    padding: 0 3px 0 7px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-event .fc-event-main-frame::before {
+    width: 3px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-event-title {
+    font-size: 11px;
+    line-height: 1.05;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-event-harness {
+    margin-top: 1px !important;
+    margin-bottom: 1px !important;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-more-link {
+    min-height: 18px;
+    font-size: 10px;
+  }
+
+  .calendar-page .calendar-more-pill,
+  .calendar-page .calendar-shell .fc .calendar-pending-pill,
+  .calendar-page .calendar-shell .fc button.calendar-pending-pill {
+    min-height: 18px;
+    padding: 1px 6px;
+    font-size: 10px;
+    line-height: 1.05;
+  }
+}
+
+@media (max-width: 430px) {
+  .calendar-page .calendar-toolbar-nav .calendar-toolbar-button,
+  .calendar-page .calendar-toolbar-lang .calendar-toolbar-button {
+    font-size: 14px !important;
+  }
+
+  .calendar-page .calendar-toolbar-label {
+    font-size: 18px !important;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-frame {
+    min-height: 66px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-events {
+    margin-top: 15px;
+    min-height: 32px;
+  }
+}
+
+@media (max-width: 375px) {
+  .calendar-page .calendar-toolbar-nav {
+    gap: 6px;
+  }
+
+  .calendar-page .calendar-toolbar-nav .calendar-toolbar-button,
+  .calendar-page .calendar-toolbar-lang .calendar-toolbar-button {
+    min-height: 36px !important;
+    padding: 5px 8px !important;
+    font-size: 13px !important;
+  }
+
+  .calendar-page .calendar-page-button {
+    min-height: 42px !important;
+    font-size: 18px !important;
+  }
+
+  .calendar-page .calendar-toolbar-label {
+    font-size: 18px !important;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-col-header-cell-cushion {
+    font-size: 12px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-frame {
+    min-height: 64px;
+    padding: 2px 1px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-number {
+    font-size: 12px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-daygrid-day-events {
+    margin-top: 14px;
+    min-height: 28px;
+  }
+
+  .calendar-page .calendar-shell .fc .fc-event-title {
+    font-size: 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .calendar-page .calendar-more-pill,
+  .calendar-page .calendar-shell .fc .calendar-pending-pill,
+  .calendar-page .calendar-shell .fc button.calendar-pending-pill {
+    min-height: 17px;
+    padding: 1px 5px;
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 768px) {
+  .calendar-page-v2 {
+    padding-top: 56px;
+  }
+
+  .calendar-page-v2 .calendar-page-header-v2 {
+    margin-top: 2px;
+    padding: 12px !important;
+    gap: 10px !important;
+  }
+
+  .calendar-page-v2 .calendar-page-header-v2 h2 {
+    font-size: 24px;
+    line-height: 1.1;
+  }
+
+  .calendar-page-v2 .calendar-page-header-copy {
+    width: 100%;
+  }
+
+  .calendar-page-v2 .calendar-page-header-copy > div {
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  .calendar-page-v2 .calendar-status-legend-card {
+    display: none;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #ffffff;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0;
+    width: 100%;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-weekday {
+    min-width: 0;
+    padding: 2px 0 4px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    color: #475569;
+    background: #eaf2ff;
+    border-right: 1px solid #dbe6f3;
+    border-bottom: 1px solid #dbe6f3;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-weekday:nth-child(7n) {
+    border-right: 0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell {
+    min-width: 0;
+    min-height: 76px;
+    padding: 4px;
+    border-right: 1px solid #dbe6f3;
+    border-bottom: 1px solid #dbe6f3;
+    border-radius: 0;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    text-align: left;
+    box-shadow: none;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell:nth-child(7n) {
+    border-right: 0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell:nth-last-child(-n + 7) {
+    border-bottom: 0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell.is-outside-month {
+    background: #f8fafc;
+    opacity: 0.72;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell.is-selected {
+    border-color: #93c5fd;
+    background: #f8fbff;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell.is-holiday {
+    background: #fffaf0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-day-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-day-number {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    color: #334155;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell.is-today .mobile-month-calendar-day-number {
+    background: #1455c8;
+    color: #ffffff;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-pending-count {
+    flex: 0 0 auto;
+    min-height: 16px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.6;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-stack {
+    display: grid;
+    gap: 2px;
+    align-content: start;
+    min-height: 0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill,
+  .calendar-page-v2 .mobile-month-calendar-more {
+    min-width: 0;
+    min-height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill {
+    border: 1px solid transparent;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.amber {
+    background: #fef3c7;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.blue {
+    background: #dbeafe;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.green {
+    background: #dcfce7;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.red {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #b91c1c;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.purple {
+    background: #ede9fe;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill.gray {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    color: #475569;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-more {
+    color: #1455c8;
+    background: #eff6ff;
+    justify-content: center;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected {
+    border: 1px solid #dbe6f3;
+    border-radius: 16px;
+    background: #f8fbff;
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-head h4 {
+    margin: 0;
+    font-size: 18px;
+    color: #073b8e;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-head span {
+    font-size: 14px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    min-height: 0;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #dbe6f3;
+    color: #0f172a;
+    text-align: left;
+    box-shadow: none;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot {
+    width: 10px;
+    height: 10px;
+    margin-top: 4px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.amber {
+    background: #f59e0b;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.blue {
+    background: #2563eb;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.green {
+    background: #16a34a;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.red {
+    background: #dc2626;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.purple {
+    background: #7c3aed;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-dot.gray {
+    background: #64748b;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-body {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-title {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-selected-meta {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.2;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-empty {
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #64748b;
+  }
+}
+
+@media (max-width: 430px) {
+  .calendar-page-v2 .mobile-month-calendar-cell {
+    min-height: 72px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-weekday {
+    font-size: 13px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-day-number {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 375px) {
+  .calendar-page-v2 {
+    padding-top: 12px;
+  }
+
+  .calendar-page-v2 .calendar-page-header-v2 h2 {
+    font-size: 22px;
+  }
+
+  .calendar-page-v2 .calendar-page-header-copy > div {
+    font-size: 14px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-grid {
+    gap: 0;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-cell {
+    min-height: 68px;
+    padding: 4px 3px;
+    border-radius: 12px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-weekday {
+    font-size: 12px;
+  }
+
+  .calendar-page-v2 .mobile-month-calendar-event-pill,
+  .calendar-page-v2 .mobile-month-calendar-more {
+    min-height: 17px;
+    padding: 0 5px;
+    font-size: 10px;
   }
 }

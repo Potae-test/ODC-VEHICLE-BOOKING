@@ -66,11 +66,12 @@ const STATUS_META = {
 };
 
 const BOOKING_STATUS_COUNT_ITEMS = [
-  { status: "PENDING", label: "รอการอนุมัติ", className: "amber" },
+  { status: "ALL", label: "ทั้งหมด", className: "slate" },
+  { status: "PENDING", label: "รออนุมัติ", className: "amber" },
   { status: "APPROVED", label: "อนุมัติแล้ว", className: "blue" },
   { status: "IN_USE", label: "กำลังใช้งาน", className: "green" },
   { status: "COMPLETED", label: "เสร็จสิ้น", className: "gray" },
-  { status: "DRIVER_CANCEL_PENDING", label: "รอการอนุมัติการยกเลิก", className: "red" },
+  { status: "CANCELLED", label: "รอการอนุมัติการยกเลิกงาน", className: "red" },
 ];
 
 function normalizeStatus(status) {
@@ -286,6 +287,72 @@ function XCircleIcon({ className }) {
     <BookingSvgIcon className={className}>
       <circle cx="12" cy="12" r="9" />
       <path d="m9 9 6 6M15 9l-6 6" />
+    </BookingSvgIcon>
+  );
+}
+
+function FileExportIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 3v5h5" />
+      <path d="M12 11v6" />
+      <path d="m9.5 14.5 2.5 2.5 2.5-2.5" />
+    </BookingSvgIcon>
+  );
+}
+
+function PlusIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M12 5v14M5 12h14" />
+    </BookingSvgIcon>
+  );
+}
+
+function FilterIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M10 18h4" />
+    </BookingSvgIcon>
+  );
+}
+
+function MapPinIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M12 21s6-5.6 6-11a6 6 0 1 0-12 0c0 5.4 6 11 6 11Z" />
+      <circle cx="12" cy="10" r="2.25" />
+    </BookingSvgIcon>
+  );
+}
+
+function UserRoundIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <circle cx="12" cy="8.5" r="3.25" />
+      <path d="M6.5 19c1.6-3.1 4-4.5 5.5-4.5s3.9 1.4 5.5 4.5" />
+    </BookingSvgIcon>
+  );
+}
+
+function ClockIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.8v4.6l3.1 1.9" />
+    </BookingSvgIcon>
+  );
+}
+
+function NoteIcon({ className }) {
+  return (
+    <BookingSvgIcon className={className}>
+      <path d="M6 4.5h12a1.5 1.5 0 0 1 1.5 1.5v12L15 21H6A1.5 1.5 0 0 1 4.5 19.5V6A1.5 1.5 0 0 1 6 4.5Z" />
+      <path d="M14.5 21v-4h4" />
+      <path d="M8 9.5h8M8 13h5" />
     </BookingSvgIcon>
   );
 }
@@ -571,6 +638,38 @@ function canUserManageOwnBookingAction(basePermission, booking, currentUser) {
   if (!basePermission) return false;
   if (isStaffOrAdmin(currentUser)) return true;
   return isOwnBooking(booking, currentUser);
+}
+
+function getBookingManagePermissionState(booking, currentUser, permissionFlags) {
+  return {
+    canManageProcessBooking: canUserManageOwnBookingAction(
+      permissionFlags.canProcessBookings,
+      booking,
+      currentUser
+    ),
+    canManageBackdateComplete: canUserManageOwnBookingAction(
+      permissionFlags.canBackdateComplete,
+      booking,
+      currentUser
+    ),
+    canManageEditBooking: canUserManageOwnBookingAction(
+      permissionFlags.canEditBookings,
+      booking,
+      currentUser
+    ),
+    canManageCancelBooking: canUserManageOwnBookingAction(
+      permissionFlags.canCancelBookings,
+      booking,
+      currentUser
+    ),
+    canManageAssignCentralVehicle: canUserManageOwnBookingAction(
+      permissionFlags.canAssignCentralVehicle,
+      booking,
+      currentUser
+    ),
+    canUnassignBookings: permissionFlags.canUnassignBookings,
+    canReviewDriverCancelRequests: permissionFlags.canReviewDriverCancelRequests,
+  };
 }
 
 function isTimeOverlap(startA, endA, startB, endB) {
@@ -933,11 +1032,8 @@ function Pagination({ page, total, onChange }) {
   );
 }
 
-const BookingTableRow = memo(function BookingTableRow({
+function getBookingActionState({
   booking,
-  rowNumber,
-  vehicleMap,
-  showVehicleColumn,
   canViewBookingDetail,
   canManageProcessBooking,
   canManageBackdateComplete,
@@ -947,7 +1043,6 @@ const BookingTableRow = memo(function BookingTableRow({
   canManageAssignCentralVehicle,
   canReviewDriverCancelRequests,
   processing,
-  onViewDetail,
   onProcess,
   onBackdateComplete,
   onEdit,
@@ -963,12 +1058,6 @@ const BookingTableRow = memo(function BookingTableRow({
   const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
   const hasRejectedDriverCancelRequest = driverCancelRequestStatus === "REJECTED";
   const rowBookingId = getBookingId(booking);
-  const disabled = Boolean(processing);
-  const actionMenuTriggerRef = useRef(null);
-  const actionMenuPanelRef = useRef(null);
-  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
-  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 });
-  const [actionMenuPlacement, setActionMenuPlacement] = useState("bottom");
   const canShowDetail = canViewBookingDetail;
   const canShowBackdateComplete =
     canManageBackdateComplete &&
@@ -1075,6 +1164,31 @@ const BookingTableRow = memo(function BookingTableRow({
     );
   }
 
+  return {
+    status,
+    statusMeta,
+    hasPendingDriverCancelRequest,
+    hasRejectedDriverCancelRequest,
+    canShowDetail,
+    actionMenuItems,
+    hasActionMenuItems: actionMenuItems.length > 0,
+  };
+}
+
+const BookingActionControls = memo(function BookingActionControls({
+  booking,
+  disabled,
+  canShowDetail,
+  actionMenuItems,
+  onViewDetail,
+  menuTriggerLabel = "ดำเนินการ",
+  compactMenuTrigger = false,
+}) {
+  const actionMenuTriggerRef = useRef(null);
+  const actionMenuPanelRef = useRef(null);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, left: 0 });
+  const [actionMenuPlacement, setActionMenuPlacement] = useState("bottom");
   const hasActionMenuItems = actionMenuItems.length > 0;
 
   useLayoutEffect(() => {
@@ -1100,10 +1214,7 @@ const BookingTableRow = memo(function BookingTableRow({
         : Math.min(window.innerHeight - (menuHeight || 220) - viewportPadding, triggerRect.bottom + 8);
 
       setActionMenuPlacement(shouldOpenUpward ? "top" : "bottom");
-      setActionMenuPosition({
-        top,
-        left,
-      });
+      setActionMenuPosition({ top, left });
     }
 
     const handleDocumentPointerDown = (event) => {
@@ -1178,17 +1289,17 @@ const BookingTableRow = memo(function BookingTableRow({
       )
     : null;
 
-  const actionButtons = (
+  return (
     <>
       {canShowDetail && (
         <button
           type="button"
-          className={getBookingActionButtonClassName("detail")}
+          className={`${getBookingActionButtonClassName("detail")} inline-flex items-center justify-center gap-1.5`}
           disabled={disabled}
           onClick={() => onViewDetail(booking)}
         >
-          <EyeIcon className="booking-action-icon booking-action-icon--white" />
-          ดูรายละเอียด
+          <EyeIcon className="h-4 w-4 shrink-0" />
+          <span className="leading-none">ดูรายละเอียด</span>
         </button>
       )}
       {hasActionMenuItems && (
@@ -1196,20 +1307,79 @@ const BookingTableRow = memo(function BookingTableRow({
           <button
             ref={actionMenuTriggerRef}
             type="button"
-            className="booking-action-button booking-action-menu-trigger"
+            className={`booking-action-button booking-action-menu-trigger${
+              compactMenuTrigger ? " booking-action-menu-trigger--compact" : ""
+            }`}
             disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={isActionMenuOpen}
+            aria-label="จัดการรายการจอง"
             onClick={() => setIsActionMenuOpen((current) => !current)}
           >
-            ดำเนินการ
-            <ChevronDownIcon className="booking-action-icon booking-action-icon--chevron" />
+            <span>{menuTriggerLabel}</span>
+            {!compactMenuTrigger && (
+              <ChevronDownIcon className="booking-action-icon booking-action-icon--chevron" />
+            )}
           </button>
           {actionMenu}
         </div>
       )}
     </>
   );
+});
+
+const BookingTableRow = memo(function BookingTableRow({
+  booking,
+  rowNumber,
+  vehicleMap,
+  showVehicleColumn,
+  canViewBookingDetail,
+  canManageProcessBooking,
+  canManageBackdateComplete,
+  canManageCancelBooking,
+  canManageEditBooking,
+  canUnassignBookings,
+  canManageAssignCentralVehicle,
+  canReviewDriverCancelRequests,
+  processing,
+  onViewDetail,
+  onProcess,
+  onBackdateComplete,
+  onEdit,
+  onCancel,
+  onUnassign,
+  onAssignCentralVehicle,
+  onApproveDriverCancel,
+  onRejectDriverCancel,
+}) {
+  const disabled = Boolean(processing);
+  const {
+    status,
+    statusMeta,
+    hasPendingDriverCancelRequest,
+    hasRejectedDriverCancelRequest,
+    canShowDetail,
+    actionMenuItems,
+  } = getBookingActionState({
+    booking,
+    canViewBookingDetail,
+    canManageProcessBooking,
+    canManageBackdateComplete,
+    canManageCancelBooking,
+    canManageEditBooking,
+    canUnassignBookings,
+    canManageAssignCentralVehicle,
+    canReviewDriverCancelRequests,
+    processing,
+    onProcess,
+    onBackdateComplete,
+    onEdit,
+    onCancel,
+    onUnassign,
+    onAssignCentralVehicle,
+    onApproveDriverCancel,
+    onRejectDriverCancel,
+  });
 
   return (
     <tr>
@@ -1249,7 +1419,13 @@ const BookingTableRow = memo(function BookingTableRow({
         )}
       </td>
       <td className="action-buttons booking-row-actions">
-        {actionButtons}
+        <BookingActionControls
+          booking={booking}
+          disabled={disabled}
+          canShowDetail={canShowDetail}
+          actionMenuItems={actionMenuItems}
+          onViewDetail={onViewDetail}
+        />
       </td>
     </tr>
   );
@@ -1279,159 +1455,132 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     onAssignCentralVehicle,
     onApproveDriverCancel,
     onRejectDriverCancel,
+    isExpanded,
+    onToggleExpand,
   } = props;
-  const statusMeta = getStatusMeta(booking.status);
-  const status = normalizeStatus(booking.status);
-  const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
-  const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
-  const rowBookingId = getBookingId(booking);
   const disabled = Boolean(processing);
-  const canShowBackdateComplete =
-    canManageBackdateComplete &&
-    rowBookingId &&
-    !["COMPLETED", "CANCELLED"].includes(status);
-  const canShowProcess =
-    canManageProcessBooking && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
-  const canShowEdit =
-    canManageEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
-  const canShowCancel =
-    canManageCancelBooking &&
-    !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
-    !hasPendingDriverCancelRequest;
-  const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
-  const canShowAssignCentralVehicle =
-    canManageAssignCentralVehicle && status === "PENDING" && !hasPendingDriverCancelRequest;
+  const bookingId = getBookingId(booking) || `booking-${rowNumber}`;
+  const noteText = normalizeBookingNote(booking.staff_note);
+  const {
+    statusMeta,
+    hasPendingDriverCancelRequest,
+    hasRejectedDriverCancelRequest,
+    canShowDetail,
+    actionMenuItems,
+  } = getBookingActionState({
+    booking,
+    canViewBookingDetail,
+    canManageProcessBooking,
+    canManageBackdateComplete,
+    canManageCancelBooking,
+    canManageEditBooking,
+    canUnassignBookings,
+    canManageAssignCentralVehicle,
+    canReviewDriverCancelRequests,
+    processing,
+    onProcess,
+    onBackdateComplete,
+    onEdit,
+    onCancel,
+    onUnassign,
+    onAssignCentralVehicle,
+    onApproveDriverCancel,
+    onRejectDriverCancel,
+  });
 
   return (
     <article className="mobile-data-card booking-mobile-card">
-      <div className="mobile-data-card-header">
-        <div>
-          <span className="mobile-data-card-index">รายการ {rowNumber}</span>
-          <h3>{booking.requester_name || "-"}</h3>
+      <button
+        type="button"
+        className="booking-mobile-card-summary"
+        aria-expanded={isExpanded}
+        aria-controls={`booking-mobile-card-panel-${bookingId}`}
+        onClick={() => onToggleExpand(bookingId)}
+      >
+        <div className="booking-mobile-card-summary-index">#{rowNumber}</div>
+        <div className="booking-mobile-card-summary-requester" title={booking.requester_name || "-"}>
+          {booking.requester_name || "-"}
         </div>
-        <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
-      </div>
-      <div className="mobile-data-card-grid">
-        <div>
-          <span>เวลาไป</span>
-          <b>{formatBookingDateTimeDisplay(booking.start_datetime)}</b>
+        <div className="booking-mobile-card-summary-destination" title={booking.destination || "-"}>
+          {booking.destination || "-"}
         </div>
-        <div>
-          <span>เวลากลับ</span>
-          <b>{formatBookingDateTimeDisplay(booking.end_datetime)}</b>
+        <div className="booking-mobile-card-summary-side">
+          <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+          <ChevronDownIcon className={`booking-mobile-card-expand-icon${isExpanded ? " is-expanded" : ""}`} />
         </div>
-        <div>
-          <span>ปลายทาง</span>
-          <b>{booking.destination || "-"}</b>
-        </div>
-        {showVehicleColumn && (
-          <div>
-            <span>รถ</span>
-            <b>{getBookingVehicleLabel(booking, vehicleMap)}</b>
+      </button>
+
+      {isExpanded && (
+        <div
+          id={`booking-mobile-card-panel-${bookingId}`}
+          className="booking-mobile-card-expanded"
+        >
+          <div className="booking-mobile-card-body">
+            <div className="booking-mobile-card-info-row">
+              <span className="booking-mobile-card-info-icon">
+                <CalendarIcon className="booking-mobile-info-svg" />
+              </span>
+              <div className="booking-mobile-card-info-copy">
+                <span className="booking-mobile-card-info-label">เวลาไป</span>
+                <b>{formatBookingDateTimeDisplay(booking.start_datetime)}</b>
+              </div>
+            </div>
+
+            <div className="booking-mobile-card-info-row">
+              <span className="booking-mobile-card-info-icon">
+                <ClockIcon className="booking-mobile-info-svg" />
+              </span>
+              <div className="booking-mobile-card-info-copy">
+                <span className="booking-mobile-card-info-label">เวลากลับ</span>
+                <b>{formatBookingDateTimeDisplay(booking.end_datetime)}</b>
+              </div>
+            </div>
+
+            <div className="booking-mobile-card-info-row">
+              <span className="booking-mobile-card-info-icon">
+                <UserRoundIcon className="booking-mobile-info-svg" />
+              </span>
+              <div className="booking-mobile-card-info-copy">
+                <span className="booking-mobile-card-info-label">คนขับ</span>
+                <b>{getBookingDriverLabel(booking)}</b>
+                {showVehicleColumn && <small>{getBookingVehicleLabel(booking, vehicleMap)}</small>}
+              </div>
+            </div>
+
+            <div className="booking-mobile-card-info-row">
+              <span className="booking-mobile-card-info-icon">
+                <NoteIcon className="booking-mobile-info-svg" />
+              </span>
+              <div className="booking-mobile-card-info-copy">
+                <span className="booking-mobile-card-info-label">หมายเหตุ</span>
+                <b>{noteText || "-"}</b>
+              </div>
+            </div>
           </div>
-        )}
-        <div>
-          <span>คนขับ</span>
-          <b>{getBookingDriverLabel(booking)}</b>
-        </div>
-        <div>
-          <span>หมายเหตุ</span>
-          <b>{normalizeBookingNote(booking.staff_note) || "-"}</b>
-        </div>
-      </div>
-      <div className="mobile-data-card-actions">
-        {canViewBookingDetail && (
-          <button type="button" className={getBookingActionButtonClassName("detail")} disabled={disabled} onClick={() => onViewDetail(booking)}>
-            ดูรายละเอียด
-          </button>
-        )}
-        {canShowBackdateComplete && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("backdate")}
-            disabled={disabled}
-            onClick={() => onBackdateComplete(booking)}
+
+          {(hasPendingDriverCancelRequest || hasRejectedDriverCancelRequest) && (
+            <div className="booking-mobile-card-meta">
+              {hasPendingDriverCancelRequest && <span className="status amber">รออนุมัติยกเลิก</span>}
+              {hasRejectedDriverCancelRequest && <span className="status red">ไม่อนุมัติการยกเลิก</span>}
+            </div>
+          )}
+
+          <div
+            className="mobile-data-card-actions booking-mobile-actions"
+            onClick={(event) => event.stopPropagation()}
           >
-            {processing === "backdate" ? "กำลังบันทึก..." : "บันทึกงานย้อนหลัง"}
-          </button>
-        )}
-        {canShowProcess && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("process")}
-            disabled={disabled}
-            onClick={() => onProcess(booking)}
-          >
-            {processing === "process"
-              ? "กำลังดำเนินการ..."
-              : status === "APPROVED"
-                ? FEATURES.vehicleModule
-                  ? "เปลี่ยนคนขับ/รถ"
-                  : "เปลี่ยนคนขับ"
-                : "อนุมัติรายการ"}
-          </button>
-        )}
-        {canShowEdit && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("edit")}
-            disabled={disabled}
-            onClick={() => onEdit(booking)}
-          >
-            {processing === "edit" ? "กำลังแก้ไข..." : "แก้ไข"}
-          </button>
-        )}
-        {canShowUnassign && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("unassign")}
-            disabled={disabled}
-            onClick={() => onUnassign(booking)}
-          >
-            {processing === "unassign" ? "กำลังดึงงานกลับ..." : "ดึงงานกลับ"}
-          </button>
-        )}
-        {canShowAssignCentralVehicle && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("central")}
-            disabled={disabled}
-            onClick={() => onAssignCentralVehicle(booking)}
-          >
-            {processing === "assign-central-vehicle" ? "กำลังบันทึก..." : "ใช้รถ สนง.กลาง"}
-          </button>
-        )}
-        {canShowCancel && (
-          <button
-            type="button"
-            className={getBookingActionButtonClassName("cancel")}
-            disabled={disabled}
-            onClick={() => onCancel(booking)}
-          >
-            {processing === "cancel" ? "กำลังยกเลิก..." : "ยกเลิก"}
-          </button>
-        )}
-        {canReviewDriverCancelRequests && hasPendingDriverCancelRequest && (
-          <>
-            <button
-              type="button"
-              className={getBookingActionButtonClassName("approveCancel")}
+            <BookingActionControls
+              booking={booking}
               disabled={disabled}
-              onClick={() => onApproveDriverCancel(booking)}
-            >
-              อนุมัติยกเลิกงานคนขับ
-            </button>
-            <button
-              type="button"
-              className={getBookingActionButtonClassName("rejectCancel")}
-              disabled={disabled}
-              onClick={() => onRejectDriverCancel(booking)}
-            >
-              ไม่อนุมัติ
-            </button>
-          </>
-        )}
-      </div>
+              canShowDetail={canShowDetail}
+              actionMenuItems={actionMenuItems}
+              onViewDetail={onViewDetail}
+              menuTriggerLabel="ดำเนินการ"
+              compactMenuTrigger
+            />
+          </div>
+        </div>
+      )}
     </article>
   );
 });
@@ -1445,6 +1594,8 @@ export default function Booking() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [expandedBookingId, setExpandedBookingId] = useState("");
   const [processingAction, setProcessingAction] = useState(null);
   const [filters, setFilters] = useState({
     requester: "",
@@ -1696,21 +1847,22 @@ export default function Booking() {
 
   const bookingStatusCounts = useMemo(() => {
     const counts = {
+      ALL: filteredBookings.length,
       PENDING: 0,
       APPROVED: 0,
       IN_USE: 0,
       COMPLETED: 0,
-      DRIVER_CANCEL_PENDING: 0,
+      CANCELLED: 0,
     };
 
     filteredBookings.forEach((booking) => {
       const status = normalizeStatus(booking.status);
-      if (Object.prototype.hasOwnProperty.call(counts, status)) {
+      if (status !== "CANCELLED" && Object.prototype.hasOwnProperty.call(counts, status)) {
         counts[status] += 1;
       }
 
-      if (getDriverCancelRequestStatus(booking) === "PENDING") {
-        counts.DRIVER_CANCEL_PENDING += 1;
+      if (status === "DRIVER_CANCELLED" || status === "CANCELLED") {
+        counts.CANCELLED += 1;
       }
     });
 
@@ -2546,9 +2698,174 @@ export default function Booking() {
     });
   }, []);
 
+  const toggleExpandedBooking = useCallback((bookingId) => {
+    setExpandedBookingId((current) => (current === bookingId ? "" : bookingId));
+  }, []);
+
+  useEffect(() => {
+    setExpandedBookingId("");
+  }, [page, debouncedFilters]);
+
+  const renderFilterFields = (isMobile = false) => (
+    <>
+      <div className={`booking-filter-row-3${isMobile ? " booking-filter-row-mobile" : ""}`} style={{ marginTop: 16 }}>
+        <div>
+          <label>ผู้จอง</label>
+          <input
+            value={filters.requester}
+            onChange={(e) => setFilter("requester", e.target.value)}
+            placeholder="ค้นหาจากชื่อผู้จอง"
+          />
+        </div>
+
+        <div>
+          <label>คนขับ</label>
+          <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
+            <option value="">ทั้งหมด</option>
+            {activeDrivers.map((driver) => (
+              <option key={driver.user_id} value={driver.user_id}>
+                {driver.name || "-"}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {FEATURES.vehicleModule && (
+          <div>
+            <label>ทะเบียนรถ</label>
+            <select
+              value={filters.vehicle_id}
+              onChange={(e) => setFilter("vehicle_id", e.target.value)}
+            >
+              <option value="">ทั้งหมด</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
+                  {vehicle.vehicle_code
+                    ? `${vehicle.vehicle_code}${vehicle.plate_no || vehicle.license_plate ? ` / ${vehicle.plate_no || vehicle.license_plate}` : ""}`
+                    : vehicle.vehicle_id || "-"}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label>สถานะ</label>
+          <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+            <option value="">ทั้งหมด</option>
+            {Object.entries(STATUS_META).map(([status, meta]) => (
+              <option key={status} value={status}>
+                {meta.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className={`booking-filter-row-3${isMobile ? " booking-filter-row-mobile" : ""}`} style={{ marginTop: 16 }}>
+        <div>
+          <ThaiDateTimeField
+            id={isMobile ? "filter_start_datetime_mobile" : "filter_start_datetime"}
+            label="เวลาไป"
+            value={filters.start_datetime}
+            placeholder="เลือกเวลาไป"
+            onChange={(value) => setFilter("start_datetime", value || "")}
+          />
+        </div>
+
+        <div>
+          <ThaiDateTimeField
+            id={isMobile ? "filter_end_datetime_mobile" : "filter_end_datetime"}
+            label="เวลากลับ"
+            value={filters.end_datetime}
+            placeholder="เลือกเวลากลับ"
+            onChange={(value) => setFilter("end_datetime", value || "")}
+          />
+        </div>
+
+        <div>
+          <label>ปลายทาง</label>
+          <input
+            value={filters.destination}
+            onChange={(e) => setFilter("destination", e.target.value)}
+            placeholder="ค้นหาปลายทาง"
+          />
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div>
-      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
+      <div className="booking-mobile-page-header booking-mobile-only block md:hidden">
+        <div className="booking-mobile-page-header-row">
+          <div className="booking-mobile-page-title-wrap">
+            <h2>รายการจองรถ</h2>
+            <p>จองรถและติดตามรายการจอง</p>
+          </div>
+          <div className="booking-mobile-page-header-actions">
+            {canViewBookings && (
+              <button
+                type="button"
+                className="booking-mobile-icon-button"
+                title="รีเฟรชข้อมูล"
+                aria-label="รีเฟรชข้อมูล"
+                disabled={refreshing || loading}
+                onClick={refreshBookings}
+              >
+                <UndoIcon className="booking-mobile-toolbar-icon" />
+              </button>
+            )}
+            {canViewBookings && (
+              <button
+                type="button"
+                className="booking-mobile-icon-button"
+                title={isMobileFilterOpen ? "ซ่อนตัวกรอง" : "แสดงตัวกรอง"}
+                aria-label={isMobileFilterOpen ? "ซ่อนตัวกรอง" : "แสดงตัวกรอง"}
+                onClick={() => setIsMobileFilterOpen((current) => !current)}
+              >
+                <FilterIcon className="booking-mobile-toolbar-icon" />
+              </button>
+            )}
+            {canViewBookings && (
+             <button
+                    type="button"
+                    className="booking-mobile-icon-button"
+                    title="Export Excel"
+                    aria-label="Export Excel"
+                    disabled={filteredBookings.length === 0}
+                    onClick={handleExportBookingExcel}
+                  >
+                    <FileExportIcon className="booking-mobile-toolbar-icon" />
+              
+                  </button>
+                    )}
+          </div>
+        </div>
+        <div className="booking-mobile-top-actions">
+          <button
+            type="button"
+            className="booking-mobile-toolbar-button booking-mobile-filter-button"
+            onClick={() => setIsMobileFilterOpen((current) => !current)}
+          >
+            <FilterIcon className="booking-mobile-toolbar-icon" />
+            <span>ตัวกรอง</span>
+          </button>
+          {canCreateBookings && (
+            <button
+              type="button"
+              className="booking-mobile-toolbar-button booking-mobile-create-button"
+              disabled={Boolean(processingAction)}
+              onClick={handleCreateBooking}
+            >
+              <PlusIcon className="booking-mobile-toolbar-icon" />
+              <span>เพิ่มรายการจองใหม่</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="page-header booking-desktop-only hidden rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 md:flex lg:px-7">
         <div>
           <h2>รายการจองรถ</h2>
           <p>จองรถและติดตามรายการจอง</p>
@@ -2573,8 +2890,8 @@ export default function Booking() {
       {error && !visibleLoading && <div className="form-card text-slate-700">{error}</div>}
 
       {canViewBookings && (
-        <div className="form-card">
-            <div className="section-header gap-3 border-b border-sky-100 pb-4">
+        <div className="form-card booking-page-card">
+            <div className="section-header booking-desktop-only hidden gap-3 border-b border-sky-100 pb-4 md:flex">
               <h3>ค้นหารายการจองรถ</h3>
 
               <button
@@ -2586,120 +2903,73 @@ export default function Booking() {
                 ล้างตัวกรอง
               </button>
             </div>
-          <div className="booking-filter-row-3" style={{ marginTop: 16 }}>
-            <div>
-              <label>ผู้จอง</label>
-              <input
-                value={filters.requester}
-                onChange={(e) => setFilter("requester", e.target.value)}
-                placeholder="ค้นหาจากชื่อผู้จอง"
-              />
-            </div>
+          <div className="booking-desktop-only hidden md:block">
+            {renderFilterFields()}
+          </div>
 
-            <div>
-              <label>คนขับ</label>
-              <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
-                <option value="">ทั้งหมด</option>
-                {activeDrivers.map((driver) => (
-                  <option key={driver.user_id} value={driver.user_id}>
-                    {driver.name || "-"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {FEATURES.vehicleModule && (
-              <div>
-                <label>ทะเบียนรถ</label>
-                <select
-                  value={filters.vehicle_id}
-                  onChange={(e) => setFilter("vehicle_id", e.target.value)}
+          <div className="booking-mobile-shell booking-mobile-only block md:hidden">
+            <div className="booking-mobile-status-scroller">
+              {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
+                <span
+                  key={item.status}
+                  className={`booking-status-count ${item.className} booking-mobile-status-count`}
                 >
-                  <option value="">ทั้งหมด</option>
-                  {vehicles.map((vehicle) => (
-                    <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
-                      {vehicle.vehicle_code
-                        ? `${vehicle.vehicle_code}${vehicle.plate_no || vehicle.license_plate ? ` / ${vehicle.plate_no || vehicle.license_plate}` : ""}`
-                        : vehicle.vehicle_id || "-"}
-                    </option>
-                  ))}
-                </select>
+                  <span className="booking-status-count-label">{item.label}</span>
+                  <span className="booking-status-count-value">{bookingStatusCounts[item.status] || 0}</span>
+                </span>
+              ))}
+            </div>
+
+            {isMobileFilterOpen && (
+              <div className="booking-mobile-filter-panel">
+                <div className="booking-mobile-filter-panel-header">
+                  <h3>ตัวกรองรายการจองรถ</h3>
+                  <button
+                    type="button"
+                    className="booking-mobile-filter-clear"
+                    disabled={refreshing}
+                    onClick={clearFilters}
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                </div>
+                {renderFilterFields(true)}
               </div>
             )}
-
-            <div>
-              <label>สถานะ</label>
-              <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
-                <option value="">ทั้งหมด</option>
-                {Object.entries(STATUS_META).map(([status, meta]) => (
-                  <option key={status} value={status}>
-                    {meta.label}
-                  </option>
-                ))}
-              </select>
-            </div>
           </div>
 
-          <div className="booking-filter-row-3" style={{ marginTop: 16 }}>
-            <div>
-              <ThaiDateTimeField
-                id="filter_start_datetime"
-                label="เวลาไป"
-                value={filters.start_datetime}
-                placeholder="เลือกเวลาไป"
-                onChange={(value) => setFilter("start_datetime", value || "")}
-              />
-            </div>
-
-            <div>
-              <ThaiDateTimeField
-                id="filter_end_datetime"
-                label="เวลากลับ"
-                value={filters.end_datetime}
-                placeholder="เลือกเวลากลับ"
-                onChange={(value) => setFilter("end_datetime", value || "")}
-              />
-            </div>
-
-            <div>
-              <label>ปลายทาง</label>
-              <input
-                value={filters.destination}
-                onChange={(e) => setFilter("destination", e.target.value)}
-                placeholder="ค้นหาปลายทาง"
-              />
-            </div>
-          </div>
-
-          <div className="booking-table-toolbar gap-4 rounded-2xl bg-slate-50/80 px-3 py-3 sm:px-4">
+          <div className="booking-table-toolbar booking-desktop-only hidden md:flex">
             <div className="booking-status-counts">
               {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
                 <span
                   key={item.status}
                   className={`booking-status-count ${item.className}`}
                 >
-                  +{bookingStatusCounts[item.status] || 0} {item.label}
+                  <span className="booking-status-count-label">{item.label}</span>
+                  <span className="booking-status-count-value">{bookingStatusCounts[item.status] || 0}</span>
                 </span>
               ))}
-
             </div>
 
             <div className="booking-create-wrapper">
               <button
                 type="button"
-                className="success-button"
+                className="booking-toolbar-button success-button"
                 disabled={filteredBookings.length === 0}
                 onClick={handleExportBookingExcel}
               >
-                Export Excel
+                <FileExportIcon className="booking-toolbar-button-icon" />
+                <span>Export Excel</span>
               </button>
               {canCreateBookings && (
                 <button
                   type="button"
+                  className="booking-toolbar-button"
                   disabled={Boolean(processingAction)}
                   onClick={handleCreateBooking}
                 >
-                  ➕ เพิ่มรายการจองใหม่
+                  <PlusIcon className="booking-toolbar-button-icon" />
+                  <span>เพิ่มรายการจองใหม่</span>
                 </button>
               )}
             </div>
@@ -2709,7 +2979,7 @@ export default function Booking() {
           ) : (
             <>
 
-              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
+              <div className="table-wrap mobile-hide-table booking-desktop-only hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block" style={{ marginTop: 24 }}>
                 <table>
                   
                   <thead>
@@ -2734,31 +3004,15 @@ export default function Booking() {
                     ) : (
                       pageItems.map((booking, rowIndex) => (
                         (() => {
-                          const canManageProcessBooking = canUserManageOwnBookingAction(
+                          const actionPermissions = getBookingManagePermissionState(booking, currentUser, {
                             canProcessBookings,
-                            booking,
-                            currentUser
-                          );
-                          const canManageBackdateComplete = canUserManageOwnBookingAction(
                             canBackdateComplete,
-                            booking,
-                            currentUser
-                          );
-                          const canManageEditBooking = canUserManageOwnBookingAction(
                             canEditBookings,
-                            booking,
-                            currentUser
-                          );
-                          const canManageCancelBooking = canUserManageOwnBookingAction(
                             canCancelBookings,
-                            booking,
-                            currentUser
-                          );
-                          const canManageAssignCentralVehicle = canUserManageOwnBookingAction(
                             canAssignCentralVehicle,
-                            booking,
-                            currentUser
-                          );
+                            canUnassignBookings,
+                            canReviewDriverCancelRequests,
+                          });
 
                           return (
                         <BookingTableRow
@@ -2768,13 +3022,7 @@ export default function Booking() {
                           vehicleMap={vehicleMap}
                           showVehicleColumn={FEATURES.vehicleModule}
                           canViewBookingDetail={canViewBookingDetail}
-                          canManageProcessBooking={canManageProcessBooking}
-                          canManageBackdateComplete={canManageBackdateComplete}
-                          canManageCancelBooking={canManageCancelBooking}
-                          canManageEditBooking={canManageEditBooking}
-                          canUnassignBookings={canUnassignBookings}
-                          canManageAssignCentralVehicle={canManageAssignCentralVehicle}
-                          canReviewDriverCancelRequests={canReviewDriverCancelRequests}
+                          {...actionPermissions}
                           processing={
                             processingAction?.bookingId === getBookingId(booking)
                               ? processingAction.type
@@ -2798,37 +3046,22 @@ export default function Booking() {
                 </table>
               </div>
 
-              <div className="mobile-card-list booking-mobile-list mt-6" style={{ marginTop: 24 }}>
+              <div className="mobile-card-list booking-mobile-list booking-mobile-only block mt-6 md:hidden" style={{ marginTop: 24 }}>
                 {pageItems.length === 0 ? (
                   <div className="mobile-empty-card">ไม่พบรายการจอง</div>
                 ) : (
                   pageItems.map((booking, rowIndex) => (
                     (() => {
-                      const canManageProcessBooking = canUserManageOwnBookingAction(
+                      const bookingId = getBookingId(booking) || `booking-${(page - 1) * ROWS_PER_PAGE + rowIndex + 1}`;
+                      const actionPermissions = getBookingManagePermissionState(booking, currentUser, {
                         canProcessBookings,
-                        booking,
-                        currentUser
-                      );
-                      const canManageBackdateComplete = canUserManageOwnBookingAction(
                         canBackdateComplete,
-                        booking,
-                        currentUser
-                      );
-                      const canManageEditBooking = canUserManageOwnBookingAction(
                         canEditBookings,
-                        booking,
-                        currentUser
-                      );
-                      const canManageCancelBooking = canUserManageOwnBookingAction(
                         canCancelBookings,
-                        booking,
-                        currentUser
-                      );
-                      const canManageAssignCentralVehicle = canUserManageOwnBookingAction(
                         canAssignCentralVehicle,
-                        booking,
-                        currentUser
-                      );
+                        canUnassignBookings,
+                        canReviewDriverCancelRequests,
+                      });
 
                       return (
                     <BookingMobileCard
@@ -2838,13 +3071,7 @@ export default function Booking() {
                       vehicleMap={vehicleMap}
                       showVehicleColumn={FEATURES.vehicleModule}
                       canViewBookingDetail={canViewBookingDetail}
-                      canManageProcessBooking={canManageProcessBooking}
-                      canManageBackdateComplete={canManageBackdateComplete}
-                      canManageCancelBooking={canManageCancelBooking}
-                      canManageEditBooking={canManageEditBooking}
-                      canUnassignBookings={canUnassignBookings}
-                      canManageAssignCentralVehicle={canManageAssignCentralVehicle}
-                      canReviewDriverCancelRequests={canReviewDriverCancelRequests}
+                      {...actionPermissions}
                       processing={
                         processingAction?.bookingId === getBookingId(booking)
                           ? processingAction.type
@@ -2859,6 +3086,8 @@ export default function Booking() {
                       onAssignCentralVehicle={handleAssignCentralVehicle}
                       onApproveDriverCancel={handleApproveDriverCancel}
                       onRejectDriverCancel={handleRejectDriverCancel}
+                      isExpanded={expandedBookingId === bookingId}
+                      onToggleExpand={toggleExpandedBooking}
                     />
                       );
                     })()
