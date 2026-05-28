@@ -97,14 +97,6 @@ function TrashIcon({ className = "" }) {
   );
 }
 
-function ChevronDownIcon({ className = "" }) {
-  return (
-    <Icon className={className}>
-      <path d="m6 9 6 6 6-6" />
-    </Icon>
-  );
-}
-
 function ChevronRightIcon({ className = "" }) {
   return (
     <Icon className={className}>
@@ -206,7 +198,7 @@ export default function BookingCancellationHistory() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState("");
-  const [expandedHistoryId, setExpandedHistoryId] = useState("");
+  const [, setExpandedHistoryId] = useState("");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     requester: "",
@@ -384,8 +376,9 @@ export default function BookingCancellationHistory() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6 mt-15">
-      <section className="hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5 md:block">
+    <div className="booking-cancellation-page">
+      <div className="booking-cancellation-desktop mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
+        <section className="hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5 md:block">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-3xl">
             <h2 className="text-[26px] font-bold leading-tight text-blue-950 sm:text-[28px]">
@@ -417,7 +410,8 @@ export default function BookingCancellationHistory() {
             </button>
           </div>
         </div>
-      </section>
+        </section>
+      </div>
 
       {loading ? (
         <div className="form-card">กำลังโหลดประวัติการยกเลิก...</div>
@@ -425,7 +419,8 @@ export default function BookingCancellationHistory() {
         <div className="form-card text-red-700">{error}</div>
       ) : (
         <>
-          <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:block">
+          <div className="booking-cancellation-desktop mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
+            <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:block">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h3 className="inline-flex items-center gap-2 text-[20px] font-bold text-slate-900 sm:text-[22px]">
@@ -447,7 +442,7 @@ export default function BookingCancellationHistory() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="booking-filter-row-4 mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 ">
               <FilterField
                 label="ผู้จอง"
                 value={filters.requester}
@@ -508,7 +503,7 @@ export default function BookingCancellationHistory() {
               </span>
             </div>
 
-            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
+            <div className="table-wrap mt-4 overflow-x-auto rounded-2xl border border-slate-200">
               <table className="min-w-[960px] w-full border-collapse bg-white">
                 <thead className="bg-slate-50/90">
                   <tr className="text-left text-[14px] font-semibold text-slate-700">
@@ -593,9 +588,12 @@ export default function BookingCancellationHistory() {
             </div>
 
             <Pagination page={page} total={historyPages} onChange={setPage} />
-          </section>
+            </section>
 
-          <section className="block md:hidden">
+          </div>
+
+          <div className="booking-cancellation-mobile mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
+            <section className="block">
             <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -634,73 +632,81 @@ export default function BookingCancellationHistory() {
               <button
                 type="button"
                 onClick={() => setIsMobileFilterOpen((current) => !current)}
-                className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
                 aria-expanded={isMobileFilterOpen}
+className="
+  flex min-h-[44px] w-full items-center justify-between gap-3
+  rounded-xl border border-blue-500
+  bg-blue-600
+  px-3 py-2 text-left
+  text-white
+  shadow-sm transition
+  hover:bg-blue-700
+"
               >
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-                    <FilterIcon className="h-3.5 w-3.5" />
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-white">
+                    <FilterIcon className="h-3.5 w-3.5 text-white" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900">ตัวกรองข้อมูล</div>
-                    <div className="text-[11px] leading-4 text-slate-500">
+                    <div className="text-sm font-semibold text-white">ตัวกรองข้อมูล</div>
+                    <div className="text-xs text-blue-100">
                       ค้นหาตามผู้จอง ปลายทาง เหตุผล หรือผู้ยกเลิก
                     </div>
                   </div>
                 </div>
                 <ChevronRightIcon
                   className={[
-                    "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
+                    "h-3.5 w-3.5 shrink-0 text-white transition-transform",
                     isMobileFilterOpen ? "rotate-90" : "",
                   ].join(" ")}
                 />
               </button>
 
               {isMobileFilterOpen ? (
-                <div className="mt-2 grid gap-2 rounded-xl bg-slate-50/80 p-3">
-                  <div className="grid gap-2">
+                <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                  <div className="grid gap-2 text-[20px]">
                     <FilterField
                       label="ผู้จอง"
                       value={filters.requester}
                       onChange={(value) => setFilter("requester", value)}
                       placeholder="ค้นหาชื่อผู้จอง"
-                      labelClassName="text-[12px] font-semibold text-slate-600"
-                      inputClassName="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      labelClassName="text-[15px] font-semibold text-slate-700"
+                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                     <FilterField
                       label="ปลายทาง"
                       value={filters.destination}
                       onChange={(value) => setFilter("destination", value)}
                       placeholder="ค้นหาปลายทาง"
-                      labelClassName="text-[12px] font-semibold text-slate-600"
-                      inputClassName="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      labelClassName="text-[15px] font-semibold text-slate-700"
+                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                     <FilterField
                       label="เหตุผล"
                       value={filters.reason}
                       onChange={(value) => setFilter("reason", value)}
                       placeholder="ค้นหาเหตุผล"
-                      labelClassName="text-[12px] font-semibold text-slate-600"
-                      inputClassName="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      labelClassName="text-[15px] font-semibold text-slate-700"
+                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                     <FilterField
                       label="ผู้ยกเลิก"
                       value={filters.cancelled_by}
                       onChange={(value) => setFilter("cancelled_by", value)}
                       placeholder="ค้นหาผู้ยกเลิก"
-                      labelClassName="text-[12px] font-semibold text-slate-600"
-                      inputClassName="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      labelClassName="text-[15px] font-semibold text-slate-700"
+                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
 
                   <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="text-[12px] font-semibold text-slate-500">
+                    <span className="text-[15px] font-semibold text-slate-500">
                       ตัวกรองที่ใช้งาน {activeFilterCount || 0}
                     </span>
                     <button
                       type="button"
                       onClick={clearFilters}
-                      className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 sm:w-auto"
+                      className="h-9 rounded-xl bg-blue-600 px-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
                     >
                       ล้างตัวกรอง
                     </button>
@@ -720,7 +726,7 @@ export default function BookingCancellationHistory() {
                   </div>
                 </div>
                 <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                  หน้า {page}/{historyPages}
+                  หน้า {page} / {historyPages}
                 </span>
               </div>
 
@@ -739,95 +745,69 @@ export default function BookingCancellationHistory() {
                 ) : (
                   pageItems.map((item, index) => {
                     const deleteId = getCancellationDeleteId(item);
-                    const isExpanded = expandedHistoryId === deleteId;
                     const isDeleting = deletingId === deleteId;
 
                     return (
                       <article
                         key={deleteId || item.booking_no || index}
-                        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+                        className="grid gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
                       >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedHistoryId((current) => (current === deleteId ? "" : deleteId))
-                          }
-                          aria-expanded={isExpanded}
-                          aria-controls={`booking-cancellation-mobile-${deleteId || index}`}
-                          className="grid w-full grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1.5 px-3 py-2 text-left"
-                        >
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex h-6 min-w-6 items-center justify-center rounded-full bg-red-50 px-1.5 text-[12px] font-semibold text-red-700">
                             {pageStart + index}
                           </div>
-
-                          <div className="min-w-0 truncate text-[14px] font-semibold text-slate-900">
-                            {item.requester_name || "-"}
-                          </div>
-
-                          <div className="min-w-0 truncate text-[13px] text-slate-500">
-                            {item.destination || "-"}
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-flex shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                              ยกเลิกแล้ว
-                            </span>
-                            <ChevronDownIcon
-                              className={[
-                                "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
-                                isExpanded ? "rotate-180" : "",
-                              ].join(" ")}
-                            />
-                          </div>
-                        </button>
-
-                        {isExpanded ? (
-                          <div
-                            id={`booking-cancellation-mobile-${deleteId || index}`}
-                            className="border-t border-slate-100 px-3 py-2.5"
+                          <span
+                            className={`inline-flex min-h-8 items-center rounded-full border px-3 text-[11px] font-semibold ${statusMeta.className}`}
+                            title={statusMeta.help}
                           >
-                            <div className="grid gap-1.5">
-                              <div className="grid gap-0.5">
-                                <span className="text-[12px] font-semibold text-slate-500">เลขที่รายการ</span>
-                                <div className="text-[14px] text-slate-800">
-                                  {item.booking_no || item.cancellation_id || "-"}
-                                </div>
-                              </div>
-                              <div className="grid gap-0.5">
-                                <span className="text-[12px] font-semibold text-slate-500">
-                                  เหตุผลการยกเลิก
-                                </span>
-                                <div className="break-words text-[14px] text-slate-800">
-                                  {item.reason || "-"}
-                                </div>
-                              </div>
-                              <div className="grid gap-0.5">
-                                <span className="text-[12px] font-semibold text-slate-500">ผู้ยกเลิก</span>
-                                <div className="break-words text-[14px] text-slate-800">
-                                  {item.cancelled_by || "-"}
-                                </div>
-                              </div>
-                              <div className="grid gap-0.5">
-                                <span className="text-[12px] font-semibold text-slate-500">ยกเลิกเมื่อ</span>
-                                <div className="text-[14px] text-slate-800">
-                                  {formatThaiDateTime(item.cancelled_at || item.updated_at || item.created_at)}
-                                </div>
-                              </div>
+                            {statusMeta.label}
+                          </span>
+                        </div>
 
-                              {canManageHistory ? (
-                                <div className="pt-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(item)}
-                                    disabled={isDeleting}
-                                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <TrashIcon className="h-4 w-4" />
-                                    <span>{isDeleting ? "กำลังลบ..." : "ลบ"}</span>
-                                  </button>
-                                </div>
-                              ) : null}
+                        <div className="grid gap-1.5">
+                          <div className="grid gap-0.5">
+                            <span className="text-[12px] font-semibold text-slate-500">ผู้จอง</span>
+                            <div className="break-words text-[14px] font-semibold text-slate-900">
+                              {item.requester_name || "-"}
                             </div>
+                          </div>
+                          <div className="grid gap-0.5">
+                            <span className="text-[12px] font-semibold text-slate-500">ปลายทาง</span>
+                            <div className="break-words text-[14px] text-slate-800">
+                              {item.destination || "-"}
+                            </div>
+                          </div>
+                          <div className="grid gap-0.5">
+                            <span className="text-[12px] font-semibold text-slate-500">เหตุผล</span>
+                            <div className="break-words text-[14px] text-slate-800">
+                              {item.reason || "-"}
+                            </div>
+                          </div>
+                          <div className="grid gap-0.5">
+                            <span className="text-[12px] font-semibold text-slate-500">ผู้ยกเลิก</span>
+                            <div className="break-words text-[14px] text-slate-800">
+                              {item.cancelled_by || "-"}
+                            </div>
+                          </div>
+                          <div className="grid gap-0.5">
+                            <span className="text-[12px] font-semibold text-slate-500">ยกเลิกเมื่อ</span>
+                            <div className="text-[14px] text-slate-800">
+                              {formatThaiDateTime(item.cancelled_at || item.updated_at || item.created_at)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {canManageHistory ? (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item)}
+                              disabled={isDeleting}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                              <span>{isDeleting ? "กำลังลบ..." : "ลบ"}</span>
+                            </button>
                           </div>
                         ) : null}
                       </article>
@@ -839,6 +819,7 @@ export default function BookingCancellationHistory() {
               <Pagination page={page} total={historyPages} onChange={setPage} compact />
             </div>
           </section>
+          </div>
         </>
       )}
     </div>

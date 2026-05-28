@@ -2714,7 +2714,7 @@ export default function Booking() {
           <input
             value={filters.requester}
             onChange={(e) => setFilter("requester", e.target.value)}
-            placeholder="ค้นหาจากชื่อผู้จอง"
+            placeholder ="ค้นหาจากชื่อผู้จอง"
           />
         </div>
 
