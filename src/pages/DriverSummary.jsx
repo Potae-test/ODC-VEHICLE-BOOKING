@@ -1,6 +1,10 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { getBookings, getDriverJobLogs, getUsers } from "../api";
+import AppLayout from "../layouts/AppLayout";
+import MobileGrid from "../layouts/MobileGrid";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
 import { formatThaiDateTime } from "../utils/date";
 import { getDriverSummaryCardScope, hasPermission, normalizeRole } from "../permissions";
 import PageSkeleton from "../components/skeletons/PageSkeleton";
@@ -410,36 +414,31 @@ function DriverSummaryMobileCard({ row, index, isExpanded, onToggleExpand, onDet
   const latestLabel = row.latest
     ? `${row.latest.booking_no || "-"} / ${getDriverJobActionLabelV2(row.latest)}`
     : "-";
-  const latestStatus = row.latest ? getStatusCategory(row.latest.status) || getDriverJobActionCategoryV2(row.latest) || "approved" : "";
 
   return (
-    <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <article className="driver-summary-mobile-card overflow-hidden rounded-[18px] border border-blue-600 bg-blue-600 shadow-sm">
       <button
         type="button"
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2.5 text-left"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-3 text-left"
         aria-expanded={isExpanded}
         onClick={() => onToggleExpand(row.key)}
       >
-        <div className="flex h-6 min-w-6 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[12px] font-semibold text-slate-700">
+        <div className="driver-summary-mobile-badge flex h-7 min-w-7 items-center justify-center rounded-full bg-white px-1.5 text-[12px] font-semibold text-slate-700">
           {index}
         </div>
         <div className="min-w-0">
-          <div className="truncate text-[14px] font-semibold text-slate-900">{row.name}</div>
-          <div className="truncate text-[12px] text-slate-500">
-            งานเดือนนี้ {row.monthCount} / ช่วงที่เลือก {row.selectedCount}
+          <div className="truncate text-[14px] font-semibold leading-5 text-white">{row.name}</div>
+          <div className="truncate text-[12px] leading-4 text-blue-100">
+            ช่วงที่เลือก {row.selectedCount} / วันนี้ {row.todayCount}
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-right">
-          <div className="grid gap-0.5">
-            <span className="text-[11px] font-semibold text-slate-500">วันนี้</span>
-            <span className="text-[13px] font-semibold text-slate-900">{row.todayCount}</span>
-          </div>
-          <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+          <span className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-blue-700">
             {row.cardTotal}
           </span>
           <ChevronDownIcon
             className={[
-              "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
+              "h-4 w-4 shrink-0 text-white/80 transition-transform",
               isExpanded ? "rotate-180" : "",
             ].join(" ")}
           />
@@ -447,28 +446,47 @@ function DriverSummaryMobileCard({ row, index, isExpanded, onToggleExpand, onDet
       </button>
 
       {isExpanded ? (
-        <div className="border-t border-slate-100 px-3 py-2.5">
+        <div className="border-t border-blue-500/40 bg-white px-3 py-3">
           <div className="grid gap-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-xl bg-slate-50 p-2">
-                <div className="text-[12px] font-semibold text-slate-500">วันนี้</div>
-                <div className="text-[15px] font-semibold text-slate-900">{row.todayCount}</div>
+            <div className="driver-summary-mobile-compact-grid">
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--blue">
+                <div className="driver-summary-mobile-mini-card-title text-blue-700">วันนี้</div>
+                <div className="driver-summary-mobile-mini-card-value text-blue-700">{row.todayCount}</div>
               </div>
-              <div className="rounded-xl bg-slate-50 p-2">
-                <div className="text-[12px] font-semibold text-slate-500">สัปดาห์นี้</div>
-                <div className="text-[15px] font-semibold text-slate-900">{row.weekCount}</div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--slate">
+                <div className="driver-summary-mobile-mini-card-title text-slate-700">สัปดาห์นี้</div>
+                <div className="driver-summary-mobile-mini-card-value text-slate-700">{row.weekCount}</div>
               </div>
-              <div className="rounded-xl bg-slate-50 p-2">
-                <div className="text-[12px] font-semibold text-slate-500">เดือนนี้</div>
-                <div className="text-[15px] font-semibold text-slate-900">{row.monthCount}</div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--indigo">
+                <div className="driver-summary-mobile-mini-card-title text-indigo-700">เดือนนี้</div>
+                <div className="driver-summary-mobile-mini-card-value text-indigo-700">{row.monthCount}</div>
               </div>
-              <div className="rounded-xl bg-slate-50 p-2">
-                <div className="text-[12px] font-semibold text-slate-500">ช่วงที่เลือก</div>
-                <div className="text-[15px] font-semibold text-slate-900">{row.selectedCount}</div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--emerald">
+                <div className="driver-summary-mobile-mini-card-title text-emerald-700">ช่วงที่เลือก</div>
+                <div className="driver-summary-mobile-mini-card-value text-emerald-700">{row.selectedCount}</div>
               </div>
             </div>
 
-            <div className="grid gap-0.5 rounded-xl bg-slate-50 p-2">
+            <div className="driver-summary-mobile-compact-grid">
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--green">
+                <div className="driver-summary-mobile-mini-card-title text-green-700">เสร็จสิ้น</div>
+                <div className="driver-summary-mobile-mini-card-value text-green-700">{row.completedCount}</div>
+              </div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--amber">
+                <div className="driver-summary-mobile-mini-card-title text-amber-700">รอออกเดินทาง</div>
+                <div className="driver-summary-mobile-mini-card-value text-amber-700">{row.approvedCount}</div>
+              </div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--sky">
+                <div className="driver-summary-mobile-mini-card-title text-sky-700">กำลังใช้งาน</div>
+                <div className="driver-summary-mobile-mini-card-value text-sky-700">{row.inUseCount}</div>
+              </div>
+              <div className="driver-summary-mobile-mini-card driver-summary-mobile-mini-card--red">
+                <div className="driver-summary-mobile-mini-card-title text-red-700">ยกเลิก</div>
+                <div className="driver-summary-mobile-mini-card-value text-red-700">{row.cancelledCount}</div>
+              </div>
+            </div>
+
+            <div className="driver-summary-mobile-latest grid gap-0.5 rounded-xl bg-slate-50 p-2.5">
               <span className="text-[12px] font-semibold text-slate-500">งานล่าสุด</span>
               <span className="text-[14px] text-slate-800">{latestLabel}</span>
               {row.latest ? (
@@ -480,7 +498,7 @@ function DriverSummaryMobileCard({ row, index, isExpanded, onToggleExpand, onDet
 
             <button
               type="button"
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-blue-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+              className="driver-summary-mobile-detail-button mobile-filter-button inline-flex items-center justify-center gap-1.5 border border-blue-200 bg-white shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
               onClick={() => onDetail(row.key)}
             >
               <DetailIcon className="h-4 w-4" />
@@ -735,6 +753,10 @@ export default function DriverSummary() {
     () => visibleDriverRows.slice((tablePage - 1) * TABLE_PAGE_SIZE, tablePage * TABLE_PAGE_SIZE),
     [visibleDriverRows, tablePage]
   );
+  const mobileTotalDrivers = useMemo(() => visibleDriverRows.length, [visibleDriverRows.length]);
+  const mobileTotalJobs = useMemo(() => visibleDriverRows.reduce((sum, row) => sum + row.cardTotal, 0), [visibleDriverRows]);
+  const mobileCompletedJobs = useMemo(() => visibleDriverRows.reduce((sum, row) => sum + row.completedCount, 0), [visibleDriverRows]);
+  const mobileInUseJobs = useMemo(() => visibleDriverRows.reduce((sum, row) => sum + row.inUseCount, 0), [visibleDriverRows]);
 
   const handleOpenDetail = useCallback((driverKey) => setDetailDriver(driverKey), []);
   const handleExportExcel = useCallback(() => {
@@ -773,7 +795,8 @@ export default function DriverSummary() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6 mt-15">
+    <AppLayout title="สรุปงานคนขับ" hideMobileHeader hideDesktopHeader hideDesktopSidebar mobileTopOffset={57}>
+      <div className="driver-summary-desktop flex w-full flex-col gap-2 pb-6">
       <div className="hidden md:block">
         <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
           <div>
@@ -955,88 +978,71 @@ export default function DriverSummary() {
       </div>
 
       <div className="block md:hidden">
-        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="min-w-0 truncate text-[22px] font-bold leading-tight text-blue-950">สรุปงานคนขับ</h2>
-              <p className="mt-0.5 text-[12px] leading-4 text-slate-500">
-                นับจำนวนงานจากรายการจองที่อนุมัติแล้ว กำลังใช้งาน และเสร็จสิ้น
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
+        <div className="driver-summary-mobile flex w-full flex-col gap-0 pb-6">
+          <MobilePageHeader
+            title="สรุปงานคนขับ"
+            subtitle="นับจำนวนงานจากรายการจองที่อนุมัติแล้ว กำลังใช้งาน และเสร็จสิ้น"
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="mobile-filter-button inline-flex items-center gap-1.5 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+                  disabled={refreshing || loading}
+                  onClick={() => loadData({ refreshOnly: true })}
+                >
+                  <RefreshIcon className="h-4 w-4" />
+                  <span>รีเฟรช</span>
+                </button>
+                <button
+                  type="button"
+                  className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={visibleDriverRows.length === 0}
+                  onClick={handleExportExcel}
+                >
+                  <ExportIcon className="h-4 w-4" />
+                  <span>Export</span>
+                </button>
+              </>
+            }
+          />
+          <MobilePageSection
+            title="ตัวกรองข้อมูล"
+            subtitle="เลือกช่วงเวลาและคนขับที่ต้องการดู"
+            actions={
               <button
                 type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
-                disabled={refreshing || loading}
-                onClick={() => loadData({ refreshOnly: true })}
+                onClick={() => setIsMobileFilterOpen((current) => !current)}
+                aria-expanded={isMobileFilterOpen}
+                className="mobile-action-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
               >
-                <RefreshIcon className="h-4 w-4" />
-                <span>รีเฟรช</span>
+                <FilterIcon className="h-4 w-4 text-white" />
+                <span>{isMobileFilterOpen ? "ซ่อน" : "ตัวกรอง"}</span>
               </button>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={visibleDriverRows.length === 0}
-                onClick={handleExportExcel}
-              >
-                <ExportIcon className="h-4 w-4" />
-                <span>Export</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setIsMobileFilterOpen((current) => !current)}
-            className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-            aria-expanded={isMobileFilterOpen}
+            }
           >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-                <FilterIcon className="h-3.5 w-3.5" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[13px] font-semibold text-slate-900">ตัวกรองข้อมูล</div>
-                <div className="text-[11px] leading-4 text-slate-500">คัดช่วงเวลาและเลือกคนขับที่ต้องการดู</div>
-              </div>
-            </div>
-            <ChevronRightIcon
-              className={[
-                "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
-                isMobileFilterOpen ? "rotate-90" : "",
-              ].join(" ")}
-            />
-          </button>
-
-          {isMobileFilterOpen ? (
-            <div className="mt-2 grid gap-2 rounded-xl bg-slate-50/80 p-3">
-              <div className="grid gap-2">
-                <label className="grid gap-1">
-                  <span className="text-[12px] font-semibold text-slate-600">ช่วงเวลา</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      ["today", "วันนี้"],
-                      ["week", "สัปดาห์นี้"],
-                      ["month", "เดือนนี้"],
-                      ["custom", "เลือกเอง"],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        className={`h-10 rounded-xl border px-3 text-sm font-semibold shadow-sm ${
-                          rangeMode === value
-                            ? "border-blue-600 bg-blue-600 text-white"
-                            : "border-slate-300 bg-white text-slate-700"
-                        }`}
-                        onClick={() => setRangeMode(value)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </label>
+            {isMobileFilterOpen ? (
+              <div className="grid gap-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    ["today", "วันนี้"],
+                    ["week", "สัปดาห์นี้"],
+                    ["month", "เดือนนี้"],
+                    ["custom", "เลือกเอง"],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`mobile-action-button border ${
+                        rangeMode === value
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "!border-slate-300 !bg-white !text-slate-700"
+                      }`}
+                      onClick={() => setRangeMode(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
 
                 <div className="grid gap-2">
                   <label className="grid gap-1">
@@ -1046,7 +1052,7 @@ export default function DriverSummary() {
                       value={customStart}
                       disabled={rangeMode !== "custom"}
                       onChange={(e) => setCustomStart(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                     />
                   </label>
                   <label className="grid gap-1">
@@ -1056,7 +1062,7 @@ export default function DriverSummary() {
                       value={customEnd}
                       disabled={rangeMode !== "custom"}
                       onChange={(e) => setCustomEnd(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100"
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
                     />
                   </label>
                   <label className="grid gap-1">
@@ -1064,7 +1070,7 @@ export default function DriverSummary() {
                     <select
                       value={selectedDriver}
                       onChange={(e) => setSelectedDriver(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     >
                       <option value="ALL">คนขับทั้งหมด</option>
                       {driverOptions.map((driver) => (
@@ -1075,70 +1081,66 @@ export default function DriverSummary() {
                     </select>
                   </label>
                 </div>
-              </div>
 
-              <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-[12px] font-semibold text-slate-500">
-                  ช่วงที่เลือก {selectedRange.label}
-                </span>
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50 sm:w-auto"
-                  onClick={() => {
-                    setRangeMode("today");
-                    setCustomStart(toDateInputValue(startOfMonth(new Date())));
-                    setCustomEnd(toDateInputValue(new Date()));
-                    setSelectedDriver("ALL");
-                  }}
-                >
-                  ล้างตัวกรอง
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-[12px] font-semibold text-slate-500">
+                    ช่วงที่เลือก {selectedRange.label}
+                  </span>
+                  <button
+                    type="button"
+                    className="mobile-filter-button"
+                    onClick={() => {
+                      setRangeMode("today");
+                      setCustomStart(toDateInputValue(startOfMonth(new Date())));
+                      setCustomEnd(toDateInputValue(new Date()));
+                      setSelectedDriver("ALL");
+                    }}
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                </div>
               </div>
+            ) : null}
+          </MobilePageSection>
+
+          <MobilePageSection
+            title="รายการสรุปคนขับ"
+            subtitle={`${selectedRange.label}: ${formatThaiDateTime(selectedRange.start)} - ${formatThaiDateTime(selectedRange.end)}`}
+            actions={
+              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                หน้า {tablePage}/{totalTablePages}
+              </span>
+            }
+          >
+            <div className="grid gap-1.5">
+              {visibleLoading ? (
+                <div className="mobile-empty-state">
+                  <span className="text-sm font-medium text-slate-600">กำลังโหลดสรุปงานคนขับ...</span>
+                </div>
+              ) : error ? (
+                <div className="mobile-empty-state">
+                  <span className="text-sm font-medium text-red-700">{error}</span>
+                </div>
+              ) : paginatedDriverRows.length === 0 ? (
+                <div className="mobile-empty-state">
+                  <span className="text-sm font-medium text-slate-600">ไม่พบข้อมูลคนขับสำหรับรายงาน</span>
+                </div>
+              ) : (
+                paginatedDriverRows.map((row, index) => (
+                  <DriverSummaryMobileCard
+                    key={row.key}
+                    row={row}
+                    index={(tablePage - 1) * TABLE_PAGE_SIZE + index + 1}
+                    isExpanded={expandedSummaryKey === row.key}
+                    onToggleExpand={(driverKey) => setExpandedSummaryKey((current) => (current === driverKey ? "" : driverKey))}
+                    onDetail={handleOpenDetail}
+                  />
+                ))
+              )}
             </div>
-          ) : null}
-        </div>
 
-        <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-          <div className="flex items-center justify-between gap-2 px-1 pb-2">
-            <div className="min-w-0">
-              <div className="text-[14px] font-semibold text-slate-900">สรุปงานคนขับ</div>
-              <div className="text-[12px] leading-4 text-slate-500">
-                {selectedRange.label}: {formatThaiDateTime(selectedRange.start)} - {formatThaiDateTime(selectedRange.end)}
-              </div>
-            </div>
-            <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-              หน้า {tablePage}/{totalTablePages}
-            </span>
-          </div>
-
-          <div className="grid gap-1.5">
-            {visibleLoading ? (
-              <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
-                <span className="text-sm font-medium text-slate-600">กำลังโหลดสรุปงานคนขับ...</span>
-              </div>
-            ) : error ? (
-              <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-red-200 px-4 py-5 text-center">
-                <span className="text-sm font-medium text-red-700">{error}</span>
-              </div>
-            ) : paginatedDriverRows.length === 0 ? (
-              <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
-                <span className="text-sm font-medium text-slate-600">ไม่พบข้อมูลคนขับสำหรับรายงาน</span>
-              </div>
-            ) : (
-              paginatedDriverRows.map((row, index) => (
-                <DriverSummaryMobileCard
-                  key={row.key}
-                  row={row}
-                  index={(tablePage - 1) * TABLE_PAGE_SIZE + index + 1}
-                  isExpanded={expandedSummaryKey === row.key}
-                  onToggleExpand={(driverKey) => setExpandedSummaryKey((current) => (current === driverKey ? "" : driverKey))}
-                  onDetail={handleOpenDetail}
-                />
-              ))
-            )}
-          </div>
-
-          <SummaryPagination page={tablePage} total={totalTablePages} onChange={setTablePage} compact />
+            <SummaryPagination page={tablePage} total={totalTablePages} onChange={setTablePage} compact />
+          </MobilePageSection>
         </div>
       </div>
 
@@ -1246,6 +1248,7 @@ export default function DriverSummary() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </AppLayout>
   );
 }

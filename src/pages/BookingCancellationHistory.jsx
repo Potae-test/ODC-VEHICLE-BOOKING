@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { deleteBookingCancellationHistory, getBookingCancellationHistory } from "../api";
+import AppLayout from "../layouts/AppLayout";
+import MobileGrid from "../layouts/MobileGrid";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showConfirm, showError, showSuccess } from "../utils/alert";
@@ -93,14 +97,6 @@ function TrashIcon({ className = "" }) {
       <path d="M14 11v6" />
       <path d="M6 7l1 13h10l1-13" />
       <path d="M9 7V4h6v3" />
-    </Icon>
-  );
-}
-
-function ChevronRightIcon({ className = "" }) {
-  return (
-    <Icon className={className}>
-      <path d="m9 6 6 6-6 6" />
     </Icon>
   );
 }
@@ -376,8 +372,16 @@ export default function BookingCancellationHistory() {
   }
 
   return (
-    <div className="booking-cancellation-page">
-      <div className="booking-cancellation-desktop mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
+    <AppLayout
+      title="ประวัติการยกเลิก"
+      hideMobileHeader
+      hideDesktopHeader
+      hideDesktopSidebar
+      mobileTopOffset={57}
+      className="booking-cancellation-page"
+    >
+      <div className="booking-cancellation-page">
+      <div className="booking-cancellation-desktop flex w-full flex-col gap-2 pb-6">
         <section className="hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm sm:p-5 md:block">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-3xl">
@@ -419,7 +423,7 @@ export default function BookingCancellationHistory() {
         <div className="form-card text-red-700">{error}</div>
       ) : (
         <>
-          <div className="booking-cancellation-desktop mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
+          <div className="booking-cancellation-desktop flex w-full flex-col gap-2 pb-6">
             <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:block">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
@@ -592,24 +596,16 @@ export default function BookingCancellationHistory() {
 
           </div>
 
-          <div className="booking-cancellation-mobile mx-auto flex w-full max-w-7xl flex-col gap-2 pb-6">
-            <section className="block">
-            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="min-w-0 truncate text-[22px] font-bold leading-tight text-blue-950">
-                    ประวัติรายการยกเลิก
-                  </h2>
-                  <p className="mt-0.5 text-[12px] leading-4 text-slate-500">
-                    ตรวจสอบประวัติการยกเลิก เหตุผล ผู้ยกเลิก และช่วงเวลาที่บันทึกไว้
-                  </p>
-                </div>
-
-                <div className="flex shrink-0 items-center gap-1.5">
+          <div className="booking-cancellation-mobile">
+            <MobilePageHeader
+              title="ประวัติรายการยกเลิก"
+              subtitle="ตรวจสอบประวัติการยกเลิก เหตุผล ผู้ยกเลิก และช่วงเวลาที่บันทึกไว้"
+              actions={
+                <>
                   <button
                     type="button"
                     onClick={loadData}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+                    className="mobile-filter-button inline-flex items-center gap-1.5 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
                   >
                     <RefreshIcon className="h-4 w-4" />
                     <span>รีเฟรช</span>
@@ -619,52 +615,33 @@ export default function BookingCancellationHistory() {
                     type="button"
                     onClick={handleExportExcel}
                     disabled={filteredHistory.length === 0}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <ExportIcon className="h-4 w-4" />
                     <span>Export</span>
                   </button>
-                </div>
-              </div>
-            </div>
+                </>
+              }
+            />
 
-            <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-              <button
-                type="button"
-                onClick={() => setIsMobileFilterOpen((current) => !current)}
-                aria-expanded={isMobileFilterOpen}
-className="
-  flex min-h-[44px] w-full items-center justify-between gap-3
-  rounded-xl border border-blue-500
-  bg-blue-600
-  px-3 py-2 text-left
-  text-white
-  shadow-sm transition
-  hover:bg-blue-700
-"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-white">
-                    <FilterIcon className="h-3.5 w-3.5 text-white" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-white">ตัวกรองข้อมูล</div>
-                    <div className="text-xs text-blue-100">
-                      ค้นหาตามผู้จอง ปลายทาง เหตุผล หรือผู้ยกเลิก
-                    </div>
-                  </div>
-                </div>
-                <ChevronRightIcon
-                  className={[
-                    "h-3.5 w-3.5 shrink-0 text-white transition-transform",
-                    isMobileFilterOpen ? "rotate-90" : "",
-                  ].join(" ")}
-                />
-              </button>
-
+            <MobilePageSection
+              title="กรองข้อมูล"
+              subtitle="ค้นหาตามผู้จอง ปลายทาง เหตุผล หรือผู้ยกเลิก"
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setIsMobileFilterOpen((current) => !current)}
+                  aria-expanded={isMobileFilterOpen}
+                  className="mobile-action-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                >
+                  <FilterIcon className="h-4 w-4 text-white" />
+                  <span>{isMobileFilterOpen ? "ซ่อน" : "ตัวกรอง"}</span>
+                </button>
+              }
+            >
               {isMobileFilterOpen ? (
-                <div className="mt-3 grid gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                  <div className="grid gap-2 text-[20px]">
+                <div className="grid gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                  <MobileGrid columns={{ base: 1, md: 2 }} gap="sm">
                     <FilterField
                       label="ผู้จอง"
                       value={filters.requester}
@@ -697,42 +674,40 @@ className="
                       labelClassName="text-[15px] font-semibold text-slate-700"
                       inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
-                  </div>
+                  </MobileGrid>
 
                   <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="text-[15px] font-semibold text-slate-500">
+                    <span className="text-[13px] font-semibold text-slate-500">
                       ตัวกรองที่ใช้งาน {activeFilterCount || 0}
                     </span>
                     <button
                       type="button"
                       onClick={clearFilters}
-                      className="h-9 rounded-xl bg-blue-600 px-3 text-[13px] font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                      className="mobile-action-button border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
                     >
                       ล้างตัวกรอง
                     </button>
                   </div>
                 </div>
               ) : null}
-            </div>
+            </MobilePageSection>
 
-            <div className="mt-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="flex items-center justify-between gap-2 px-1 pb-2">
-                <div className="min-w-0">
-                  <div className="text-[14px] font-semibold text-slate-900">รายการยกเลิก</div>
-                  <div className="text-[12px] leading-4 text-slate-500">
-                    {filteredHistory.length > 0
-                      ? `แสดง ${pageStart}-${pageEnd} จากทั้งหมด ${filteredHistory.length} รายการ`
-                      : "ไม่พบข้อมูลที่ตรงกับตัวกรอง"}
-                  </div>
-                </div>
+            <MobilePageSection
+              title="รายการยกเลิก"
+              subtitle={
+                filteredHistory.length > 0
+                  ? `แสดง ${pageStart}-${pageEnd} จากทั้งหมด ${filteredHistory.length} รายการ`
+                  : "ไม่พบข้อมูลที่ตรงกับตัวกรอง"
+              }
+              actions={
                 <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
                   หน้า {page} / {historyPages}
                 </span>
-              </div>
-
+              }
+            >
               <div className="grid gap-1.5">
                 {pageItems.length === 0 ? (
-                  <div className="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
+                  <div className="mobile-empty-state">
                     <div className="flex flex-col items-center gap-1 text-slate-500">
                       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                         <FilterIcon className="h-4 w-4" />
@@ -817,11 +792,11 @@ className="
               </div>
 
               <Pagination page={page} total={historyPages} onChange={setPage} compact />
-            </div>
-          </section>
+            </MobilePageSection>
           </div>
         </>
       )}
-    </div>
+      </div>
+    </AppLayout>
   );
 }

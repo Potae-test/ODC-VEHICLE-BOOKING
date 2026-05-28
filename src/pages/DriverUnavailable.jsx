@@ -14,6 +14,9 @@ import { hasPermission, normalizeRole } from "../permissions";
 import { showConfirm, showError, showSuccess } from "../utils/alert";
 import ThaiDateTimeField from "../components/common/ThaiDateTimeField";
 import { parseAppDateTime, toLocalDateTimeString } from "../utils/datetime";
+import MobileGrid from "../layouts/MobileGrid";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
 
 const ROWS_PER_PAGE = 5;
 
@@ -112,6 +115,97 @@ function Pagination({ page, total, onChange }) {
   );
 }
 
+function DriverUnavailableCompactCard({
+  record,
+  canEdit,
+  canCancel,
+  expanded,
+  onToggleExpand,
+  onEdit,
+  onCancel,
+}) {
+  const status = normalizeStatus(record.status);
+  const typeClassName = getTypeClassName(record.type);
+  const statusClassName = getStatusClassName(record.status);
+  const typeLabel = getTypeLabel(record.type);
+  const rangeLabel = formatRange(record.start_datetime, record.end_datetime);
+  const isActive = status === "ACTIVE";
+  const isCancelled = status === "CANCELLED";
+
+  return (
+    <article
+      className={[
+        "driver-unavailable-compact-card",
+        isActive ? "driver-unavailable-compact-card--active" : "",
+        isCancelled ? "driver-unavailable-compact-card--cancelled" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <button
+        type="button"
+        className="driver-unavailable-compact-main"
+        aria-expanded={expanded}
+        onClick={() => onToggleExpand(record.unavailable_id)}
+      >
+        <div className="driver-unavailable-compact-copy">
+          <div className="driver-unavailable-compact-title-row">
+            <h3 className="driver-unavailable-compact-title">{record.driver_name || "-"}</h3>
+            <span className={`status ${typeClassName}`}>{typeLabel}</span>
+          </div>
+          <div className="driver-unavailable-compact-meta">
+            <span className={`status ${statusClassName}`}>{status}</span>
+            <span title={rangeLabel}>{rangeLabel}</span>
+          </div>
+        </div>
+        <span className={`driver-unavailable-compact-chevron ${expanded ? "is-open" : ""}`} aria-hidden="true">
+          ▾
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="driver-unavailable-compact-expanded">
+          <div className="driver-unavailable-compact-grid">
+            <div>
+              <span>ประเภท</span>
+              <b>{typeLabel}</b>
+            </div>
+            <div>
+              <span>สถานะ</span>
+              <b>{status}</b>
+            </div>
+            <div>
+              <span>เหตุผล</span>
+              <b>{record.reason || "-"}</b>
+            </div>
+            <div>
+              <span>เวลาเริ่ม</span>
+              <b>{formatThaiDateTime(record.start_datetime)}</b>
+            </div>
+            <div>
+              <span>เวลาสิ้นสุด</span>
+              <b>{formatThaiDateTime(record.end_datetime)}</b>
+            </div>
+          </div>
+
+          <div className="driver-unavailable-compact-actions">
+            {canEdit && status === "ACTIVE" && (
+              <button type="button" onClick={() => onEdit(record)}>
+                แก้ไข
+              </button>
+            )}
+            {canCancel && status === "ACTIVE" && (
+              <button type="button" className="danger-button" onClick={() => onCancel(record)}>
+                ยกเลิก
+              </button>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function UnavailableDateTimeFields({ initialStart, initialEnd, onChange }) {
   const [startValue, setStartValue] = useState(initialStart);
   const [endValue, setEndValue] = useState(initialEnd);
@@ -203,6 +297,8 @@ export default function DriverUnavailable() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [expandedUnavailableId, setExpandedUnavailableId] = useState("");
   const currentUser = getCurrentUser();
   const currentRole = normalizeRole(currentUser?.role);
   const canCreate = hasPermission(null, "driver_unavailable_create");
@@ -286,6 +382,22 @@ export default function DriverUnavailable() {
 
   const pages = useMemo(() => totalPages(filteredItems), [filteredItems]);
   const pageItems = useMemo(() => paginate(filteredItems, page), [filteredItems, page]);
+  const uniqueDriverCount = useMemo(() => {
+    const seen = new Set();
+    filteredItems.forEach((record) => {
+      const key = String(record.driver_user_id || record.driver_name || "").trim();
+      if (key) seen.add(key);
+    });
+    return seen.size;
+  }, [filteredItems]);
+  const activeCount = useMemo(
+    () => filteredItems.filter((record) => normalizeStatus(record.status) === "ACTIVE").length,
+    [filteredItems]
+  );
+  const cancelledCount = useMemo(
+    () => filteredItems.filter((record) => normalizeStatus(record.status) === "CANCELLED").length,
+    [filteredItems]
+  );
 
   useEffect(() => {
     setPage(1);
@@ -490,196 +602,298 @@ export default function DriverUnavailable() {
   }
 
   return (
-    <div>
-      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
-        <div>
-          <h2>แจ้งข้อมูลการปฏิบัติงานของคนขับ</h2>
-          <p>กำหนดช่วงเวลาที่คนขับไม่สามารถรับงานได้</p>
+    <div className="driver-unavailable-page">
+      <div className="hidden md:block">
+        <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
+          <div>
+            <h2>แจ้งข้อมูลการปฏิบัติงานของคนขับ</h2>
+            <p>กำหนดช่วงเวลาที่คนขับไม่สามารถรับงานได้</p>
+          </div>
+
+          <div className="section-toolbar gap-3">
+            <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
+              {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
+            </button>
+            {canCreate && (
+              <button type="button" className="success-button" onClick={() => openForm()}>
+                เพิ่มวันไม่รับงาน
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="section-toolbar gap-3">
-          <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
-            {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
-          </button>
-          {canCreate && (
-            <button type="button" className="success-button" onClick={() => openForm()}>
-              เพิ่มวันไม่รับงาน
-            </button>
+        {loading && <div className="form-card text-slate-700">กำลังโหลดข้อมูล...</div>}
+        {error && !loading && <div className="form-card text-slate-700">{error}</div>}
+
+        {!loading && !error && (
+          <div className="form-card">
+            <div className="driver-unavailable-toolbar">
+              <div className="driver-unavailable-filters">
+                <input
+                  value={filters.keyword}
+                  onChange={(e) => setFilter("keyword", e.target.value)}
+                  placeholder="ค้นหา คนขับ / เหตุผล / สถานะ"
+                />
+
+                <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
+                  <option value="">คนขับทั้งหมด</option>
+                  {drivers.map((driver) => (
+                    <option key={driver.user_id} value={driver.user_id}>
+                      {driver.name || "-"}
+                    </option>
+                  ))}
+                </select>
+
+                <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
+                  <option value="">ทุกประเภท</option>
+                  <option value="ลา">ลา</option>
+                  <option value="หยุด">หยุด</option>
+                  <option value="OTHER">อื่นๆ</option>
+                </select>
+
+                <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+                  <option value="">ทุกสถานะ</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+              </div>
+
+              <div className="driver-unavailable-actions">
+                <button
+                  type="button"
+                  className="small-button"
+                  onClick={() =>
+                    setFilters({
+                      keyword: "",
+                      driver: "",
+                      type: "",
+                      status: "",
+                    })
+                  }
+                >
+                  ล้างตัวกรอง
+                </button>
+                <button
+                  type="button"
+                  className="warning-button"
+                  disabled={filteredItems.length === 0}
+                  onClick={handleExportExcel}
+                >
+                  Export Excel
+                </button>
+              </div>
+            </div>
+
+            <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <table>
+                <thead>
+                  <tr>
+                    <th>คนขับ</th>
+                    <th>ประเภท</th>
+                    <th>เหตุผล</th>
+                    <th>เวลาเริ่ม</th>
+                    <th>เวลาสิ้นสุด</th>
+                    <th>สถานะ</th>
+                    <th>จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan="7">ไม่พบรายการตามเงื่อนไขที่ค้นหา</td>
+                    </tr>
+                  ) : (
+                    pageItems.map((record) => (
+                      <tr key={record.unavailable_id}>
+                        <td>{record.driver_name || "-"}</td>
+                        <td>
+                          <span className={`status ${getTypeClassName(record.type)}`}>
+                            {getTypeLabel(record.type)}
+                          </span>
+                        </td>
+                        <td>{getUnavailableReasonLabel(record) || "-"}</td>
+                        <td>{formatThaiDateTime(record.start_datetime)}</td>
+                        <td>{formatThaiDateTime(record.end_datetime)}</td>
+                        <td>
+                          <span className={`status ${getStatusClassName(record.status)}`}>
+                            {normalizeStatus(record.status)}
+                          </span>
+                        </td>
+                        <td className="action-buttons">
+                          {canEdit && normalizeStatus(record.status) === "ACTIVE" && (
+                            <button type="button" onClick={() => handleEdit(record)}>
+                              แก้ไข
+                            </button>
+                          )}
+                          {canCancel && normalizeStatus(record.status) === "ACTIVE" && (
+                            <button type="button" className="danger-button" onClick={() => handleCancel(record)}>
+                              ยกเลิก
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredItems.length > 0 && (
+              <Pagination page={page} total={pages} onChange={setPage} />
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="block md:hidden">
+        <div className="driver-unavailable-mobile-page mt-[57px] md:mt-0">
+          <MobilePageHeader
+            title="แจ้งข้อมูลการปฏิบัติงานของคนขับ"
+            subtitle="กำหนดช่วงเวลาที่คนขับไม่สามารถรับงานได้"
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="mobile-filter-button inline-flex items-center gap-1.5 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+                  disabled={refreshing || loading}
+                  onClick={() => loadData({ refreshOnly: true })}
+                >
+                  <span>รีเฟรช</span>
+                </button>
+                {canCreate && (
+                  <button
+                    type="button"
+                    className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => openForm()}
+                  >
+                    <span>+ เพิ่มวันไม่รับงาน</span>
+                  </button>
+                )}
+              </>
+            }
+          />
+
+          {loading ? (
+            <MobilePageSection title="สถานะการโหลด" subtitle="กำลังดึงข้อมูลรายการแจ้งไม่รับงาน">
+              <div className="mobile-empty-state">กำลังโหลดข้อมูล...</div>
+            </MobilePageSection>
+          ) : error ? (
+            <MobilePageSection title="ข้อผิดพลาด" subtitle="เกิดปัญหาในการโหลดข้อมูล">
+              <div className="mobile-empty-state text-red-700">{error}</div>
+            </MobilePageSection>
+          ) : (
+            <>
+
+              <MobilePageSection
+                title="ตัวกรองข้อมูล"
+                subtitle="ค้นหา / คนขับ / ประเภท / สถานะ"
+                actions={
+                  <button
+                    type="button"
+                    className="driver-unavailable-filter-toggle mobile-filter-button inline-flex items-center gap-1.5 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+                    aria-expanded={isMobileFilterOpen}
+                    onClick={() => setIsMobileFilterOpen((current) => !current)}
+                  >
+                    <span>{isMobileFilterOpen ? "⌃" : "⌄"}</span>
+                  </button>
+                }
+              >
+                {isMobileFilterOpen ? (
+                  <div className="grid gap-3">
+                    <input
+                      value={filters.keyword}
+                      onChange={(e) => setFilter("keyword", e.target.value)}
+                      placeholder="ค้นหา คนขับ / เหตุผล / สถานะ"
+                    />
+
+                    <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
+                      <option value="">คนขับทั้งหมด</option>
+                      {drivers.map((driver) => (
+                        <option key={driver.user_id} value={driver.user_id}>
+                          {driver.name || "-"}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
+                      <option value="">ทุกประเภท</option>
+                      <option value="ลา">ลา</option>
+                      <option value="หยุด">หยุด</option>
+                      <option value="OTHER">อื่นๆ</option>
+                    </select>
+
+                    <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
+                      <option value="">ทุกสถานะ</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="CANCELLED">CANCELLED</option>
+                    </select>
+
+                    <div className="driver-unavailable-compact-actions">
+                      <button
+                        type="button"
+                        className="mobile-filter-button"
+                        onClick={() =>
+                          setFilters({
+                            keyword: "",
+                            driver: "",
+                            type: "",
+                            status: "",
+                          })
+                        }
+                      >
+                        ล้างตัวกรอง
+                      </button>
+                      <button
+                        type="button"
+                        className="mobile-action-button"
+                        disabled={filteredItems.length === 0}
+                        onClick={handleExportExcel}
+                      >
+                        Export Excel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </MobilePageSection>
+
+              <MobilePageSection
+                title="รายการแจ้งไม่รับงาน"
+                subtitle="แสดงรายการตามเงื่อนไขที่เลือก"
+                actions={
+                  <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                    หน้า {page}/{pages}
+                  </span>
+                }
+              >
+                {pageItems.length === 0 ? (
+                  <div className="mobile-empty-state">ไม่พบรายการตามเงื่อนไขที่ค้นหา</div>
+                ) : (
+                  <div className="grid gap-1.5">
+                    {pageItems.map((record) => (
+                      <DriverUnavailableCompactCard
+                        key={record.unavailable_id}
+                        record={record}
+                        canEdit={canEdit}
+                        canCancel={canCancel}
+                        expanded={expandedUnavailableId === record.unavailable_id}
+                        onToggleExpand={(unavailableId) =>
+                          setExpandedUnavailableId((current) => (current === unavailableId ? "" : unavailableId))
+                        }
+                        onEdit={handleEdit}
+                        onCancel={handleCancel}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {filteredItems.length > 0 && (
+                  <Pagination page={page} total={pages} onChange={setPage} />
+                )}
+              </MobilePageSection>
+            </>
           )}
         </div>
       </div>
-
-      {loading && <div className="form-card text-slate-700">กำลังโหลดข้อมูล...</div>}
-      {error && !loading && <div className="form-card text-slate-700">{error}</div>}
-
-      {!loading && !error && (
-        <div className="form-card">
-          <div className="driver-unavailable-toolbar">
-            <div className="driver-unavailable-filters">
-              <input
-                value={filters.keyword}
-                onChange={(e) => setFilter("keyword", e.target.value)}
-                placeholder="ค้นหา คนขับ / เหตุผล / สถานะ"
-              />
-
-              <select value={filters.driver} onChange={(e) => setFilter("driver", e.target.value)}>
-                <option value="">คนขับทั้งหมด</option>
-                {drivers.map((driver) => (
-                  <option key={driver.user_id} value={driver.user_id}>
-                    {driver.name || "-"}
-                  </option>
-                ))}
-              </select>
-
-              <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
-                <option value="">ทุกประเภท</option>
-                <option value="ลา">ลา</option>
-                <option value="หยุด">หยุด</option>
-                <option value="OTHER">อื่นๆ</option>
-              </select>
-
-              <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
-                <option value="">ทุกสถานะ</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
-            </div>
-
-            <div className="driver-unavailable-actions">
-              <button
-                type="button"
-                className="small-button"
-                onClick={() =>
-                  setFilters({
-                    keyword: "",
-                    driver: "",
-                    type: "",
-                    status: "",
-                  })
-                }
-              >
-                ล้างตัวกรอง
-              </button>
-              <button
-                type="button"
-                className="warning-button"
-                disabled={filteredItems.length === 0}
-                onClick={handleExportExcel}
-              >
-                Export Excel
-              </button>
-            </div>
-          </div>
-
-          <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <table>
-              <thead>
-                <tr>
-                  <th>คนขับ</th>
-                  <th>ประเภท</th>
-                  <th>เหตุผล</th>
-                  <th>เวลาเริ่ม</th>
-                  <th>เวลาสิ้นสุด</th>
-                  <th>สถานะ</th>
-                  <th>จัดการ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan="7">ไม่พบรายการตามเงื่อนไขที่ค้นหา</td>
-                  </tr>
-                ) : (
-                  pageItems.map((record) => (
-                    <tr key={record.unavailable_id}>
-                      <td>{record.driver_name || "-"}</td>
-                      <td>
-                        <span className={`status ${getTypeClassName(record.type)}`}>
-                          {getTypeLabel(record.type)}
-                        </span>
-                      </td>
-                      <td>{getUnavailableReasonLabel(record) || "-"}</td>
-                      <td>{formatThaiDateTime(record.start_datetime)}</td>
-                      <td>{formatThaiDateTime(record.end_datetime)}</td>
-                      <td>
-                        <span className={`status ${getStatusClassName(record.status)}`}>
-                          {normalizeStatus(record.status)}
-                        </span>
-                      </td>
-                      <td className="action-buttons">
-                        {canEdit && normalizeStatus(record.status) === "ACTIVE" && (
-                          <button type="button" onClick={() => handleEdit(record)}>
-                            แก้ไข
-                          </button>
-                        )}
-                        {canCancel && normalizeStatus(record.status) === "ACTIVE" && (
-                          <button type="button" className="danger-button" onClick={() => handleCancel(record)}>
-                            ยกเลิก
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mobile-card-list driver-unavailable-mobile-list mt-6">
-            {filteredItems.length === 0 ? (
-              <div className="mobile-empty-card">ไม่พบรายการตามเงื่อนไขที่ค้นหา</div>
-            ) : (
-              pageItems.map((record) => (
-                <article key={`mobile-${record.unavailable_id}`} className="mobile-data-card border-sky-100 bg-white shadow-sm">
-                  <div className="mobile-data-card-header">
-                    <div>
-                      <span className="mobile-data-card-index">คนขับ</span>
-                      <h3>{record.driver_name || "-"}</h3>
-                    </div>
-                    <span className={`status ${getStatusClassName(record.status)}`}>
-                      {normalizeStatus(record.status)}
-                    </span>
-                  </div>
-                  <div className="mobile-data-card-grid">
-                    <div>
-                      <span>ประเภท</span>
-                      <b>{getTypeLabel(record.type)}</b>
-                    </div>
-                    <div>
-                      <span>เหตุผล</span>
-                      <b>{getUnavailableReasonLabel(record) || "-"}</b>
-                    </div>
-                    <div>
-                      <span>เวลาเริ่ม</span>
-                      <b>{formatThaiDateTime(record.start_datetime)}</b>
-                    </div>
-                    <div>
-                      <span>เวลาสิ้นสุด</span>
-                      <b>{formatThaiDateTime(record.end_datetime)}</b>
-                    </div>
-                  </div>
-                  <div className="mobile-data-card-actions">
-                    {canEdit && normalizeStatus(record.status) === "ACTIVE" && (
-                      <button type="button" onClick={() => handleEdit(record)}>
-                        แก้ไข
-                      </button>
-                    )}
-                    {canCancel && normalizeStatus(record.status) === "ACTIVE" && (
-                      <button type="button" className="danger-button" onClick={() => handleCancel(record)}>
-                        ยกเลิก
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-
-          {filteredItems.length > 0 && (
-            <Pagination page={page} total={pages} onChange={setPage} />
-          )}
-        </div>
-      )}
     </div>
   );
 }

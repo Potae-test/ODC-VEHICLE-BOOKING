@@ -2,6 +2,23 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-05-29
+- Redesigned the mobile view of `src/pages/DriverUnavailable.jsx` with the shared booking-style mobile header, summary grid, collapsible filter card, and compact expandable cards while keeping the desktop table layout and all unavailable-workflow logic unchanged.
+- Removed the leftover legacy mobile card list from the desktop branch of `src/pages/DriverUnavailable.jsx` so the desktop view stays on the original table layout while mobile uses only the new compact card stack.
+
+## 2026-05-28
+- Redesigned the mobile `src/pages/DriverJobs.jsx` experience into compact expandable cards with a shared mobile header, summary grid, and paginated today/pending sections, while keeping the existing booking, approval, cancel, start, complete, pagination, and detail logic unchanged.
+- Refined the expanded mobile dashboard tiles in `src/pages/DriverSummary.jsx` into compact 2-column colored cards with shared mini-card CSS classes in `src/styles/main.css`, preserving the same counts, expand state, and detail flow.
+- Updated the `DriverSummaryMobileCard` collapsed header in `src/pages/DriverSummary.jsx` to a blue mobile card with white header text and a white total badge so the compact summary remains readable on the colored surface, while leaving the expanded stats and detail flow unchanged.
+- Restyled the `DriverSummaryMobileCard` in `src/pages/DriverSummary.jsx` from the stronger blue-tinted treatment to a white modern mobile card with lighter status/stat blocks and a compact blue outline detail button, while keeping all summary counts, expansion behavior, and detail modal logic unchanged.
+- Redesigned the mobile `src/pages/DriverSummary.jsx` view to use the shared Booking-style mobile layout primitives, added mobile overview totals, and normalized the compact filter/list card rhythm without changing desktop rendering, counts, export logic, detail modal logic, or permission behavior.
+- Standardized shared mobile layout tokens and classes in `src/styles/main.css` for the Booking-style mobile rhythm, including reusable spacing, card radius, padding, button sizing, and empty-state styles used by `src/layouts/MobilePageLayout.jsx`, `src/layouts/MobilePageHeader.jsx`, `src/layouts/MobilePageSection.jsx`, and `src/layouts/MobileGrid.jsx`.
+- Added reusable mobile page primitives in `src/layouts/MobilePageLayout.jsx`, `src/layouts/MobilePageHeader.jsx`, `src/layouts/MobilePageSection.jsx`, and `src/layouts/MobileGrid.jsx`, then routed `AppLayout` mobile rendering through them so pages can share the Booking-style mobile spacing and card rhythm without changing business logic.
+- Refactored `src/pages/BookingCancellationHistory.jsx` to use the shared mobile page header, section, and grid components, and updated `src/pages/DriverSummary.jsx` plus `src/pages/DriverJobs.jsx` to opt into the shared 57px mobile offset without altering their existing data or action flows.
+- Tuned the shared mobile layout so `hideMobileHeader` can suppress the shell header when a page already provides its own mobile header, and updated `src/pages/BookingCancellationHistory.jsx` plus its mobile spacing rules to remove the duplicated top gap without changing cancellation history behavior.
+- Added a shared responsive layout layer in `src/hooks/useIsMobile.js`, `src/layouts/AppLayout.jsx`, `src/layouts/DesktopLayout.jsx`, and `src/layouts/MobileLayout.jsx`, plus shared layout styles in `src/styles/main.css`, so pages can switch between mobile and desktop shells without changing booking, driver, or permission logic.
+- Refactored `src/pages/BookingCancellationHistory.jsx`, `src/pages/DriverSummary.jsx`, and `src/pages/DriverJobs.jsx` to use the new shared app layout wrapper while preserving their existing API calls, filters, actions, and Thai UI behavior.
+
 ## 2026-05-26
 - Fixed the Booking row action dropdown so the `ดำเนินการ` menu renders as a floating portal-backed card positioned from the trigger button, opens upward when space below is limited, and closes on outside click, Escape, or scroll without changing any booking permissions or handlers.
 - Tightened FullCalendar month-view styling for `src/pages/Calendar.jsx` and `src/App.css` so day cells, event pills, pending-count pills, more links, and today highlighting stay compact and proportional after the Tailwind page refresh, without changing any Calendar logic or permissions.
@@ -42,3 +59,13 @@ Record repository-level rule changes here. Read this file before editing shared 
 - Added PWA-ready foundations with `vite-plugin-pwa`, a merged Firebase messaging and offline-capable service worker, manifest metadata, generated app icons, install prompt support, and offline fallback content while keeping the existing booking and notification logic intact.
 - Added push-debug instrumentation across Apps Script and the Cloudflare Worker so `created_notifications` are returned consistently and FCM delivery can be traced in `wrangler tail` without changing booking or queue logic.
 - Normalized push subscription provider handling so blank `provider` values are treated as `FCM` for backward compatibility and FCM lookups no longer miss valid active tokens.
+## 2026-05-28
+- Normalized the desktop page wrappers in `src/pages/DriverSummary.jsx` and `src/pages/BookingCancellationHistory.jsx` by removing the extra centered `max-w-7xl` containers so their content width now matches the full-width `DriverJobs` desktop rhythm.
+- Applied the desktop header/sidebar hide flags to `src/pages/BookingCancellationHistory.jsx` so it now follows the same no-shell desktop pattern as `src/pages/DriverJobs.jsx` and `src/pages/DriverSummary.jsx` while keeping the mobile layout unchanged.
+- Added `hideDesktopSidebar` support to the shared app layout and disabled both the desktop title strip and desktop sidebar on `src/pages/DriverJobs.jsx` and `src/pages/DriverSummary.jsx` so those pages render only their own content on desktop while keeping the mobile shell unchanged.
+- Added `hideDesktopHeader` support to the shared app layout and disabled the desktop shell title strip on `src/pages/DriverJobs.jsx` and `src/pages/DriverSummary.jsx` so their original page headers remain the only desktop title areas.
+- Split `src/pages/DriverJobs.jsx` into explicit desktop and mobile wrappers with breakpoint CSS guards so the desktop `JobCard` table view and the compact mobile card view cannot bleed into each other on phone widths.
+- Added a defensive mobile-only CSS rule for `src/pages/DriverJobs.jsx` so any legacy `.driver-job-card` markup stays hidden on phone widths, ensuring the new compact expandable cards are the only mobile job cards rendered.
+- Normalized the shared mobile layout tokens and CSS classes in `src/styles/main.css` so mobile pages use the same header offset, card radius, padding, button height, and section spacing.
+- Updated `src/pages/BookingCancellationHistory.jsx` to rely on the shared mobile header/section spacing instead of page-specific wrapper spacing.
+- Added a small cancellation-page mobile width safeguard in `src/App.css` to preserve the existing visual result while keeping the spacing controlled by the shared mobile layout system.

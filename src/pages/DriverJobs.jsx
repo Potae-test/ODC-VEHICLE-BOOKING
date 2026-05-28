@@ -7,6 +7,10 @@ import {
   requestDriverCancelJob,
   startTrip,
 } from "../api";
+import AppLayout from "../layouts/AppLayout";
+import MobileGrid from "../layouts/MobileGrid";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
 import { formatThaiDateTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showError, showSuccess } from "../utils/alert";
@@ -290,6 +294,203 @@ function PaginationControls({ page, totalPages, onChange }) {
     </div>
   );
 }
+
+function Icon({ children, className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      {children}
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className = "" }) {
+  return (
+    <Icon className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+function RefreshIcon({ className = "" }) {
+  return (
+    <Icon className={className}>
+      <path d="M21 12a9 9 0 0 0-15.3-6.4" />
+      <path d="M3 4v5h5" />
+      <path d="M3 12a9 9 0 0 0 15.3 6.4" />
+      <path d="M21 20v-5h-5" />
+    </Icon>
+  );
+}
+
+function DriverJobCompactCard({
+  booking,
+  vehicleMap,
+  onStart,
+  onComplete,
+  onCancelJob,
+  onShowDetails,
+  canStart,
+  canComplete,
+  processing,
+  current = false,
+  expanded = false,
+  onToggleExpand,
+}) {
+  const status = normalizeStatus(booking.status);
+  const statusMeta = getStatusMeta(status);
+  const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
+  const startLabel = formatThaiDateTime(booking.start_datetime);
+  const endLabel = formatThaiDateTime(booking.end_datetime);
+  const assignedUserLabel = getAssignedUserLabel(booking);
+  const hasPendingDriverCancelRequest = isPendingDriverCancel(booking);
+  const hasRejectedDriverCancelRequest = getDriverCancelRequestStatus(booking) === "REJECTED";
+  const disabled = Boolean(processing);
+  const canRequestCancel = status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest;
+  const canStartNow = canStart && status === "APPROVED" && !hasPendingDriverCancelRequest;
+  const canCompleteNow = canComplete && status === "IN_USE" && !hasPendingDriverCancelRequest;
+  const cardStateClass =
+    current || status === "IN_USE"
+      ? "driver-job-compact-card--current"
+      : status === "APPROVED"
+        ? "driver-job-compact-card--approved"
+        : status === "PENDING"
+          ? "driver-job-compact-card--pending"
+          : "";
+
+  return (
+    <article
+      className={`driver-job-compact-card ${cardStateClass}`.trim()}
+    >
+      <button
+        type="button"
+        className="driver-job-compact-main"
+        aria-expanded={expanded}
+        onClick={() => onToggleExpand(booking.booking_id)}
+      >
+        <div className="driver-job-compact-time">
+          <span>{startLabel || "-"}</span>
+        </div>
+
+        <div className="driver-job-compact-copy">
+          <div className="driver-job-compact-destination" title={booking.destination || "-"}>
+            {compactText(booking.destination)}
+          </div>
+          <div className="driver-job-compact-meta">
+            <span>ผู้จอง: {compactText(booking.requester_name)}</span>
+            <span>{vehicleLabel !== "-" ? vehicleLabel : compactText(assignedUserLabel)}</span>
+          </div>
+        </div>
+
+        <div className="driver-job-compact-right">
+          <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+          <ChevronDownIcon
+            className={[
+              "driver-job-compact-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform",
+              expanded ? "rotate-180" : "",
+            ].join(" ")}
+          />
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="driver-job-compact-expanded">
+          <div className="driver-job-compact-detail-grid">
+            <div>
+              <label>เวลาไป</label>
+              <b title={startLabel}>{startLabel || "-"}</b>
+            </div>
+            <div>
+              <label>เวลากลับ</label>
+              <b title={endLabel}>{endLabel || "-"}</b>
+            </div>
+            {FEATURES.vehicleModule && (
+              <div>
+                <label>รถ / ป้ายทะเบียน</label>
+                <b title={vehicleLabel}>{vehicleLabel}</b>
+              </div>
+            )}
+            <div>
+              <label>มอบหมายให้</label>
+              <b title={assignedUserLabel}>{assignedUserLabel}</b>
+            </div>
+            {booking.staff_note && (
+              <div className="driver-job-compact-note">
+                <label>หมายเหตุ</label>
+                <b title={booking.staff_note}>{booking.staff_note}</b>
+              </div>
+            )}
+            {hasPendingDriverCancelRequest && booking.driver_cancel_request_reason && (
+              <div className="driver-job-compact-note">
+                <label>เหตุผลที่ขอยกเลิก</label>
+                <b title={booking.driver_cancel_request_reason}>{booking.driver_cancel_request_reason}</b>
+              </div>
+            )}
+            {hasRejectedDriverCancelRequest && booking.driver_cancel_review_reason && (
+              <div className="driver-job-compact-note">
+                <label>เหตุผลจาก STAFF</label>
+                <b title={booking.driver_cancel_review_reason}>{booking.driver_cancel_review_reason}</b>
+              </div>
+            )}
+          </div>
+
+          <div className="driver-job-compact-actions">
+            <button
+              type="button"
+              className="driver-job-compact-action driver-job-compact-action--detail"
+              disabled={disabled}
+              onClick={() => onShowDetails(booking)}
+            >
+              ดูรายละเอียด
+            </button>
+
+            {canRequestCancel ? (
+              <button
+                type="button"
+                className="driver-job-compact-action driver-job-compact-action--cancel"
+                disabled={disabled}
+                onClick={() => onCancelJob(booking)}
+              >
+                {processing === "cancel-request" ? "กำลังยกเลิกงาน..." : "ยกเลิกงาน"}
+              </button>
+            ) : null}
+
+            {canStartNow ? (
+              <button
+                type="button"
+                className="driver-job-compact-action driver-job-compact-action--start"
+                disabled={disabled}
+                onClick={() => onStart(booking)}
+              >
+                {processing === "start" ? "กำลังรับงาน..." : "รับงาน / วิ่งงาน"}
+              </button>
+            ) : null}
+
+            {canCompleteNow ? (
+              <button
+                type="button"
+                className="driver-job-compact-action driver-job-compact-action--complete"
+                disabled={disabled}
+                onClick={() => onComplete(booking)}
+              >
+                {processing === "complete" ? "กำลังจบงาน..." : "จบงาน / คืนรถ"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
 function DriverJobTableActions({
   booking,
   processing,
@@ -462,6 +663,7 @@ export default function DriverJobs() {
   const [processingAction, setProcessingAction] = useState(null);
   const [pendingJobsPage, setPendingJobsPage] = useState(1);
   const [todayJobsPage, setTodayJobsPage] = useState(1);
+  const [expandedJobId, setExpandedJobId] = useState("");
   const debouncedWaitingSearch = useDebouncedValue(waitingSearch);
 
   const currentUser = useMemo(() => getCurrentUser(), []);
@@ -573,6 +775,10 @@ export default function DriverJobs() {
     [todayJobs, todayJobsPage]
   );
   const driverJobTableColSpan = FEATURES.vehicleModule ? 9 : 8;
+  const mobileCurrentJobsTotal = currentJobs.length;
+  const mobileTodayJobsTotal = todayJobs.length;
+  const mobilePendingJobsTotal = pendingJobs.length;
+  const mobileAllJobsTotal = currentJobs.length + pendingJobs.length;
 
   useEffect(() => {
     setPendingJobsPage(1);
@@ -581,6 +787,10 @@ export default function DriverJobs() {
   useEffect(() => {
     setTodayJobsPage(1);
   }, [todayJobs]);
+
+  useEffect(() => {
+    setExpandedJobId("");
+  }, [debouncedWaitingSearch, pendingJobsPage, todayJobsPage]);
 
   const handleStart = useCallback(async (booking) => {
     if (processingAction) return;
@@ -809,36 +1019,316 @@ export default function DriverJobs() {
   }
 
   return (
-    <div className="driver-jobs-page">
-      <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
-        <div>
-          <h2>งานคนขับ</h2>
-          <p>ดูและจัดการงานที่ถูกมอบหมายให้คนขับ</p>
+    <AppLayout title="งานคนขับ" hideMobileHeader hideDesktopHeader hideDesktopSidebar mobileTopOffset={57}>
+      {/* Desktop version */}
+      <div className="driver-jobs-desktop driver-jobs-page hidden md:block">
+        <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
+          <div>
+            <h2>งานคนขับ</h2>
+            <p>ดูและจัดการงานที่ถูกมอบหมายให้คนขับ</p>
+          </div>
+
+          <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
+            รีเฟรชข้อมูล
+          </button>
         </div>
 
-        <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
-          รีเฟรชข้อมูล
-        </button>
-      </div>
+        {loading && <div className="form-card text-slate-700">กำลังโหลดงานคนขับ...</div>}
+        {error && !loading && <div className="form-card text-slate-700">{error}</div>}
 
-      {loading && <div className="form-card text-slate-700">กำลังโหลดงานคนขับ...</div>}
-      {error && !loading && <div className="form-card text-slate-700">{error}</div>}
+        {!loading && !error && (
+          <>
+            <div className="form-card">
+              <div className="section-header gap-3 border-b border-sky-100 pb-4">
+                <h3>งานที่กำลังใช้งาน</h3>
+                <span className="section-counter">{currentJobs.length} งาน</span>
+              </div>
 
-      {!loading && !error && (
-        <>
-          <div className="form-card">
-            <div className="section-header gap-3 border-b border-sky-100 pb-4">
-              <h3>งานที่กำลังใช้งาน</h3>
-              <span className="section-counter">{currentJobs.length} งาน</span>
+              {currentJobs.length === 0 ? (
+                <div className="driver-empty">ไม่มีงานที่กำลังใช้งาน</div>
+              ) : (
+                <div className="driver-job-list">
+                  {currentJobs.map((booking) => (
+                    <JobCard
+                      key={booking.booking_id}
+                      booking={booking}
+                      vehicleMap={vehicleMap}
+                      onStart={handleStart}
+                      onComplete={handleComplete}
+                      onCancelJob={handleCancelJob}
+                      onShowDetails={showDetails}
+                      canStart={canStartTrip}
+                      canComplete={canCompleteTrip}
+                      currentUser={currentUser}
+                      currentRole={currentRole}
+                      processing={
+                        processingAction?.bookingId === booking.booking_id
+                          ? processingAction.type
+                          : ""
+                      }
+                      current
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
+            <div className="form-card">
+              <div className="driver-jobs-table-section">
+                <div className="section-header gap-3 border-b border-sky-100 pb-4">
+                  <h3>งานวันนี้</h3>
+                  <span className="section-counter">{todayJobs.length} รายการ</span>
+                </div>
+
+                <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ลำดับ</th>
+                        <th>ผู้จอง</th>
+                        <th>เวลาไป</th>
+                        <th>เวลากลับ</th>
+                        <th>ปลายทาง</th>
+                        {FEATURES.vehicleModule && <th>รถ</th>}
+                        <th>สถานะ</th>
+                        <th>หมายเหตุ</th>
+                        <th>จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedTodayJobs.length === 0 ? (
+                        <tr>
+                          <td colSpan={driverJobTableColSpan}>ไม่มีงานวันนี้</td>
+                        </tr>
+                      ) : (
+                        paginatedTodayJobs.map((job, index) => (
+                          <tr key={job.booking_id || index}>
+                            <td>{(todayJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
+                            <td>{job.requester_name || "-"}</td>
+                            <td>{formatThaiDateTime(job.start_datetime)}</td>
+                            <td>{formatThaiDateTime(job.end_datetime)}</td>
+                            <td>{job.destination || "-"}</td>
+                            {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
+                            <td>
+                              {renderStatusBadge(job.status)}
+                              {isPendingDriverCancel(job) && (
+                                <div style={{ marginTop: 6 }}>
+                                  <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                                </div>
+                              )}
+                              {getDriverCancelRequestStatus(job) === "REJECTED" && (
+                                <div style={{ marginTop: 6 }}>
+                                  <span className="status red">ไม่อนุมัติการยกเลิก</span>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              {job.staff_note || job.note || "-"}
+                              {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
+                                <div className="driver-job-cancel-note">
+                                  เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
+                                </div>
+                              )}
+                              {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
+                                <div className="driver-job-cancel-note">
+                                  เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
+                                </div>
+                              )}
+                            </td>
+                            <td className="action-buttons">
+                              <DriverJobTableActions
+                                booking={job}
+                                processing={
+                                  processingAction?.bookingId === job.booking_id
+                                    ? processingAction.type
+                                    : ""
+                                }
+                                onShowDetails={showDetails}
+                                onCancelJob={handleCancelJob}
+                                onStart={handleStart}
+                                onComplete={handleComplete}
+                                canStart={canStartTrip}
+                                canComplete={canCompleteTrip}
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <PaginationControls
+                  page={todayJobsPage}
+                  totalPages={todayJobsTotalPages}
+                  onChange={setTodayJobsPage}
+                />
+              </div>
+            </div>
+
+            <div className="form-card">
+              <div className="driver-jobs-table-section">
+                <div className="section-header gap-3 border-b border-sky-100 pb-4">
+                  <h3>งานที่รออยู่ทั้งหมด</h3>
+                  <span className="section-counter">{pendingJobs.length} รายการ</span>
+                </div>
+
+                <div className="driver-job-search">
+                  <input
+                    type="search"
+                    value={waitingSearch}
+                    onChange={(event) => setWaitingSearch(event.target.value)}
+                    placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
+                    aria-label="ค้นหางานที่รออยู่ทั้งหมด"
+                  />
+                </div>
+
+                <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ลำดับ</th>
+                        <th>ผู้จอง</th>
+                        <th>เวลาไป</th>
+                        <th>เวลากลับ</th>
+                        <th>ปลายทาง</th>
+                        {FEATURES.vehicleModule && <th>รถ</th>}
+                        <th>สถานะ</th>
+                        <th>หมายเหตุ</th>
+                        <th>จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedPendingJobs.length === 0 ? (
+                        <tr>
+                          <td colSpan={driverJobTableColSpan}>ไม่มีงานที่รออยู่</td>
+                        </tr>
+                      ) : (
+                        paginatedPendingJobs.map((job, index) => (
+                          <tr key={job.booking_id || index}>
+                            <td>{(pendingJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
+                            <td>{job.requester_name || "-"}</td>
+                            <td>{formatThaiDateTime(job.start_datetime)}</td>
+                            <td>{formatThaiDateTime(job.end_datetime)}</td>
+                            <td>{job.destination || "-"}</td>
+                            {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
+                            <td>
+                              {renderStatusBadge(job.status)}
+                              {isPendingDriverCancel(job) && (
+                                <div style={{ marginTop: 6 }}>
+                                  <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                                </div>
+                              )}
+                              {getDriverCancelRequestStatus(job) === "REJECTED" && (
+                                <div style={{ marginTop: 6 }}>
+                                  <span className="status red">ไม่อนุมัติการยกเลิก</span>
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              {job.staff_note || job.note || "-"}
+                              {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
+                                <div className="driver-job-cancel-note">
+                                  เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
+                                </div>
+                              )}
+                              {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
+                                <div className="driver-job-cancel-note">
+                                  เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
+                                </div>
+                              )}
+                            </td>
+                            <td className="action-buttons">
+                              <DriverJobTableActions
+                                booking={job}
+                                processing={
+                                  processingAction?.bookingId === job.booking_id
+                                    ? processingAction.type
+                                    : ""
+                                }
+                                onShowDetails={showDetails}
+                                onCancelJob={handleCancelJob}
+                                onStart={handleStart}
+                                onComplete={handleComplete}
+                                canStart={canStartTrip}
+                                canComplete={canCompleteTrip}
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <PaginationControls
+                  page={pendingJobsPage}
+                  totalPages={pendingJobsTotalPages}
+                  onChange={setPendingJobsPage}
+                />
+              </div>
+            </div>
+
+          </>
+        )}
+      </div>
+
+      {/* Mobile version */}
+      <div className="driver-jobs-mobile block md:hidden">
+        <div className="driver-jobs-mobile-page">
+          <MobilePageHeader
+            title="งานคนขับ"
+            subtitle="ดูและจัดการงานที่ถูกมอบหมายให้คนขับ"
+            actions={
+              <button
+                type="button"
+                className="mobile-filter-button inline-flex items-center gap-1.5 shadow-sm transition hover:border-blue-300 hover:bg-blue-50"
+                disabled={refreshing || loading}
+                onClick={() => loadData({ refreshOnly: true })}
+              >
+                <RefreshIcon className="h-4 w-4" />
+                <span>รีเฟรช</span>
+              </button>
+            }
+          />
+
+          <MobilePageSection title="ภาพรวม" subtitle="สรุปงานปัจจุบันและงานที่ต้องจัดการ">
+            <MobileGrid columns={{ base: 2 }} gap="sm">
+              <div className="driver-jobs-mobile-summary-card driver-jobs-mobile-summary-card--green">
+                <span>กำลังใช้งาน</span>
+                <b>{mobileCurrentJobsTotal}</b>
+              </div>
+              <div className="driver-jobs-mobile-summary-card driver-jobs-mobile-summary-card--blue">
+                <span>งานวันนี้</span>
+                <b>{mobileTodayJobsTotal}</b>
+              </div>
+              <div className="driver-jobs-mobile-summary-card driver-jobs-mobile-summary-card--amber">
+                <span>รอรับงาน</span>
+                <b>{mobilePendingJobsTotal}</b>
+              </div>
+              <div className="driver-jobs-mobile-summary-card driver-jobs-mobile-summary-card--slate">
+                <span>ทั้งหมด</span>
+                <b>{mobileAllJobsTotal}</b>
+              </div>
+            </MobileGrid>
+          </MobilePageSection>
+
+          <MobilePageSection
+            title="งานกำลังใช้งาน"
+            subtitle="งานที่กำลังวิ่งอยู่ตอนนี้"
+            actions={
+              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                {mobileCurrentJobsTotal} งาน
+              </span>
+            }
+          >
             {currentJobs.length === 0 ? (
-              <div className="driver-empty">ไม่มีงานที่กำลังใช้งาน</div>
+              <div className="mobile-empty-state">ไม่มีงานที่กำลังใช้งาน</div>
             ) : (
-              <div className="driver-job-list">
+              <div className="grid gap-1.5">
                 {currentJobs.map((booking) => (
-                  <JobCard
-                    key={booking.booking_id}
+                  <DriverJobCompactCard
+                    key={`current-mobile-${booking.booking_id}`}
                     booking={booking}
                     vehicleMap={vehicleMap}
                     onStart={handleStart}
@@ -847,273 +1337,125 @@ export default function DriverJobs() {
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
-                    currentUser={currentUser}
-                    currentRole={currentRole}
                     processing={
                       processingAction?.bookingId === booking.booking_id
                         ? processingAction.type
                         : ""
                     }
                     current
+                    expanded={expandedJobId === booking.booking_id}
+                    onToggleExpand={(bookingId) =>
+                      setExpandedJobId((current) => (current === bookingId ? "" : bookingId))
+                    }
                   />
                 ))}
               </div>
             )}
-          </div>
+          </MobilePageSection>
 
-          <div className="form-card">
-            <div className="driver-jobs-table-section">
-              <div className="section-header gap-3 border-b border-sky-100 pb-4">
-                <h3>งานวันนี้</h3>
-                <span className="section-counter">{todayJobs.length} รายการ</span>
+          <MobilePageSection
+            title="งานวันนี้"
+            subtitle="รายการงานที่เริ่มในวันนี้"
+            actions={
+              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                หน้า {todayJobsPage}/{todayJobsTotalPages}
+              </span>
+            }
+          >
+            {paginatedTodayJobs.length === 0 ? (
+              <div className="mobile-empty-state">ไม่มีงานวันนี้</div>
+            ) : (
+              <div className="grid gap-1.5">
+                {paginatedTodayJobs.map((booking) => (
+                  <DriverJobCompactCard
+                    key={`today-mobile-${booking.booking_id}`}
+                    booking={booking}
+                    vehicleMap={vehicleMap}
+                    onStart={handleStart}
+                    onComplete={handleComplete}
+                    onCancelJob={handleCancelJob}
+                    onShowDetails={showDetails}
+                    canStart={canStartTrip}
+                    canComplete={canCompleteTrip}
+                    processing={
+                      processingAction?.bookingId === booking.booking_id
+                        ? processingAction.type
+                        : ""
+                    }
+                    expanded={expandedJobId === booking.booking_id}
+                    onToggleExpand={(bookingId) =>
+                      setExpandedJobId((current) => (current === bookingId ? "" : bookingId))
+                    }
+                  />
+                ))}
               </div>
+            )}
 
-              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ลำดับ</th>
-                      <th>ผู้จอง</th>
-                      <th>เวลาไป</th>
-                      <th>เวลากลับ</th>
-                      <th>ปลายทาง</th>
-                      {FEATURES.vehicleModule && <th>รถ</th>}
-                      <th>สถานะ</th>
-                      <th>หมายเหตุ</th>
-                      <th>จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedTodayJobs.length === 0 ? (
-                      <tr>
-                        <td colSpan={driverJobTableColSpan}>ไม่มีงานวันนี้</td>
-                      </tr>
-                    ) : (
-                      paginatedTodayJobs.map((job, index) => (
-                        <tr key={job.booking_id || index}>
-                          <td>{(todayJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
-                          <td>{job.requester_name || "-"}</td>
-                          <td>{formatThaiDateTime(job.start_datetime)}</td>
-                          <td>{formatThaiDateTime(job.end_datetime)}</td>
-                          <td>{job.destination || "-"}</td>
-                          {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
-                          <td>
-                            {renderStatusBadge(job.status)}
-                            {isPendingDriverCancel(job) && (
-                              <div style={{ marginTop: 6 }}>
-                                <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
-                              </div>
-                            )}
-                            {getDriverCancelRequestStatus(job) === "REJECTED" && (
-                              <div style={{ marginTop: 6 }}>
-                                <span className="status red">ไม่อนุมัติการยกเลิก</span>
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            {job.staff_note || job.note || "-"}
-                            {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
-                              <div className="driver-job-cancel-note">
-                                เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
-                              </div>
-                            )}
-                            {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
-                              <div className="driver-job-cancel-note">
-                                เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
-                              </div>
-                            )}
-                          </td>
-                          <td className="action-buttons">
-                            <DriverJobTableActions
-                              booking={job}
-                              processing={
-                                processingAction?.bookingId === job.booking_id
-                                  ? processingAction.type
-                                  : ""
-                              }
-                              onShowDetails={showDetails}
-                              onCancelJob={handleCancelJob}
-                              onStart={handleStart}
-                              onComplete={handleComplete}
-                              canStart={canStartTrip}
-                              canComplete={canCompleteTrip}
-                            />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <PaginationControls
+              page={todayJobsPage}
+              totalPages={todayJobsTotalPages}
+              onChange={setTodayJobsPage}
+            />
+          </MobilePageSection>
 
-              <div className="mobile-card-list driver-job-mobile-list mt-6">
-                {paginatedTodayJobs.length === 0 ? (
-                  <div className="mobile-empty-card">ไม่มีงานวันนี้</div>
-                ) : (
-                  paginatedTodayJobs.map((booking) => (
-                    <JobCard
-                      key={`today-mobile-${booking.booking_id}`}
-                      booking={booking}
-                      vehicleMap={vehicleMap}
-                      onStart={handleStart}
-                      onComplete={handleComplete}
-                      onCancelJob={handleCancelJob}
-                      onShowDetails={showDetails}
-                      canStart={canStartTrip}
-                      canComplete={canCompleteTrip}
-                      currentUser={currentUser}
-                      currentRole={currentRole}
-                      processing={
-                        processingAction?.bookingId === booking.booking_id
-                          ? processingAction.type
-                          : ""
-                      }
-                    />
-                  ))
-                )}
-              </div>
-
-              <PaginationControls
-                page={todayJobsPage}
-                totalPages={todayJobsTotalPages}
-                onChange={setTodayJobsPage}
+          <MobilePageSection
+            title="งานที่รออยู่ทั้งหมด"
+            subtitle="ค้นหาและจัดการงานที่รอรับงาน"
+            actions={
+              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                หน้า {pendingJobsPage}/{pendingJobsTotalPages}
+              </span>
+            }
+          >
+            <div className="driver-job-compact-search-wrap">
+              <input
+                type="search"
+                value={waitingSearch}
+                onChange={(event) => setWaitingSearch(event.target.value)}
+                placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
+                aria-label="ค้นหางานที่รออยู่ทั้งหมด"
+                className="driver-job-compact-search"
               />
             </div>
-          </div>
 
-          <div className="form-card">
-            <div className="driver-jobs-table-section">
-              <div className="section-header gap-3 border-b border-sky-100 pb-4">
-                <h3>งานที่รออยู่ทั้งหมด</h3>
-                <span className="section-counter">{pendingJobs.length} รายการ</span>
+            {paginatedPendingJobs.length === 0 ? (
+              <div className="mobile-empty-state">ไม่มีงานที่รออยู่</div>
+            ) : (
+              <div className="grid gap-1.5">
+                {paginatedPendingJobs.map((booking) => (
+                  <DriverJobCompactCard
+                    key={`pending-mobile-${booking.booking_id}`}
+                    booking={booking}
+                    vehicleMap={vehicleMap}
+                    onStart={handleStart}
+                    onComplete={handleComplete}
+                    onCancelJob={handleCancelJob}
+                    onShowDetails={showDetails}
+                    canStart={canStartTrip}
+                    canComplete={canCompleteTrip}
+                    processing={
+                      processingAction?.bookingId === booking.booking_id
+                        ? processingAction.type
+                        : ""
+                    }
+                    expanded={expandedJobId === booking.booking_id}
+                    onToggleExpand={(bookingId) =>
+                      setExpandedJobId((current) => (current === bookingId ? "" : bookingId))
+                    }
+                  />
+                ))}
               </div>
+            )}
 
-              <div className="driver-job-search">
-                <input
-                  type="search"
-                  value={waitingSearch}
-                  onChange={(event) => setWaitingSearch(event.target.value)}
-                  placeholder="ค้นหาผู้จอง เวลา ปลายทาง หรือเหตุผล"
-                  aria-label="ค้นหางานที่รออยู่ทั้งหมด"
-                />
-              </div>
-
-              <div className="table-wrap mobile-hide-table rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ลำดับ</th>
-                      <th>ผู้จอง</th>
-                      <th>เวลาไป</th>
-                      <th>เวลากลับ</th>
-                      <th>ปลายทาง</th>
-                      {FEATURES.vehicleModule && <th>รถ</th>}
-                      <th>สถานะ</th>
-                      <th>หมายเหตุ</th>
-                      <th>จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedPendingJobs.length === 0 ? (
-                      <tr>
-                        <td colSpan={driverJobTableColSpan}>ไม่มีงานที่รออยู่</td>
-                      </tr>
-                    ) : (
-                      paginatedPendingJobs.map((job, index) => (
-                        <tr key={job.booking_id || index}>
-                          <td>{(pendingJobsPage - 1) * DRIVER_JOBS_PAGE_SIZE + index + 1}</td>
-                          <td>{job.requester_name || "-"}</td>
-                          <td>{formatThaiDateTime(job.start_datetime)}</td>
-                          <td>{formatThaiDateTime(job.end_datetime)}</td>
-                          <td>{job.destination || "-"}</td>
-                          {FEATURES.vehicleModule && <td>{formatVehicleLabel(job, vehicleMap)}</td>}
-                          <td>
-                            {renderStatusBadge(job.status)}
-                            {isPendingDriverCancel(job) && (
-                              <div style={{ marginTop: 6 }}>
-                                <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
-                              </div>
-                            )}
-                            {getDriverCancelRequestStatus(job) === "REJECTED" && (
-                              <div style={{ marginTop: 6 }}>
-                                <span className="status red">ไม่อนุมัติการยกเลิก</span>
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            {job.staff_note || job.note || "-"}
-                            {isPendingDriverCancel(job) && job.driver_cancel_request_reason && (
-                              <div className="driver-job-cancel-note">
-                                เหตุผลที่ขอยกเลิก: {job.driver_cancel_request_reason}
-                              </div>
-                            )}
-                            {getDriverCancelRequestStatus(job) === "REJECTED" && job.driver_cancel_review_reason && (
-                              <div className="driver-job-cancel-note">
-                                เหตุผลจาก STAFF: {job.driver_cancel_review_reason}
-                              </div>
-                            )}
-                          </td>
-                          <td className="action-buttons">
-                            <DriverJobTableActions
-                              booking={job}
-                              processing={
-                                processingAction?.bookingId === job.booking_id
-                                  ? processingAction.type
-                                  : ""
-                              }
-                              onShowDetails={showDetails}
-                              onCancelJob={handleCancelJob}
-                              onStart={handleStart}
-                              onComplete={handleComplete}
-                              canStart={canStartTrip}
-                              canComplete={canCompleteTrip}
-                            />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mobile-card-list driver-job-mobile-list mt-6">
-                {paginatedPendingJobs.length === 0 ? (
-                  <div className="mobile-empty-card">ไม่มีงานที่รออยู่</div>
-                ) : (
-                  paginatedPendingJobs.map((booking) => (
-                    <JobCard
-                      key={`pending-mobile-${booking.booking_id}`}
-                      booking={booking}
-                      vehicleMap={vehicleMap}
-                      onStart={handleStart}
-                      onComplete={handleComplete}
-                      onCancelJob={handleCancelJob}
-                      onShowDetails={showDetails}
-                      canStart={canStartTrip}
-                      canComplete={canCompleteTrip}
-                      currentUser={currentUser}
-                      currentRole={currentRole}
-                      processing={
-                        processingAction?.bookingId === booking.booking_id
-                          ? processingAction.type
-                          : ""
-                      }
-                    />
-                  ))
-                )}
-              </div>
-
-              <PaginationControls
-                page={pendingJobsPage}
-                totalPages={pendingJobsTotalPages}
-                onChange={setPendingJobsPage}
-              />
-            </div>
-          </div>
-
-        </>
-      )}
-    </div>
+            <PaginationControls
+              page={pendingJobsPage}
+              totalPages={pendingJobsTotalPages}
+              onChange={setPendingJobsPage}
+            />
+          </MobilePageSection>
+        </div>
+      </div>
+    </AppLayout>
   );
 }
 

@@ -3832,6 +3832,209 @@ label {
   align-items: center;
 }
 
+.driver-unavailable-mobile-page {
+  display: grid;
+  gap: var(--mobile-section-gap);
+}
+
+.driver-unavailable-mobile-summary-card {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.driver-unavailable-mobile-summary-card span {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #64748b;
+}
+
+.driver-unavailable-mobile-summary-card b {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #0f172a;
+}
+
+.driver-unavailable-mobile-summary-card--blue {
+  background: #eff6ff;
+}
+
+.driver-unavailable-mobile-summary-card--blue b {
+  color: #1d4ed8;
+}
+
+.driver-unavailable-mobile-summary-card--green {
+  background: #f0fdf4;
+}
+
+.driver-unavailable-mobile-summary-card--green b {
+  color: #15803d;
+}
+
+.driver-unavailable-mobile-summary-card--red {
+  background: #fef2f2;
+}
+
+.driver-unavailable-mobile-summary-card--red b {
+  color: #b91c1c;
+}
+
+.driver-unavailable-mobile-summary-card--indigo {
+  background: #eef2ff;
+}
+
+.driver-unavailable-mobile-summary-card--indigo b {
+  color: #4338ca;
+}
+
+.driver-unavailable-filter-toggle {
+  min-width: 38px;
+  justify-content: center;
+}
+
+.driver-unavailable-filter-toggle span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  transition: transform 0.15s ease;
+}
+
+.driver-unavailable-filter-toggle[aria-expanded="true"] span {
+  transform: rotate(180deg);
+}
+
+.driver-unavailable-compact-card {
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-left-width: 4px;
+  border-left-color: #cbd5e1;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.driver-unavailable-compact-card--active {
+  border-left-color: #16a34a;
+}
+
+.driver-unavailable-compact-card--cancelled {
+  border-left-color: #dc2626;
+}
+
+.driver-unavailable-compact-main {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  background: #ffffff;
+  text-align: left;
+}
+
+.driver-unavailable-compact-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 6px;
+}
+
+.driver-unavailable-compact-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.driver-unavailable-compact-title {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.25;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.driver-unavailable-compact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.driver-unavailable-compact-chevron {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.driver-unavailable-compact-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.driver-unavailable-compact-expanded {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.driver-unavailable-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.driver-unavailable-compact-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.driver-unavailable-compact-grid span {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #64748b;
+}
+
+.driver-unavailable-compact-grid b {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.driver-unavailable-compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.driver-unavailable-compact-actions button {
+  min-height: var(--mobile-button-height);
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: var(--mobile-button-font-size);
+}
+
 @media (max-width: 900px) {
   .driver-unavailable-filters {
     grid-template-columns: 1fr;
@@ -3843,6 +4046,21 @@ label {
 
   .driver-unavailable-actions {
     justify-content: flex-end;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .driver-unavailable-mobile-page input,
+  .driver-unavailable-mobile-page select {
+    min-height: var(--mobile-button-height);
+    font-size: 13px;
+    padding: 0 12px;
+    border-radius: 12px;
+  }
+
+  .driver-unavailable-mobile-page .mobile-page-section-body {
+    display: grid;
+    gap: 10px;
   }
 }
 
@@ -5272,8 +5490,8 @@ label {
 
 @media (max-width: 768px) {
   .booking-cancellation-page {
-    margin-top: 60px;
-    padding-top: 12px;
+    margin-top: 0;
+    padding-top: 0;
   }
 
   .booking-cancellation-desktop {
@@ -5392,12 +5610,6 @@ label {
 
   .login-card {
     box-shadow: 0 10px 24px rgba(15, 47, 92, 0.1);
-  }
-}
-
-@media (min-width: 769px) {
-  .booking-cancellation-page {
-    margin-top: 0;
   }
 }
 
@@ -6023,5 +6235,10 @@ label {
     min-height: 17px;
     padding: 0 5px;
     font-size: 10px;
+  }
+}
+@media (max-width: 768px) {
+  .booking-cancellation-mobile {
+    width: 100%;
   }
 }
