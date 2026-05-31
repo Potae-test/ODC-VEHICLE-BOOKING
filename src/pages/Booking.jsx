@@ -1489,7 +1489,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
   });
 
   return (
-    <article className="mobile-data-card booking-mobile-card">
+    <article className={`mobile-data-card booking-mobile-card ${isExpanded ? "is-expanded" : ""}`}>
       <button
         type="button"
         className="booking-mobile-card-summary"

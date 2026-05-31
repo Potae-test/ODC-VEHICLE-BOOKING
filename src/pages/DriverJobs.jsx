@@ -366,7 +366,16 @@ function DriverJobCompactCard({
         : status === "PENDING"
           ? "driver-job-compact-card--pending"
           : "";
+const startDate = booking.start_datetime
+  ? new Date(booking.start_datetime).toLocaleDateString("th-TH")
+  : "-";
 
+const startTime = booking.start_datetime
+  ? new Date(booking.start_datetime).toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  : "-";
   return (
     <article
       className={`driver-job-compact-card ${cardStateClass}`.trim()}
@@ -377,17 +386,18 @@ function DriverJobCompactCard({
         aria-expanded={expanded}
         onClick={() => onToggleExpand(booking.booking_id)}
       >
-        <div className="driver-job-compact-time">
-          <span>{startLabel || "-"}</span>
-        </div>
-
+      <div className="driver-job-compact-time">
+        <span>
+          วันที่: {startDate} เวลา: {startTime} น.
+        </span>
+      </div>
         <div className="driver-job-compact-copy">
           <div className="driver-job-compact-destination" title={booking.destination || "-"}>
-            {compactText(booking.destination)}
+             <span>รายการจอง: {compactText(booking.destination)}</span>
           </div>
           <div className="driver-job-compact-meta">
             <span>ผู้จอง: {compactText(booking.requester_name)}</span>
-            <span>{vehicleLabel !== "-" ? vehicleLabel : compactText(assignedUserLabel)}</span>
+            <span>พขร: {vehicleLabel !== "-" ? vehicleLabel : compactText(assignedUserLabel)}</span>
           </div>
         </div>
 
@@ -1293,7 +1303,7 @@ export default function DriverJobs() {
           />
 
           <MobilePageSection title="ภาพรวม" subtitle="สรุปงานปัจจุบันและงานที่ต้องจัดการ">
-            <MobileGrid columns={{ base: 2 }} gap="sm">
+            <MobileGrid columns={{ base: 4 }} gap="sm">
               <div className="driver-jobs-mobile-summary-card driver-jobs-mobile-summary-card--green">
                 <span>กำลังใช้งาน</span>
                 <b>{mobileCurrentJobsTotal}</b>

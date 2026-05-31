@@ -610,7 +610,7 @@
     display: grid;
     align-content: center;
     gap: 4px;
-    min-height: 78px;
+    /* min-height: 78px; */
     padding: 12px;
     border: 1px solid rgba(226, 232, 240, 0.9);
     border-radius: 16px;
@@ -697,6 +697,7 @@
     min-height: 82px;
     padding: 12px;
     text-align: left;
+    color: #ffffff 
   }
 
   .driver-job-compact-time {
@@ -704,7 +705,7 @@
     font-size: 13px;
     font-weight: 700;
     line-height: 1.2;
-    color: #0f172a;
+    color: #ffffff;
   }
 
   .driver-job-compact-copy {
@@ -718,7 +719,7 @@
     font-size: 14px;
     font-weight: 700;
     line-height: 1.25;
-    color: #0f172a;
+    color: #ffffff;
   }
 
   .driver-job-compact-meta {
@@ -726,7 +727,7 @@
     gap: 2px;
     font-size: 12px;
     line-height: 1.35;
-    color: #64748b;
+    color: #ffffff;
   }
 
   .driver-job-compact-right {

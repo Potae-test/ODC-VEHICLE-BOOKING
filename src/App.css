@@ -4467,9 +4467,10 @@ label {
 .booking-mobile-card-summary-index {
   font-size: 15px;
   font-weight: 700;
-  color: #1455c8;
+  color: #64748b;
   white-space: nowrap;
 }
+
 
 .booking-mobile-card-summary-requester,
 .booking-mobile-card-summary-destination {
@@ -4493,6 +4494,46 @@ label {
   gap: 6px;
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* Expanded state */
+
+.booking-mobile-card:not(.is-expanded) .booking-mobile-card-summary {
+  background: transparent;
+  padding: 0;
+}
+
+.booking-mobile-card:not(.is-expanded) .booking-mobile-card-summary-index {
+  color: #64748b;
+}
+
+.booking-mobile-card:not(.is-expanded) .booking-mobile-card-summary-requester {
+  color: #0f2f5c;
+}
+
+.booking-mobile-card:not(.is-expanded) .booking-mobile-card-summary-destination {
+  color: #475569;
+}
+
+.booking-mobile-card:not(.is-expanded) .booking-mobile-card-expand-icon {
+  color: #64748b;
+}
+
+.booking-mobile-card.is-expanded .booking-mobile-card-summary {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  border-radius: 16px;
+  padding: 10px 12px;
+}
+
+.booking-mobile-card.is-expanded .booking-mobile-card-summary-index,
+.booking-mobile-card.is-expanded .booking-mobile-card-summary-requester,
+.booking-mobile-card.is-expanded .booking-mobile-card-summary-destination,
+.booking-mobile-card.is-expanded .booking-mobile-card-expand-icon {
+  color: #ffffff;
+}
+
+.booking-mobile-card.is-expanded .booking-mobile-card-summary-destination {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .booking-mobile-card .mobile-data-card-index {
