@@ -124,11 +124,170 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
   const isBackdated = String(booking?.is_backdated || "").trim().toUpperCase() === "TRUE";
 
   return `
-    <div class="swal-form">
+    <style>
+      @media (max-width: 600px) {
+        .booking-form-popup .booking-form-html {
+          margin: 0;
+          padding: 0;
+          overflow-x: hidden;
+        }
+
+        .booking-form-popup .swal-form.booking-form-modal {
+          display: grid;
+          gap: 10px;
+          padding: 20px;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+        }
+
+        .booking-form-popup .swal-form.booking-form-modal label {
+          margin: 0 0 4px;
+          font-size: 18px;
+          line-height: 1.15;
+        }
+
+        .booking-form-popup .swal2-input.booking-form-input,
+        .booking-form-popup .swal2-select.booking-form-input {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 48px !important;
+          height: 48px;
+          padding: 8px 12px !important;
+          margin: 0 !important;
+          font-size: 18px !important;
+          line-height: 1.15;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+
+        .booking-form-popup .swal2-input.booking-form-input::placeholder,
+        .booking-form-popup .swal2-textarea.booking-form-textarea::placeholder {
+          font-size: 16px !important;
+        }
+
+        .booking-form-popup .booking-overlap-warning {
+          margin: 2px 0 0;
+          padding: 10px 12px;
+          font-size: 16px;
+          line-height: 1.35;
+        }
+
+        .booking-form-popup .booking-form-datetime {
+          gap: 8px;
+        }
+
+        .booking-form-popup .booking-datetime-stack {
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-label-row {
+          grid-template-columns: minmax(0, 1fr) auto !important;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-input-row {
+          grid-template-columns: minmax(0, 1fr) 70px 70px !important;
+          gap: 8px;
+          min-width: 0;
+          align-items: end;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-main-label,
+        .booking-form-popup .booking-datetime-stack .thai-datetime-time-labels {
+          font-size: 16px;
+          min-width: 0;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-date-col,
+        .booking-form-popup .booking-datetime-stack .thai-datetime-time-row {
+          min-width: 0;
+          width: 100%;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-date-col input,
+        .booking-form-popup .booking-datetime-stack .thai-datetime-picker-input.flatpickr-input {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 56px !important;
+          height: 56px;
+          padding: 8px 10px !important;
+          margin: 0 !important;
+          font-size: 16px !important;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-datetime-time-row {
+          grid-template-columns: 70px auto 70px;
+          gap: 6px;
+          align-items: center;
+          min-width: 0;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-hour-input,
+        .booking-form-popup .booking-datetime-stack .thai-minute-input {
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+          min-height: 50px;
+          height: 50px;
+          padding: 6px 6px;
+          font-size: 16px !important;
+          box-sizing: border-box;
+        }
+
+        .booking-form-popup .booking-datetime-stack .thai-time-separator {
+          font-size: 16px;
+        }
+
+        .booking-form-popup .swal2-textarea.booking-form-textarea {
+          width: 100% !important;
+          max-width: 100% !important;
+          min-height: 132px !important;
+          padding: 10px 12px !important;
+          margin: 0 !important;
+          font-size: 18px !important;
+          line-height: 1.35;
+          min-width: 0 !important;
+          box-sizing: border-box !important;
+          resize: vertical;
+        }
+
+        .booking-form-popup .swal2-actions.booking-form-actions {
+          width: 100%;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .booking-form-popup .swal2-actions.booking-form-actions .booking-form-confirm,
+        .booking-form-popup .swal2-actions.booking-form-actions .booking-form-cancel {
+          flex: 1 1 0;
+          min-width: 150px;
+          min-height: 44px;
+          padding: 8px 12px !important;
+          font-size: 18px !important;
+          border-radius: 12px !important;
+        }
+
+        .booking-form-popup .swal2-actions.booking-form-actions .booking-form-confirm {
+          order: 1;
+        }
+
+        .booking-form-popup .swal2-actions.booking-form-actions .booking-form-cancel {
+          order: 2;
+        }
+      }
+    </style>
+    <div class="swal-form booking-form-modal">
       <label>ชื่อผู้จอง</label>
       <input
         id="requester_name"
-        class="swal2-input"
+        class="swal2-input booking-form-input"
         placeholder="ชื่อ-นามสกุล"
         value="${escapeHtml(booking?.requester_name || "")}"
       >
@@ -136,7 +295,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       <label>หน่วยงาน / ฝ่าย</label>
       <input
         id="department"
-        class="swal2-input"
+        class="swal2-input booking-form-input"
         placeholder="เช่น ฝ่ายประสานงาน"
         value="${escapeHtml(booking?.department || "")}"
       >
@@ -144,7 +303,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       <label>เบอร์โทร</label>
       <input
         id="phone"
-        class="swal2-input"
+        class="swal2-input booking-form-input"
         placeholder="08x-xxx-xxxx"
         value="${escapeHtml(booking?.phone || "")}"
       >
@@ -154,12 +313,12 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
         แจ้งเตือน: คุณมีรายการจองอื่นในช่วงวันเวลาใกล้เคียงกัน !!
       </div>
 
-      <div class="booking-form-full-row booking-datetime-stack" id="booking_datetime_mount"></div>
+      <div class="booking-form-full-row booking-datetime-stack booking-form-datetime" id="booking_datetime_mount"></div>
 
       <label>ประเภทรถ</label>
       ${
         FEATURES.vehicleModule
-          ? `<select id="vehicle_type_request" class="swal2-select">
+          ? `<select id="vehicle_type_request" class="swal2-select booking-form-input">
         ${vehicleTypeOptions}
       </select>`
           : ""
@@ -168,7 +327,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       <label>ปลายทาง</label>
       <textarea
         id="destination"
-        class="swal2-textarea"
+        class="swal2-textarea booking-form-textarea"
         rows="4"
         placeholder="เช่น ศาลากลางจังหวัด"
         style="
@@ -184,7 +343,7 @@ function buildModalHtml(booking, vehicleTypes, showBackdatedCheckbox) {
       <label>รายละเอียดการใช้รถ</label>
       <textarea
         id="purpose"
-        class="swal2-textarea"
+        class="swal2-textarea booking-form-textarea"
         rows="4"
         placeholder="เช่น ประชุมราชการ"
         style="
@@ -249,12 +408,20 @@ const BookingFormModal = forwardRef(function BookingFormModal(
         html: buildModalHtml(initialBooking, vehicleTypes, Boolean(showBackdatedCheckbox)),
         width: 780,
         showCancelButton: true,
+        reverseButtons: false,
         confirmButtonText: booking ? "บันทึก" : "ส่งคำขอจองรถ",
         cancelButtonText: "ยกเลิก",
         confirmButtonColor: "#1455c8",
         cancelButtonColor: "#64748b",
         allowOutsideClick: false,
         allowEscapeKey: false,
+        customClass: {
+          popup: "booking-form-popup",
+          htmlContainer: "booking-form-html",
+          actions: "booking-form-actions",
+          confirmButton: "booking-form-confirm",
+          cancelButton: "booking-form-cancel",
+        },
         didOpen: () => {
           const modal = Swal.getPopup();
           const warningEl = modal?.querySelector("#booking_overlap_warning");

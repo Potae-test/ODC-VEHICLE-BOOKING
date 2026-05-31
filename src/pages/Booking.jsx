@@ -1004,6 +1004,27 @@ function totalPages(items) {
   return Math.max(1, Math.ceil(items.length / ROWS_PER_PAGE));
 }
 
+function clampPage(page, total) {
+  const nextPage = Number(page) || 1;
+  return Math.min(Math.max(nextPage, 1), Math.max(total, 1));
+}
+
+function buildPageWindow(page, total, maxVisiblePages = 3) {
+  const safeTotal = Math.max(1, total);
+  const safePage = clampPage(page, safeTotal);
+  const windowSize = Math.max(1, maxVisiblePages);
+
+  const start = Math.min(safePage, Math.max(1, safeTotal - windowSize + 1));
+  const end = Math.min(safeTotal, start + windowSize - 1);
+
+  const pages = [];
+  for (let current = start; current <= end; current += 1) {
+    pages.push(current);
+  }
+
+  return pages;
+}
+
 function useDebouncedValue(value, delay = 250) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -1016,18 +1037,43 @@ function useDebouncedValue(value, delay = 250) {
 }
 
 function Pagination({ page, total, onChange }) {
+  const safeTotal = Math.max(1, total);
+  const safePage = clampPage(page, safeTotal);
+  const pageNumbers = useMemo(() => buildPageWindow(safePage, safeTotal, 3), [safePage, safeTotal]);
+
+  const handleChange = (nextPage) => {
+    onChange(clampPage(nextPage, safeTotal));
+  };
+
   return (
-    <div className="pagination">
-      {Array.from({ length: total }).map((_, index) => (
-        <button
-          key={index}
-          type="button"
-          className={page === index + 1 ? "active-page" : ""}
-          onClick={() => onChange(index + 1)}
-        >
-          {index + 1}
+    <div className="booking-pagination-wrapper">
+      <div className="booking-pagination-info">
+        {/* หน้า {safePage} / {safeTotal} */}
+      </div>
+      <div className="pagination booking-pagination">
+        <button type="button" onClick={() => handleChange(1)} disabled={safePage <= 1}>
+          แรก
         </button>
-      ))}
+        <button type="button" onClick={() => handleChange(safePage - 1)} disabled={safePage <= 1}>
+          ก่อนหน้า
+        </button>
+        {pageNumbers.map((pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            className={safePage === pageNumber ? "active-page" : ""}
+            onClick={() => handleChange(pageNumber)}
+          >
+            {pageNumber}
+          </button>
+        ))}
+        <button type="button" onClick={() => handleChange(safePage + 1)} disabled={safePage >= safeTotal}>
+          ถัดไป
+        </button>
+        <button type="button" onClick={() => handleChange(safeTotal)} disabled={safePage >= safeTotal}>
+          ท้าย
+        </button>
+      </div>
     </div>
   );
 }
@@ -1704,6 +1750,10 @@ export default function Booking() {
   useEffect(() => {
     setPage(1);
   }, [debouncedFilters]);
+
+  useEffect(() => {
+    setExpandedBookingId("");
+  }, [page]);
 
   const vehicleTypes = useMemo(
     () => [...new Set(vehicles.map((vehicle) => vehicle.vehicle_type).filter(Boolean))],

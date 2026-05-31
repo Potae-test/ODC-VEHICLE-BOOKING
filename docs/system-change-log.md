@@ -3,6 +3,10 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-05-31
+- Tightened the Booking pager in `src/pages/Booking.jsx` and `src/App.css` so mobile now keeps the controls on one row with a 3-page window, compact buttons, and horizontal overflow fallback only, while preserving the existing Booking data and action logic.
+- Updated the Booking page pagination in `src/pages/Booking.jsx` to use a DriverQueueLogs-style windowed pager with first/previous/next/last controls, a page range limited to five buttons, and expanded-card reset on page change, plus booking-scoped pagination styling in `src/App.css` to avoid mobile overflow.
+- Fine-tuned the mobile SweetAlert booking create/edit form in `src/components/booking/BookingFormModal.jsx` and `src/App.css` so the date, hour, minute, and textarea controls are more compact on phones while keeping the booking payload, Thai date-time behavior, and button order unchanged.
+- Scoped the Booking create/edit SweetAlert form to a booking-only popup class and added mobile-specific modal sizing, spacing, and button-wrap rules in `src/components/booking/BookingFormModal.jsx` and `src/App.css` so the booking form fits narrow screens without changing other SweetAlert dialogs or booking payload logic.
 - Fixed `deleteDriverQueueLog` in `apps-script/code.gs` to log the delete payload and header row, then match the Google Sheet `log_id` column by exact value only, using the actual `DriverQueueLogs` sheet and throwing the requested Thai not-found error when no row matches.
 - Hardened `DriverQueueLogs` delete debugging by logging the selected row payload and delete identifier in `src/pages/DriverQueueLogs.jsx` while keeping the current delete flow unchanged.
 - Hardened `getDriverQueueLogs` and `deleteDriverQueueLog` in `apps-script/code.gs` so each queue log row now returns `row_number` and delete can match by `log_id`, `id`, `queue_log_id`, or direct sheet row number before returning the existing Thai success/error messages.

@@ -5695,6 +5695,60 @@ label {
   color: #ffffff;
 }
 
+.booking-pagination-info {
+  width: 100%;
+  color: #475569;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.booking-pagination-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.booking-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.booking-pagination button {
+  flex: 0 0 auto;
+  min-width: 58px;
+  padding: 10px 14px;
+}
+
+@media (max-width: 480px) {
+  .booking-pagination-info {
+    font-size: 16px;
+  }
+
+  .booking-pagination {
+    gap: 6px;
+  }
+
+  .booking-pagination button {
+    min-width: 52px;
+    padding: 6px 8px;
+    font-size: 12px;
+    min-height: 36px;
+    border-radius: 12px;
+  }
+}
+
 .staff-section {
   border: 1px solid #dbe6f3;
   border-radius: 28px;
@@ -6575,5 +6629,156 @@ label {
     flex-direction: column;
     gap: 4px;
     min-width: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .swal2-popup.booking-form-popup {
+    width: min(100vw - 12px, 560px) !important;
+    max-width: min(100vw - 12px, 560px) !important;
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-title {
+    font-size: 28px !important;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .swal2-popup.booking-form-popup .booking-form-html {
+    max-height: calc(100vh - 140px);
+    margin: 0;
+    padding: 0 2px;
+    overflow-x: hidden;
+  }
+
+  .swal2-popup.booking-form-popup .swal-form.booking-form-modal {
+    gap: 10px;
+  }
+
+  .swal2-popup.booking-form-popup .swal-form.booking-form-modal label {
+    margin-bottom: 4px;
+    font-size: 18px;
+    line-height: 1.15;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-input.booking-form-input,
+  .swal2-popup.booking-form-popup .swal2-select.booking-form-input,
+  .swal2-popup.booking-form-popup .swal2-textarea.booking-form-textarea {
+    min-height: 48px !important;
+    height: 48px;
+    padding: 8px 12px !important;
+    border-radius: 12px !important;
+    font-size: 18px !important;
+    line-height: 1.2;
+    min-width: 0 !important;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-input.booking-form-input::placeholder,
+  .swal2-popup.booking-form-popup .swal2-textarea.booking-form-textarea::placeholder {
+    font-size: 14px !important;
+  }
+
+  .swal2-popup.booking-form-popup .booking-form-textarea {
+    min-height: 100px !important;
+    height: auto;
+    padding: 10px 12px !important;
+  }
+
+  .swal2-popup.booking-form-popup .booking-form-datetime {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-label-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px;
+    align-items: end;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-input-row {
+    grid-template-columns: minmax(0, 1fr) 70px 70px !important;
+    gap: 8px;
+    align-items: end;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-main-label,
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-time-labels {
+    font-size: 16px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-date-col,
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-time-row {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-time-row {
+    grid-template-columns: 70px auto 70px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-date-col input,
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-datetime-picker-input.flatpickr-input {
+    min-height: 56px !important;
+    height: 56px;
+    padding: 8px 10px !important;
+    font-size: 16px !important;
+    min-width: 0 !important;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-hour-input,
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-minute-input {
+    min-height: 50px;
+    height: 50px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 6px;
+    border-radius: 12px;
+    font-size: 16px !important;
+  }
+
+  .swal2-popup.booking-form-popup .booking-datetime-stack .thai-time-separator {
+    font-size: 16px;
+  }
+
+  .swal2-popup.booking-form-popup .booking-overlap-warning {
+    font-size: 16px;
+    line-height: 1.35;
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-actions.booking-form-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: stretch;
+    gap: 8px;
+    margin-top: 16px !important;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-actions.booking-form-actions .booking-form-confirm,
+  .swal2-popup.booking-form-popup .swal2-actions.booking-form-actions .booking-form-cancel {
+    flex: 1 1 0;
+    min-width: 150px;
+    min-height: 44px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-actions.booking-form-actions .booking-form-confirm {
+    order: 1;
+  }
+
+  .swal2-popup.booking-form-popup .swal2-actions.booking-form-actions .booking-form-cancel {
+    order: 2;
   }
 }
