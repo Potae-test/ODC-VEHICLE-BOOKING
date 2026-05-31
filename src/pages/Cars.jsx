@@ -63,6 +63,14 @@ const initialForm = {
   driver_name: "-",
 };
 
+const VEHICLE_MODAL_CLASSES = {
+  popup: "admin-modal-popup",
+  htmlContainer: "admin-modal-html",
+  actions: "admin-modal-actions",
+  confirmButton: "admin-modal-confirm",
+  cancelButton: "admin-modal-cancel",
+};
+
 export default function Cars() {
   const [vehicles, setVehicles] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -91,7 +99,7 @@ export default function Cars() {
     const result = await Swal.fire({
       title: "เพิ่มข้อมูลรถ",
       html: `
-        <div class="swal-form">
+        <div class="swal-form admin-modal-form">
           <label>ชื่อรถ</label>
           <input id="vehicle_code" class="swal2-input" placeholder="เช่น รถตู้โตโยต้า">
 
@@ -127,10 +135,12 @@ export default function Cars() {
       `,
       width: 750,
       showCancelButton: true,
+      reverseButtons: false,
       confirmButtonText: "เพิ่มรถ",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: VEHICLE_MODAL_CLASSES,
       allowOutsideClick: false,
       allowEscapeKey: false,
       didOpen: () => {
@@ -195,7 +205,7 @@ export default function Cars() {
     const result = await Swal.fire({
       title: "แก้ไขข้อมูลรถ",
       html: `
-        <div class="swal-form">
+        <div class="swal-form admin-modal-form">
           <label>รหัสรถ</label>
           <input id="vehicle_code" class="swal2-input" value="${escapeHtml(car.vehicle_code || "")}">
 
@@ -235,10 +245,12 @@ export default function Cars() {
       `,
       width: 750,
       showCancelButton: true,
+      reverseButtons: false,
       confirmButtonText: "บันทึกการแก้ไข",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: VEHICLE_MODAL_CLASSES,
       allowOutsideClick: false,
       allowEscapeKey: false,
       didOpen: () => {
@@ -340,14 +352,14 @@ export default function Cars() {
   });
 
   return (
-    <div>
+    <div className="cars-page">
       <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>จัดการรถ</h2>
           <p>ข้อมูลจาก Google Sheet ผ่าน Cloudflare Worker API</p>
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="cars-header-actions">
           {canCreateVehicles && (
             <button type="button" onClick={handleOpenCreateVehicle}>
               เพิ่มรถ
@@ -366,7 +378,7 @@ export default function Cars() {
         <div className="form-card">
           <h3>รายการรถทั้งหมด</h3>
 
-          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only">
             <table>
               <thead>
                 <tr>
@@ -429,6 +441,70 @@ export default function Cars() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="mobile-only mobile-card-list cars-mobile-list">
+            {displayVehicles.length === 0 ? (
+              <div className="mobile-empty-card">ยังไม่มีข้อมูลรถ</div>
+            ) : (
+              displayVehicles.map((car) => (
+                <div
+                  key={car.vehicle_id}
+                  className={`mobile-data-card cars-mobile-card ${
+                    car.effective_status === "UNAVAILABLE" ? "is-inactive" : ""
+                  }`}
+                >
+                  <div className="mobile-data-card-header">
+                    <div>
+                      <h3>{car.vehicle_code || "-"}</h3>
+                      <span className="mobile-data-card-index">{car.plate_no || "-"}</span>
+                    </div>
+                    <span className={getStatusClass(car.effective_status)}>
+                      {getStatusText(car.effective_status)}
+                    </span>
+                  </div>
+
+                  <div className="mobile-data-card-grid cars-mobile-grid">
+                    <div>
+                      <span>ประเภทรถ</span>
+                      <b>{getVehicleTypeText(car.vehicle_type)}</b>
+                    </div>
+                    <div>
+                      <span>คนขับประจำ</span>
+                      <b>{car.driver_name || "-"}</b>
+                    </div>
+                    <div className="cars-mobile-grid-full">
+                      <span>หมายเหตุ</span>
+                      <b>{car.note || "-"}</b>
+                    </div>
+                  </div>
+
+                  <div className="mobile-data-card-actions cars-mobile-actions">
+                    {car.effective_status === "IN_USE" ? (
+                      <span className="muted-text">รถกำลังใช้งาน ไม่สามารถแก้ไขหรือลบได้</span>
+                    ) : (
+                      <>
+                        {canEditVehicles && (
+                          <button type="button" onClick={() => handleEditVehicle(car)}>
+                            แก้ไข
+                          </button>
+                        )}
+
+                        {canDeleteVehicles && (
+                          <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => handleDelete(car)}
+                          >
+                            ลบข้อมูล
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

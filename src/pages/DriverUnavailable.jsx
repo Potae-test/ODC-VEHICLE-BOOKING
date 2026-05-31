@@ -246,7 +246,7 @@ function buildFormHtml(record, options = {}) {
   const driverDropdown = canSelectDriver
     ? `
       <label>คนขับ</label>
-      <select id="driver_user_id" class="swal2-select">
+      <select id="driver_user_id" class="swal2-select driver-unavailable-select">
         <option value="">-- เลือกคนขับ --</option>
         ${drivers
           .map(
@@ -262,10 +262,10 @@ function buildFormHtml(record, options = {}) {
     : "";
 
   return `
-    <div class="swal-form">
+    <div class="swal-form driver-unavailable-form">
       ${driverDropdown}
       <label>ประเภท</label>
-      <select id="unavailable_type" class="swal2-select">
+      <select id="unavailable_type" class="swal2-select driver-unavailable-select">
         <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา / หยุด</option>
         <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>ติดภารกิจ (ชั่วคราว)</option>
         <option value="OTHER" ${type === "OTHER" ? "selected" : ""}>อื่นๆ</option>
@@ -274,7 +274,7 @@ function buildFormHtml(record, options = {}) {
       <label>เหตุผล</label>
       <textarea
         id="unavailable_reason"
-        class="swal2-textarea"
+        class="swal2-textarea driver-unavailable-textarea"
         rows="5"
         placeholder="ระบุเหตุผลการไม่รับงาน"
       >${escapeHtml(record?.reason || "")}</textarea>
@@ -477,10 +477,18 @@ export default function DriverUnavailable() {
       }),
       width: 760,
       showCancelButton: true,
+      reverseButtons: false,
       confirmButtonText: record ? "บันทึกการแก้ไข" : "บันทึก",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "driver-unavailable-modal",
+        htmlContainer: "driver-unavailable-html",
+        actions: "driver-unavailable-actions",
+        confirmButton: "driver-unavailable-confirm",
+        cancelButton: "driver-unavailable-cancel",
+      },
       didOpen: () => {
         const modal = Swal.getPopup();
         const datetimeMount = modal?.querySelector("#driver_unavailable_datetime_mount");

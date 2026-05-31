@@ -2,7 +2,18 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-01
+- Refined the mobile-only Admin page layout in `src/pages/Admin.jsx` and `src/App.css` so the management sections, permission cards, summary cards, and mobile action rows read as cleaner stacked cards on phones without changing Admin APIs, CRUD flows, permissions, or desktop layout.
+- Matched the Cars create/edit SweetAlert dialogs in `src/pages/Cars.jsx` to the shared Booking/Admin compact modal rhythm with scoped `admin-modal-*` classes, and added a Cars-only mobile card list for the vehicle table in `src/pages/Cars.jsx` and `src/App.css` so the page stays readable on phones without changing vehicle logic or payloads.
+
 ## 2026-05-31
+- Standardized the remaining Admin SweetAlert dialogs in `src/pages/Admin.jsx` with the shared `admin-modal-*` popup classes so the password reset, disable/enable, and delete flows match the compact Booking-style mobile rhythm without changing Admin APIs, validation, or permissions.
+- Extended the scoped Admin SweetAlert styling in `src/pages/Admin.jsx` and `src/App.css` to the vehicle and driver create/edit dialogs so all Admin popups now share the same compact booking-style form and button rhythm without changing any Admin logic or payloads.
+- Scoped the Admin SweetAlert forms in `src/pages/Admin.jsx` and `src/App.css` so the add/edit driver and add/edit user dialogs use the same compact booking-style popup rhythm without changing Admin payloads, validation, or permissions.
+- Aligned the `คนขับ` and `ประเภท` selects inside the `เพิ่มวันไม่รับงาน` SweetAlert in `src/pages/DriverUnavailable.jsx` so both use the same compact native-select styling, while keeping the dropdown behavior and unavailable workflow unchanged.
+- Fine-tuned the `เพิ่มวันไม่รับงาน` SweetAlert in `src/pages/DriverUnavailable.jsx` and `src/App.css` so the driver and type selects share the same compact mobile sizing and the reason placeholder is lighter, while keeping the unavailable workflow and payloads unchanged.
+- Scoped the `เพิ่มวันไม่รับงาน` SweetAlert in `src/pages/DriverUnavailable.jsx` and `src/App.css` with driver-unavailable modal classes so the driver, type, reason, and Thai date-time fields render in a compact mobile-friendly layout without changing the unavailable-workflow logic or payloads.
+- Added the organization logo to the Booking login form in `src/pages/Login.jsx` with responsive sizing in `src/App.css`, keeping the login logic and fields unchanged.
 - Fixed the React DOM nesting warning in `src/pages/Calendar.jsx` by changing the mobile month event pills from nested buttons to keyboard-accessible role-button divs, preserving the same click behavior and visual styling.
 - Grouped the Booking detail modal fields into larger category cards in `src/pages/Booking.jsx` and `src/App.css` so the detail view is shorter and easier to scan on mobile while preserving role-based visibility and all displayed fields.
 - Reduced the size of the skipped-driver cards inside the Booking approval modal in `src/App.css` so they better match the recommendation summary card scale while keeping the same skipped-driver data and workflow.

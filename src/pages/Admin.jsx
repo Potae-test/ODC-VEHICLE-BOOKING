@@ -23,7 +23,6 @@ import {
 import {
   showConfirm,
   showError,
-  showInput,
   showSuccess,
 } from "../utils/alert";
 import {
@@ -218,6 +217,90 @@ function getBookingVehicleLabel(booking, vehicleMap) {
   return `${vehicleName} / ${plate}`;
 }
 
+const ADMIN_MODAL_CLASSES = {
+  popup: "admin-modal-popup",
+  htmlContainer: "admin-modal-html",
+  actions: "admin-modal-actions",
+  confirmButton: "admin-modal-confirm",
+  cancelButton: "admin-modal-cancel",
+};
+
+async function openAdminConfirmDialog(message, options = {}) {
+  const danger = options.confirmButtonColor === "#dc2626";
+  const result = await Swal.fire({
+    icon: options.icon || "warning",
+    title: options.title || "ยืนยันการทำรายการ",
+    html: `<div class="admin-modal-message">${escapeHtml(message).replaceAll("\n", "<br>")}</div>`,
+    width: options.width || 760,
+    showCancelButton: true,
+    reverseButtons: false,
+    confirmButtonText: options.confirmButtonText || "ยืนยัน",
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor: options.confirmButtonColor || "#1455c8",
+    cancelButtonColor: "#64748b",
+    customClass: {
+      ...ADMIN_MODAL_CLASSES,
+      confirmButton: danger
+        ? "admin-modal-confirm admin-modal-danger-confirm"
+        : "admin-modal-confirm",
+    },
+  });
+
+  return result.isConfirmed;
+}
+
+async function openAdminTextInputDialog({
+  title,
+  label,
+  placeholder = "",
+  initialValue = "",
+  confirmButtonText = "ตกลง",
+  confirmButtonColor = "#1455c8",
+  validationMessage = "กรุณากรอกข้อมูล",
+  contentHtml = "",
+}) {
+  const inputId = "admin-modal-input";
+  const danger = confirmButtonColor === "#dc2626";
+  const result = await Swal.fire({
+    title,
+    html: `
+      <div class="swal-form admin-modal-form">
+        ${contentHtml ? `<div class="admin-modal-message">${contentHtml}</div>` : ""}
+        ${label ? `<label for="${inputId}">${escapeHtml(label)}</label>` : ""}
+        <input
+          id="${inputId}"
+          class="swal2-input"
+          value="${escapeHtml(initialValue)}"
+          placeholder="${escapeHtml(placeholder)}"
+        >
+      </div>
+    `,
+    width: 760,
+    showCancelButton: true,
+    reverseButtons: false,
+    confirmButtonText,
+    cancelButtonText: "ยกเลิก",
+    confirmButtonColor,
+    cancelButtonColor: "#64748b",
+    customClass: {
+      ...ADMIN_MODAL_CLASSES,
+      confirmButton: danger
+        ? "admin-modal-confirm admin-modal-danger-confirm"
+        : "admin-modal-confirm",
+    },
+    preConfirm: () => {
+      const value = document.getElementById(inputId)?.value.trim() || "";
+      if (!value) {
+        Swal.showValidationMessage(validationMessage);
+        return false;
+      }
+      return value;
+    },
+  });
+
+  return result.isConfirmed ? result.value : null;
+}
+
 export default function Admin() {
   const currentUser = useMemo(() => getCurrentUser(), []);
   const bookingFormModalRef = useRef(null);
@@ -339,13 +422,17 @@ export default function Admin() {
         .map((r, index) => `${index + 1}. ${r}`)
         .join("\n");
 
-      const answer = await showInput(
-        "ปิดใช้งานคนขับ",
-        `เลือกเหตุผลการปิดใช้งาน\n\n${reasonText}\n\nพิมพ์เลขข้อ หรือพิมพ์เหตุผลใหม่`,
-        "เช่น 1 หรือ ลาป่วย"
-      );
+      const answer = await openAdminTextInputDialog({
+        title: "ปิดใช้งานคนขับ",
+        label: "เหตุผล",
+        placeholder: "เช่น 1 หรือ ลาป่วย",
+        confirmButtonText: "ยืนยัน",
+        confirmButtonColor: "#dc2626",
+        validationMessage: "กรุณาระบุเหตุผล",
+        contentHtml: `เลือกเหตุผลการปิดใช้งาน<br><br>${escapeHtml(reasonText).replaceAll("\n", "<br>")}<br><br>พิมพ์เลขข้อ หรือพิมพ์เหตุผลใหม่`,
+      });
 
-      if (!answer) return;
+      if (answer === null) return;
 
       const selectedIndex = Number(answer) - 1;
 
@@ -378,11 +465,11 @@ export default function Admin() {
       alert(err.message || "อัปเดตไม่สำเร็จ");
     }
   }
-    async function handleOpenCreateDriver() {
+  async function handleOpenCreateDriver() {
     const result = await Swal.fire({
       title: "เพิ่มข้อมูลคนขับ",
       html: `
-        <div class="swal-form">
+        <div class="swal-form admin-modal-form">
           <label>ชื่อคนขับ</label>
           <input id="driver_name" class="swal2-input" placeholder="เช่น นายสมชาย">
 
@@ -401,10 +488,18 @@ export default function Admin() {
       `,
       width: 750,
       showCancelButton: true,
+      reverseButtons: false,
       confirmButtonText: "เพิ่มคนขับ",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "admin-modal-popup",
+        htmlContainer: "admin-modal-html",
+        actions: "admin-modal-actions",
+        confirmButton: "admin-modal-confirm",
+        cancelButton: "admin-modal-cancel",
+      },
       preConfirm: () => {
         const name = document.getElementById("driver_name").value.trim();
         const phone = document.getElementById("driver_phone").value.trim();
@@ -434,7 +529,7 @@ export default function Admin() {
     const result = await Swal.fire({
       title: "แก้ไขผู้ใช้งาน",
       html: `
-        <div class="swal-form">
+        <div class="swal-form admin-modal-form">
           <label>ชื่อผู้ใช้งาน</label>
           <input id="user_name" class="swal2-input" value="${escapeHtml(u.name || "")}" placeholder="ชื่อ-นามสกุล">
 
@@ -464,10 +559,18 @@ export default function Admin() {
       `,
       width: 750,
       showCancelButton: true,
+      reverseButtons: false,
       confirmButtonText: "บันทึกการแก้ไข",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "admin-modal-popup",
+        htmlContainer: "admin-modal-html",
+        actions: "admin-modal-actions",
+        confirmButton: "admin-modal-confirm",
+        cancelButton: "admin-modal-cancel",
+      },
       preConfirm: () => {
         const name = document.getElementById("user_name").value.trim();
         const email = document.getElementById("user_email").value.trim();
@@ -507,7 +610,7 @@ async function handleOpenCreateUser() {
   const result = await Swal.fire({
     title: "เพิ่มผู้ใช้งาน",
     html: `
-      <div class="swal-form">
+      <div class="swal-form admin-modal-form">
         <label>ชื่อผู้ใช้งาน</label>
         <input id="user_name" class="swal2-input" placeholder="เช่น ผู้ดูแลระบบ">
 
@@ -540,10 +643,18 @@ async function handleOpenCreateUser() {
     `,
     width: 750,
     showCancelButton: true,
+    reverseButtons: false,
     confirmButtonText: "เพิ่มผู้ใช้งาน",
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    customClass: {
+      popup: "admin-modal-popup",
+      htmlContainer: "admin-modal-html",
+      actions: "admin-modal-actions",
+      confirmButton: "admin-modal-confirm",
+      cancelButton: "admin-modal-cancel",
+    },
     preConfirm: () => {
       const name = document.getElementById("user_name").value.trim();
       const email = document.getElementById("user_email").value.trim();
@@ -605,11 +716,14 @@ async function handleOpenCreateUser() {
   }
 
   async function handleResetPassword(u) {
-    const password = await showInput(
-      "เปลี่ยนรหัสผ่าน",
-      `กรอกรหัสผ่านใหม่ของ ${u.name}`,
-      "เช่น 1234"
-    );
+    const password = await openAdminTextInputDialog({
+      title: "เปลี่ยนรหัสผ่าน",
+      label: `กรอกรหัสผ่านใหม่ของ ${u.name}`,
+      placeholder: "เช่น 1234",
+      confirmButtonText: "ตกลง",
+      confirmButtonColor: "#1455c8",
+      validationMessage: "กรุณากรอกรหัสผ่านใหม่",
+    });
 
     if (!password) return;
 
@@ -625,10 +739,11 @@ async function handleOpenCreateUser() {
       showError(err.message || "เปลี่ยนรหัสผ่านไม่สำเร็จ");
     }
   }
-    async function handleDisableUser(u) {
-    const confirmed = await showConfirm(
-      `ยืนยันปิดใช้งาน ${u.name} ใช่หรือไม่?`
-    );
+
+  async function handleDisableUser(u) {
+    const confirmed = await openAdminConfirmDialog(`ยืนยันปิดใช้งาน ${u.name} ใช่หรือไม่?`, {
+      confirmButtonColor: "#dc2626",
+    });
 
     if (!confirmed) return;
 
@@ -642,26 +757,13 @@ async function handleOpenCreateUser() {
       showError(err.message || "ปิดใช้งานไม่สำเร็จ");
     }
   }
-async function handleDeleteUser(u) {
-  const confirmed = await showConfirm(
-    `ยืนยันลบผู้ใช้ ${u.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
-  );
 
-  if (!confirmed) return;
-
-  try {
-    await deleteUser(u.user_id);
-
-    await showSuccess("ลบผู้ใช้สำเร็จ");
-
-    await refreshUsers();
-  } catch (err) {
-    showError(err.message || "ลบไม่สำเร็จ");
-  }
-  }
   async function handleDeleteUser(u) {
-    const confirmed = await showConfirm(
-      `ยืนยันลบผู้ใช้ ${u.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+    const confirmed = await openAdminConfirmDialog(
+      `ยืนยันลบผู้ใช้ ${u.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`,
+      {
+        confirmButtonColor: "#dc2626",
+      }
     );
 
     if (!confirmed) return;
@@ -676,25 +778,24 @@ async function handleDeleteUser(u) {
       showError(err.message || "ลบไม่สำเร็จ");
     }
   }
+
   async function handleEnableUser(u) {
-  const confirmed = await showConfirm(
-    `ยืนยันเปิดใช้งาน ${u.name} ใช่หรือไม่?`
-  );
+    const confirmed = await openAdminConfirmDialog(`ยืนยันเปิดใช้งาน ${u.name} ใช่หรือไม่?`);
 
-  if (!confirmed) return;
+    if (!confirmed) return;
 
-  try {
-    await updateUser({
-      ...u,
-      status: "ACTIVE",
-    });
+    try {
+      await updateUser({
+        ...u,
+        status: "ACTIVE",
+      });
 
-    await showSuccess("เปิดใช้งานผู้ใช้สำเร็จ");
-    await refreshUsers();
-  } catch (err) {
-    showError(err.message || "เปิดใช้งานไม่สำเร็จ");
+      await showSuccess("เปิดใช้งานผู้ใช้สำเร็จ");
+      await refreshUsers();
+    } catch (err) {
+      showError(err.message || "เปิดใช้งานไม่สำเร็จ");
+    }
   }
-}
   function clearUserForm() {
     setUserForm({
       user_id: "",
@@ -1142,7 +1243,7 @@ async function handleEditDriver(d) {
   const result = await Swal.fire({
     title: "แก้ไขข้อมูลคนขับ",
     html: `
-      <div class="swal-form">
+      <div class="swal-form admin-modal-form">
         <label>ชื่อคนขับ</label>
         <input id="driver_name" class="swal2-input" value="${d.name || ""}">
 
@@ -1161,10 +1262,18 @@ async function handleEditDriver(d) {
     `,
     width: 700,
     showCancelButton: true,
+    reverseButtons: false,
     confirmButtonText: "บันทึกการแก้ไข",
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    customClass: {
+      popup: "admin-modal-popup",
+      htmlContainer: "admin-modal-html",
+      actions: "admin-modal-actions",
+      confirmButton: "admin-modal-confirm",
+      cancelButton: "admin-modal-cancel",
+    },
     preConfirm: () => {
       const name = document.getElementById("driver_name").value.trim();
       const phone = document.getElementById("driver_phone").value.trim();
@@ -1198,8 +1307,11 @@ async function handleEditDriver(d) {
 }
 
 async function handleDeleteDriver(d) {
-  const confirmed = await showConfirm(
-    `ยืนยันลบคนขับ ${d.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+  const confirmed = await openAdminConfirmDialog(
+    `ยืนยันลบคนขับ ${d.name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`,
+    {
+      confirmButtonColor: "#dc2626",
+    }
   );
 
   if (!confirmed) return;
@@ -1217,7 +1329,7 @@ async function handleOpenCreateVehicle() {
   const result = await Swal.fire({
     title: "เพิ่มข้อมูลรถ",
     html: `
-      <div class="swal-form">
+      <div class="swal-form admin-modal-form">
         <label>ชื่อรถ</label>
         <input id="vehicle_name" class="swal2-input" placeholder="เช่น รถตู้ Toyota">
 
@@ -1254,10 +1366,18 @@ async function handleOpenCreateVehicle() {
 
     width: 750,
     showCancelButton: true,
+    reverseButtons: false,
     confirmButtonText: "เพิ่มรถ",
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    customClass: {
+      popup: "admin-modal-popup",
+      htmlContainer: "admin-modal-html",
+      actions: "admin-modal-actions",
+      confirmButton: "admin-modal-confirm",
+      cancelButton: "admin-modal-cancel",
+    },
 
     didOpen: () => {
       const vehicleType = document.getElementById("vehicle_type");
@@ -1325,7 +1445,7 @@ async function handleEditVehicle(vehicle) {
   const result = await Swal.fire({
     title: "แก้ไขข้อมูลรถ",
     html: `
-      <div class="swal-form">
+      <div class="swal-form admin-modal-form">
         <label>ชื่อรถ</label>
         <input id="vehicle_name" class="swal2-input" value="${vehicle.vehicle_name || ""}">
 
@@ -1362,10 +1482,18 @@ async function handleEditVehicle(vehicle) {
     `,
     width: 750,
     showCancelButton: true,
+    reverseButtons: false,
     confirmButtonText: "บันทึกการแก้ไข",
     cancelButtonText: "ยกเลิก",
     confirmButtonColor: "#1455c8",
     cancelButtonColor: "#64748b",
+    customClass: {
+      popup: "admin-modal-popup",
+      htmlContainer: "admin-modal-html",
+      actions: "admin-modal-actions",
+      confirmButton: "admin-modal-confirm",
+      cancelButton: "admin-modal-cancel",
+    },
     didOpen: () => {
       const vehicleType = document.getElementById("vehicle_type");
       const otherDiv = document.getElementById("otherVehicleDiv");
@@ -1423,8 +1551,11 @@ async function handleEditVehicle(vehicle) {
 }
 
 async function handleDeleteVehicle(vehicle) {
-  const confirmed = await showConfirm(
-    `ยืนยันลบรถ ${vehicle.vehicle_name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`
+  const confirmed = await openAdminConfirmDialog(
+    `ยืนยันลบรถ ${vehicle.vehicle_name} ใช่หรือไม่?\n\nข้อมูลจะหายถาวร`,
+    {
+      confirmButtonColor: "#dc2626",
+    }
   );
 
   if (!confirmed) return;
@@ -1449,7 +1580,7 @@ async function handleDeleteVehicle(vehicle) {
   }, [bookingPage, bookingPageCount]);
 
   return (
-    <div>
+    <div className="admin-page">
       <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
         <div>
           <h2>Admin / Dashboard</h2>
@@ -1485,7 +1616,7 @@ async function handleDeleteVehicle(vehicle) {
           </button>
         </div>
 
-        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only">
           <table className="permission-table">
             <thead>
               <tr>
@@ -1518,6 +1649,32 @@ async function handleDeleteVehicle(vehicle) {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div className="mobile-only mobile-card-list admin-permission-mobile-list">
+          {permissionRoles.map((role) => (
+            <div key={role} className="mobile-data-card admin-permission-card">
+              <div className="mobile-data-card-header">
+                <div>
+                  <h3>{role}</h3>
+                  {role === "ADMIN" && <span className="permission-note">เห็นทุกเมนูเสมอ</span>}
+                </div>
+              </div>
+              <div className="admin-permission-row-list">
+                {PERMISSION_ITEMS.map((permission) => (
+                  <label className="admin-permission-row" key={permission.id}>
+                    <input
+                      type="checkbox"
+                      checked={roleHasPermission(role, permission.id)}
+                      disabled={role === "ADMIN"}
+                      onChange={() => toggleRolePermission(role, permission.id)}
+                    />
+                    <span>{permission.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1592,7 +1749,7 @@ async function handleDeleteVehicle(vehicle) {
             </button>
           </div>
 
-          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only">
             <table className="permission-table">
               <thead>
                 <tr>
@@ -1620,6 +1777,30 @@ async function handleDeleteVehicle(vehicle) {
               </tbody>
             </table>
           </div>
+
+          <div className="mobile-only mobile-card-list admin-summary-scope-list">
+            {Object.keys(DEFAULT_DRIVER_SUMMARY_CARD_SCOPE).map((role) => (
+              <div key={role} className="mobile-data-card admin-summary-scope-card">
+                <div className="mobile-data-card-header">
+                  <div>
+                    <h3>{role}</h3>
+                  </div>
+                </div>
+                <div className="admin-summary-scope-control">
+                  <label>การเห็นกล่องสรุปคนขับ</label>
+                  <select
+                    value={driverSummaryCardScopeConfig[role] || "NONE"}
+                    disabled={role === "ADMIN"}
+                    onChange={(e) => handleChangeDriverSummaryCardScope(role, e.target.value)}
+                  >
+                    <option value="SELF">เห็นเฉพาะคนขับคนนั้นๆ</option>
+                    <option value="ALL">เห็นทุกคน</option>
+                    <option value="NONE">ไม่เห็นเลย</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1637,8 +1818,9 @@ async function handleDeleteVehicle(vehicle) {
         {visibleLoading ? (
           <TableSkeleton rows={6} columns={8} />
         ) : (
-        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
-          <table>
+        <>
+          <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only" style={{ marginTop: 24 }}>
+            <table>
             <thead>
               <tr>
                 <th>รหัสรถ</th>
@@ -1693,8 +1875,65 @@ async function handleDeleteVehicle(vehicle) {
                 ))
               )}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+
+          <div className="mobile-only mobile-card-list admin-entity-mobile-list" style={{ marginTop: 24 }}>
+            {normalizedVehicles.length === 0 ? (
+              <div className="mobile-empty-card">ไม่มีข้อมูลรถ</div>
+            ) : (
+              normalizedVehicles.map((vehicle) => (
+                <div
+                  key={vehicle.vehicle_id}
+                  className={`mobile-data-card admin-entity-card ${vehicle.status === "INACTIVE" ? "is-inactive" : ""}`}
+                >
+                  <div className="mobile-data-card-header">
+                    <div>
+                      <h3>{vehicle.vehicle_name || "-"}</h3>
+                      <span className="mobile-data-card-index">{vehicle.vehicle_id || "-"}</span>
+                    </div>
+                    <span className={getVehicleStatusClass(vehicle.status)}>
+                      {getVehicleStatusText(vehicle.status)}
+                    </span>
+                  </div>
+
+                  <div className="mobile-data-card-grid admin-entity-grid">
+                    <div>
+                      <span>ทะเบียนรถ</span>
+                      <b>{vehicle.license_plate || "-"}</b>
+                    </div>
+                    <div>
+                      <span>ประเภทรถ</span>
+                      <b>{getVehicleTypeText(vehicle.vehicle_type)}</b>
+                    </div>
+                    <div>
+                      <span>หมายเหตุ</span>
+                      <b>{vehicle.note || "-"}</b>
+                    </div>
+                  </div>
+
+                  <div className="mobile-data-card-actions admin-entity-actions">
+                    {canEditVehicles && (
+                      <button type="button" onClick={() => handleEditVehicle(vehicle)}>
+                        แก้ไข
+                      </button>
+                    )}
+
+                    {canDeleteVehicles && (
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteVehicle(vehicle)}
+                      >
+                        ลบ
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
         )}
       </div>
       )}
@@ -1709,7 +1948,7 @@ async function handleDeleteVehicle(vehicle) {
         </button>
         )}
       </div>
-        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only" style={{ marginTop: 24 }}>
           <table>
             <thead>
               <tr>
@@ -1767,8 +2006,74 @@ async function handleDeleteVehicle(vehicle) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+
+        <div className="mobile-only mobile-card-list admin-entity-mobile-list" style={{ marginTop: 24 }}>
+          {drivers.length === 0 ? (
+            <div className="mobile-empty-card">ไม่มีข้อมูลคนขับ</div>
+          ) : (
+            drivers.map((d) => (
+                <div
+                  key={d.driver_id}
+                  className={`mobile-data-card admin-entity-card ${d.status === "INACTIVE" ? "is-inactive" : ""}`}
+                >
+                  <div className="mobile-data-card-header">
+                    <div>
+                      <h3>{d.name || "-"}</h3>
+                      <span className="mobile-data-card-index">{d.driver_id || "-"}</span>
+                    </div>
+                    <span className={d.status === "INACTIVE" ? "status gray" : "status green"}>
+                      {d.status || "-"}
+                    </span>
+                  </div>
+
+                  <div className="mobile-data-card-grid admin-entity-grid">
+                    <div>
+                      <span>เบอร์โทร</span>
+                      <b>{d.phone || "-"}</b>
+                    </div>
+                    <div>
+                      <span>หมายเหตุ</span>
+                      <b>{d.remark || "-"}</b>
+                    </div>
+                  </div>
+
+                  <div className="mobile-data-card-actions admin-entity-actions">
+                    {canEditDrivers && (
+                      <button type="button" onClick={() => handleEditDriver(d)}>
+                        แก้ไข
+                      </button>
+                    )}
+
+                    {canEditDrivers && d.status === "INACTIVE" ? (
+                      <button type="button" onClick={() => handleDriverStatus(d, "ACTIVE")}>
+                        เปิดใช้งาน
+                      </button>
+                    ) : canEditDrivers ? (
+                      <button
+                        type="button"
+                        className="warning-button"
+                        onClick={() => handleDriverStatus(d, "INACTIVE")}
+                      >
+                        ปิดใช้งาน
+                      </button>
+                    ) : null}
+
+                    {canDeleteDrivers && (
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteDriver(d)}
+                      >
+                        ลบ
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
       </div>
       )}
 
@@ -1782,7 +2087,8 @@ async function handleDeleteVehicle(vehicle) {
         </button>
         )}
       </div>
-        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm" style={{ marginTop: 24 }}>
+        <>
+        <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm desktop-only" style={{ marginTop: 24 }}>
           <table>
             <thead>
               <tr>
@@ -1848,6 +2154,90 @@ async function handleDeleteVehicle(vehicle) {
           </tbody>
           </table>
         </div>
+
+        <div className="mobile-only mobile-card-list admin-entity-mobile-list" style={{ marginTop: 24 }}>
+          {users.length === 0 ? (
+            <div className="mobile-empty-card">ไม่มีข้อมูลผู้ใช้งาน</div>
+          ) : (
+            users.map((u) => (
+              <div
+                key={u.user_id}
+                className={`mobile-data-card admin-entity-card ${u.status === "INACTIVE" ? "is-inactive" : ""}`}
+              >
+                <div className="mobile-data-card-header">
+                  <div>
+                    <h3>{u.name || "-"}</h3>
+                    <span className="mobile-data-card-index">{u.user_id || "-"}</span>
+                  </div>
+                  <span className={u.status === "INACTIVE" ? "status gray" : "status green"}>
+                    {u.status || "-"}
+                  </span>
+                </div>
+
+                <div className="mobile-data-card-grid admin-entity-grid">
+                  <div>
+                    <span>Email</span>
+                    <b>{u.email || "-"}</b>
+                  </div>
+                  <div>
+                    <span>Role</span>
+                    <b>{u.role || "-"}</b>
+                  </div>
+                </div>
+
+                <div className="mobile-data-card-grid admin-entity-grid">
+                  <div>
+                    <span>เบอร์โทร</span>
+                    <b>{u.phone || "-"}</b>
+                  </div>
+                  <div>
+                    <span>หน่วยงาน</span>
+                    <b>{u.department || "-"}</b>
+                  </div>
+                </div>
+
+                <div className="mobile-data-card-actions admin-entity-actions">
+                  {canEditUsers && (
+                    <button type="button" onClick={() => editUser(u)}>
+                      แก้ไข
+                    </button>
+                  )}
+
+                  {canEditUsers && (
+                    <button type="button" onClick={() => handleResetPassword(u)}>
+                      เปลี่ยนรหัส
+                    </button>
+                  )}
+
+                  {canEditUsers && u.status === "INACTIVE" ? (
+                    <button type="button" onClick={() => handleEnableUser(u)}>
+                      เปิดใช้งาน
+                    </button>
+                  ) : canEditUsers ? (
+                    <button
+                      type="button"
+                      className="warning-button"
+                      onClick={() => handleDisableUser(u)}
+                    >
+                      ปิดใช้งาน
+                    </button>
+                  ) : null}
+
+                  {canDeleteUsers && (
+                    <button
+                      type="button"
+                      className="danger-button"
+                      onClick={() => handleDeleteUser(u)}
+                    >
+                      ลบ
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        </>
       </div>
       )}
 

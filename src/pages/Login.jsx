@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { login } from "../api";
+import LOGO_ODC from "../assets/LOGO_ODC.png";
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -30,6 +31,7 @@ export default function Login({ onLogin }) {
   return (
     <div className="login-page px-3 py-4 sm:px-4 sm:py-6">
       <form className="login-card border border-sky-100 bg-white/95 shadow-sm" onSubmit={handleLogin}>
+        <img src={LOGO_ODC} alt="ODC Logo" className="login-logo" />
         <h1>ระบบงานจองรถ</h1>
         <p>ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย</p>
 
