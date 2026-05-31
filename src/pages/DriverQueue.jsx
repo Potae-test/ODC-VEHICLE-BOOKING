@@ -8,9 +8,46 @@ import {
   setCurrentDriverQueuePointer,
   updateDriverQueueMaster,
 } from "../api";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
+import useIsMobile from "../hooks/useIsMobile";
 import { formatThaiDateTime } from "../utils/date";
 import { showConfirm, showError, showSuccess } from "../utils/alert";
 import { hasPermission } from "../permissions";
+
+function QueueIcon({ children, className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      {children}
+    </svg>
+  );
+}
+
+function ChevronUpIcon({ className = "" }) {
+  return (
+    <QueueIcon className={className}>
+      <path d="m18 15-6-6-6 6" />
+    </QueueIcon>
+  );
+}
+
+function ChevronDownIcon({ className = "" }) {
+  return (
+    <QueueIcon className={className}>
+      <path d="m6 9 6 6 6-6" />
+    </QueueIcon>
+  );
+}
 
 function sortQueue(items) {
   return [...items].sort((a, b) => {
@@ -76,7 +113,134 @@ function moveQueueItem(items, fromIndex, toIndex) {
   }));
 }
 
+function getQueueCardAccent(row, currentDriver, nextDriver) {
+  const driverId = String(row?.driver_user_id || "").trim();
+  const currentId = String(currentDriver?.driver_user_id || "").trim();
+  const nextId = String(nextDriver?.driver_user_id || "").trim();
+  const status = normalizeStatus(row?.status);
+
+  if (driverId && currentId && driverId === currentId) {
+    return "current";
+  }
+  if (driverId && nextId && driverId === nextId) {
+    return "next";
+  }
+  if (status !== "ACTIVE") {
+    return "inactive";
+  }
+  return "active";
+}
+
+function QueueBadge({ children, tone = "slate" }) {
+  const toneClass =
+    tone === "green"
+      ? "bg-emerald-100 text-emerald-700"
+      : tone === "blue"
+        ? "bg-blue-100 text-blue-700"
+        : tone === "red"
+          ? "bg-red-100 text-red-700"
+          : "bg-slate-100 text-slate-700";
+
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold ${toneClass}`}>{children}</span>;
+}
+
+function MobileQueueRowCard({
+  row,
+  index,
+  totalRows,
+  currentDriver,
+  nextDriver,
+  resolveDriverName,
+  canManageQueue,
+  onMove,
+  onSetCurrentPointer,
+  onEditNote,
+  onToggleStatus,
+}) {
+  const accent = getQueueCardAccent(row, currentDriver, nextDriver);
+  const isCurrent = accent === "current";
+  const isNext = accent === "next";
+  const isInactive = accent === "inactive";
+  const statusMeta = getStatusMeta(row.status);
+  const statusLabel = statusMeta.label;
+
+  return (
+    <article
+      className={[
+        "driver-queue-mobile-card",
+        isCurrent ? "driver-queue-mobile-card--current" : "",
+        isNext ? "driver-queue-mobile-card--next" : "",
+        isInactive ? "driver-queue-mobile-card--inactive" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <div className="driver-queue-mobile-card-header">
+        <div className="min-w-0">
+          <div className="driver-queue-mobile-card-title">
+            #{row.queue_order || index + 1} {resolveDriverName(row)}
+          </div>
+          <div className="driver-queue-mobile-card-subtitle">{row.driver_user_id || "-"}</div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <QueueBadge tone={normalizeStatus(row.status) === "ACTIVE" ? "green" : "gray"}>{statusLabel}</QueueBadge>
+          {isCurrent ? <QueueBadge tone="green">คิวปัจจุบัน</QueueBadge> : null}
+          {isNext && !isCurrent ? <QueueBadge tone="blue">คิวถัดไป</QueueBadge> : null}
+        </div>
+      </div>
+
+      <div className="driver-queue-mobile-card-body">
+        <div>
+          <span className="driver-queue-mobile-card-label">หมายเหตุ</span>
+          <div className="driver-queue-mobile-card-value">{row.note || "-"}</div>
+        </div>
+        <div>
+          <span className="driver-queue-mobile-card-label">คิวล่าสุด</span>
+          <div className="driver-queue-mobile-card-value">{formatThaiDateTime(row.last_assigned_at) || "-"}</div>
+        </div>
+      </div>
+
+      {canManageQueue && (
+        <>
+          <div className="driver-queue-mobile-action-grid">
+            <button type="button" className="driver-queue-mobile-action-button" onClick={() => onMove(row, "UP")} disabled={index === 0}>
+ <ChevronUpIcon className="h-4 w-4" /> ปรับลำดับขึ้น
+            </button>
+            <button
+              type="button"
+              className="driver-queue-mobile-action-button"
+              onClick={() => onMove(row, "DOWN")}
+              disabled={index === totalRows - 1}
+            >
+              <ChevronDownIcon className="h-4 w-4" /> ปรับลำดับลง
+            </button>
+            <button type="button" className="driver-queue-mobile-action-button" onClick={() => onSetCurrentPointer(row)}>
+              ตั้งคิว
+            </button>
+            <button type="button" className="driver-queue-mobile-action-button" onClick={() => onEditNote(row)}>
+              แก้หมายเหตุ
+            </button>
+          </div>
+          <button
+            type="button"
+            className={[
+              "driver-queue-mobile-action-button driver-queue-mobile-action-button--full",
+              normalizeStatus(row.status) === "ACTIVE"
+                ? "driver-queue-mobile-action-button--warning"
+                : "driver-queue-mobile-action-button--success",
+            ].join(" ")}
+            onClick={() => onToggleStatus(row)}
+          >
+            {normalizeStatus(row.status) === "ACTIVE" ? "ปิดคิว" : "เปิดคิว"}
+          </button>
+        </>
+      )}
+    </article>
+  );
+}
+
 export default function DriverQueue() {
+  const isMobile = useIsMobile();
   const [queue, setQueue] = useState([]);
   const [state, setState] = useState(getQueueState(null));
   const [draftQueue, setDraftQueue] = useState([]);
@@ -302,6 +466,100 @@ export default function DriverQueue() {
     return <div className="form-card text-slate-700">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
   }
 
+  if (isMobile) {
+    const currentDriverName = resolveDriverName(currentDriver);
+    const nextDriverName = resolveDriverName(nextDriver);
+
+    return (
+      <div className="driver-queue-mobile mt-[57px] flex w-full flex-col gap-3 pb-6">
+        <MobilePageHeader
+          title="คิวคนขับ"
+          subtitle="จัดลำดับคิวและตัวชี้คิวแบบวงกลม"
+          actions={
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                disabled={refreshing || loading}
+                onClick={() => loadData({ refreshOnly: true })}
+              >
+                <span>{refreshing ? "กำลังรีเฟรช..." : "รีเฟรช"}</span>
+              </button>
+              {canResetQueue ? (
+                <button
+                  type="button"
+                  className="mobile-filter-button inline-flex items-center gap-1.5 border border-amber-400 bg-amber-400 shadow-sm transition hover:bg-amber-500"
+                  onClick={handleResetPointer}
+                >
+                  <span>รีเซ็ตคิวเริ่มที่คนแรก</span>
+                </button>
+              ) : null}
+            </div>
+          }
+        />
+
+        {loading ? (
+          <div className="driver-queue-mobile-state-card">กำลังโหลดข้อมูล...</div>
+        ) : error ? (
+          <div className="driver-queue-mobile-state-card text-red-700">{error}</div>
+        ) : (
+          <>
+            <MobilePageSection title="คิวปัจจุบัน" className="driver-queue-mobile-section">
+              <div className="driver-queue-mobile-current-card">
+                <div className="driver-queue-mobile-current-name">{currentDriverName}</div>
+                <div className="driver-queue-mobile-current-meta">ลำดับคิว: {currentDriver?.queue_order || "-"}</div>
+                <div className="driver-queue-mobile-current-next">
+                  คิวถัดไป: <span>{nextDriverName}</span>
+                </div>
+              </div>
+            </MobilePageSection>
+
+            <MobilePageSection
+              title="รายการคิวคนขับ"
+              actions={
+                canManageQueue ? (
+                  <button
+                    type="button"
+                    className="mobile-action-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!isDirty || saving}
+                    onClick={handleSaveQueue}
+                  >
+                    <span>{saving ? "กำลังบันทึก..." : "บันทึกคิว"}</span>
+                  </button>
+                ) : null
+              }
+            >
+              <div className="driver-queue-mobile-helper">* ใช้ปุ่มขึ้น/ลงแทนการลากในมือถือ</div>
+
+              {draftQueue.length === 0 ? (
+                <div className="mobile-empty-state">ไม่พบข้อมูลคิวคนขับ</div>
+              ) : (
+                <div className="grid gap-[10px]">
+                  {draftQueue.map((row, index) => (
+                    <MobileQueueRowCard
+                      key={row.queue_id || `${row.driver_user_id || ""}-${row.queue_order || ""}`}
+                      row={row}
+                      index={index}
+                      totalRows={draftQueue.length}
+                      currentDriver={currentDriver}
+                      nextDriver={nextDriver}
+                      resolveDriverName={resolveDriverName}
+                      canManageQueue={canManageQueue}
+                      onMove={handleMove}
+                      onSetCurrentPointer={handleSetCurrentPointer}
+                      onEditNote={handleEditNote}
+                      onToggleStatus={handleToggleStatus}
+                    />
+                  ))}
+                </div>
+              )}
+            </MobilePageSection>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="page-header rounded-3xl border border-sky-100 bg-white px-4 py-4 shadow-sm sm:px-5 lg:px-7">
@@ -410,10 +668,10 @@ export default function DriverQueue() {
                           {canManageQueue && (
                             <>
                               <button type="button" onClick={() => handleMove(row, "UP")} disabled={index === 0}>
-                                ↑
+                                <ChevronUpIcon className="h-4 w-4" />
                               </button>
                               <button type="button" onClick={() => handleMove(row, "DOWN")} disabled={index === draftQueue.length - 1}>
-                                ↓
+                                <ChevronDownIcon className="h-4 w-4" /> 
                               </button>
                               <button type="button" onClick={() => handleSetCurrentPointer(row)}>
                                 ตั้งเป็นคิวปัจจุบัน

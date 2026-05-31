@@ -71,7 +71,7 @@ const BOOKING_STATUS_COUNT_ITEMS = [
   { status: "APPROVED", label: "อนุมัติแล้ว", className: "blue" },
   { status: "IN_USE", label: "กำลังใช้งาน", className: "green" },
   { status: "COMPLETED", label: "เสร็จสิ้น", className: "gray" },
-  { status: "CANCELLED", label: "รอการอนุมัติการยกเลิกงาน", className: "red" },
+  { status: "DRIVER_CANCEL_PENDING", label: "รอการอนุมัติการยกเลิกงาน", className: "red" },
 ];
 
 function normalizeStatus(status) {
@@ -1852,17 +1852,17 @@ export default function Booking() {
       APPROVED: 0,
       IN_USE: 0,
       COMPLETED: 0,
-      CANCELLED: 0,
+      DRIVER_CANCEL_PENDING: 0,
     };
 
     filteredBookings.forEach((booking) => {
       const status = normalizeStatus(booking.status);
-      if (status !== "CANCELLED" && Object.prototype.hasOwnProperty.call(counts, status)) {
+      if (Object.prototype.hasOwnProperty.call(counts, status)) {
         counts[status] += 1;
       }
 
-      if (status === "DRIVER_CANCELLED" || status === "CANCELLED") {
-        counts.CANCELLED += 1;
+      if (getDriverCancelRequestStatus(booking) === "PENDING") {
+        counts.DRIVER_CANCEL_PENDING += 1;
       }
     });
 
@@ -2686,6 +2686,14 @@ export default function Booking() {
     }));
   }, []);
 
+  const handleStatusChipClick = useCallback((status) => {
+    setFilters((current) => ({
+      ...current,
+      status: status === "ALL" ? "" : status,
+    }));
+    setPage(1);
+  }, []);
+
   const clearFilters = useCallback(() => {
     setFilters({
       requester: "",
@@ -2697,6 +2705,8 @@ export default function Booking() {
       vehicle_id: "",
     });
   }, []);
+
+  const activeStatus = filters.status || "ALL";
 
   const toggleExpandedBooking = useCallback((bookingId) => {
     setExpandedBookingId((current) => (current === bookingId ? "" : bookingId));
@@ -2843,14 +2853,14 @@ export default function Booking() {
           </div>
         </div>
         <div className="booking-mobile-top-actions">
-          <button
+          {/* <button
             type="button"
             className="booking-mobile-toolbar-button booking-mobile-filter-button"
             onClick={() => setIsMobileFilterOpen((current) => !current)}
           >
             <FilterIcon className="booking-mobile-toolbar-icon" />
             <span>ตัวกรอง</span>
-          </button>
+          </button> */}
           {canCreateBookings && (
             <button
               type="button"
@@ -2910,13 +2920,18 @@ export default function Booking() {
           <div className="booking-mobile-shell booking-mobile-only block md:hidden">
             <div className="booking-mobile-status-scroller">
               {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
-                <span
+                <button
                   key={item.status}
-                  className={`booking-status-count ${item.className} booking-mobile-status-count`}
+                  type="button"
+                  className={`booking-status-count ${item.className} booking-mobile-status-count ${
+                    activeStatus === item.status ? "is-active" : ""
+                  }`}
+                  aria-pressed={activeStatus === item.status}
+                  onClick={() => handleStatusChipClick(item.status)}
                 >
                   <span className="booking-status-count-label">{item.label}</span>
                   <span className="booking-status-count-value">{bookingStatusCounts[item.status] || 0}</span>
-                </span>
+                </button>
               ))}
             </div>
 
@@ -2941,13 +2956,18 @@ export default function Booking() {
           <div className="booking-table-toolbar booking-desktop-only hidden md:flex">
             <div className="booking-status-counts">
               {BOOKING_STATUS_COUNT_ITEMS.map((item) => (
-                <span
+                <button
                   key={item.status}
-                  className={`booking-status-count ${item.className}`}
+                  type="button"
+                  className={`booking-status-count ${item.className} ${
+                    activeStatus === item.status ? "is-active" : ""
+                  }`}
+                  aria-pressed={activeStatus === item.status}
+                  onClick={() => handleStatusChipClick(item.status)}
                 >
                   <span className="booking-status-count-label">{item.label}</span>
                   <span className="booking-status-count-value">{bookingStatusCounts[item.status] || 0}</span>
-                </span>
+                </button>
               ))}
             </div>
 

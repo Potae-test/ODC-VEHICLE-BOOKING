@@ -3329,6 +3329,8 @@ label {
   font-size: 18px;
   font-weight: 800;
   white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .booking-status-count.slate {
@@ -3365,6 +3367,15 @@ label {
   background: #fee2e2;
   border-color: #fecaca;
   color: #dc2626;
+}
+
+.booking-status-count.is-active {
+  box-shadow: 0 0 0 2px rgba(20, 85, 200, 0.18);
+  transform: translateY(-1px);
+}
+
+.booking-status-count.is-active .booking-status-count-label {
+  font-weight: 800;
 }
 
 .booking-status-count-label,
@@ -4346,6 +4357,11 @@ label {
   padding: 0;
 }
 
+.booking-mobile-icon-button:hover:not(:disabled) {
+  background: #0f429f;
+  color: #ffffff;
+}
+
 .booking-mobile-toolbar-icon {
   width: 18px;
   height: 18px;
@@ -4353,7 +4369,7 @@ label {
 
 .booking-mobile-top-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* grid-template-columns: repeat(2, minmax(0, 1fr)); */
   gap: 10px;
 }
 
@@ -4395,7 +4411,7 @@ label {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 4px;
   scrollbar-width: none;
 }
 
@@ -4628,6 +4644,209 @@ label {
 @media (max-width: 767px) {
   .booking-desktop-only {
     display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .driver-queue-logs-mobile {
+    display: grid;
+    gap: 12px;
+  }
+
+  .driver-queue-logs-mobile-state-card {
+    border: 1px solid #dbe6f3;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    padding: 14px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .driver-queue-logs-mobile-card {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .driver-queue-logs-mobile-card-summary {
+    width: 100%;
+    min-height: 56px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    box-shadow: none;
+  }
+
+  .driver-queue-logs-mobile-card-summary-index {
+    font-size: 15px;
+    font-weight: 700;
+    color: #64748b;
+    white-space: nowrap;
+  }
+
+  .driver-queue-logs-mobile-card-summary-booking {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .driver-queue-logs-mobile-card-summary-side {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .driver-queue-logs-mobile-card-summary-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .driver-queue-logs-mobile-card-expand-icon {
+    width: 16px;
+    height: 16px;
+    color: #64748b;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .driver-queue-logs-mobile-card-expand-icon.is-expanded {
+    transform: rotate(180deg);
+  }
+
+  .driver-queue-logs-mobile-card-expanded {
+    display: grid;
+    gap: 10px;
+    padding-top: 10px;
+    margin-top: 2px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .driver-queue-logs-mobile-card .booking-mobile-card-body {
+    gap: 8px;
+  }
+
+  .driver-queue-logs-mobile-card .booking-mobile-card-info-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .driver-queue-logs-mobile-card .booking-mobile-card-info-label {
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+
+  .driver-queue-logs-mobile-card .booking-mobile-card-info-copy b {
+    font-size: 15px;
+  }
+
+  .driver-queue-log-expanded-detail {
+    display: grid;
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .driver-queue-log-detail-item {
+    display: grid;
+    gap: 3px;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #f8fafc;
+  }
+
+  .driver-queue-log-detail-item span {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    line-height: 1.25;
+  }
+
+  .driver-queue-log-detail-item b {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  .driver-queue-log-flow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .driver-queue-log-flow span {
+    display: inline-flex;
+    min-width: 26px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: #eaf2ff;
+    color: #1455c8;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .driver-queue-logs-mobile .mobile-page-section {
+    margin-bottom: 0;
+  }
+
+  .driver-queue-logs-mobile-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .driver-queue-logs-mobile-pagination button {
+    min-height: 35px;
+    min-width: 38px;
+    padding: 0 10px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  }
+
+  .driver-queue-logs-mobile-pagination button.active-page {
+    border-color: #1455c8;
+    background: #1455c8;
+    color: #ffffff;
+  }
+
+  .driver-queue-logs-mobile-pagination button:disabled {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
   }
 }
 
@@ -5662,6 +5881,7 @@ label {
   .calendar-page .page-header,
   .calendar-page .form-card {
     margin-bottom: 0;
+    margin-top: 10px;
   }
 
   .calendar-page .page-header,
@@ -6282,4 +6502,27 @@ label {
   .booking-cancellation-mobile {
     width: 100%;
   }
+}
+/* Mobile Filter Placeholder */
+
+.mobile-filter-input::placeholder {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+}
+
+.mobile-filter-input {
+  font-size: 13px !important;
+}
+
+.mobile-filter-input::-webkit-input-placeholder {
+  font-size: 13px !important;
+}
+
+.mobile-filter-input::-moz-placeholder {
+  font-size: 13px !important;
+}
+
+.mobile-filter-input:-ms-input-placeholder {
+  font-size: 13px !important;
 }

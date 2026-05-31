@@ -327,6 +327,23 @@ function DetailIcon({ className = "" }) {
   );
 }
 
+function formatThaiDateTimeFull(value) {
+  const date = new Date(value);
+
+  return date.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })
+  + " เวลา "
+  + date.toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).replace(":", ".")
+  + " น.";
+}
+
 function SummaryPagination({ page, total, onChange, compact = false }) {
   if (total <= 1) return null;
 
@@ -1022,7 +1039,7 @@ export default function DriverSummary() {
           >
             {isMobileFilterOpen ? (
               <div className="grid gap-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="driver-summary-mobile-range-grid">
                   {[
                     ["today", "วันนี้"],
                     ["week", "สัปดาห์นี้"],
@@ -1032,11 +1049,12 @@ export default function DriverSummary() {
                     <button
                       key={value}
                       type="button"
-                      className={`mobile-action-button border ${
-                        rangeMode === value
-                          ? "border-blue-600 bg-blue-600 text-white"
-                          : "!border-slate-300 !bg-white !text-slate-700"
-                      }`}
+                      className={[
+                        "driver-summary-mobile-range-button",
+                        rangeMode === value ? "driver-summary-mobile-range-button--active" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={() => setRangeMode(value)}
                     >
                       {label}
@@ -1045,32 +1063,32 @@ export default function DriverSummary() {
                 </div>
 
                 <div className="grid gap-2">
-                  <label className="grid gap-1">
+                  <label className="grid gap-1.5">
                     <span className="text-[12px] font-semibold text-slate-600">วันที่เริ่ม</span>
                     <input
                       type="date"
                       value={customStart}
                       disabled={rangeMode !== "custom"}
                       onChange={(e) => setCustomStart(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                      className="driver-summary-mobile-input"
                     />
                   </label>
-                  <label className="grid gap-1">
+                  <label className="grid gap-1.5">
                     <span className="text-[12px] font-semibold text-slate-600">วันที่สิ้นสุด</span>
                     <input
                       type="date"
                       value={customEnd}
                       disabled={rangeMode !== "custom"}
                       onChange={(e) => setCustomEnd(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                      className="driver-summary-mobile-input"
                     />
                   </label>
-                  <label className="grid gap-1">
+                  <label className="grid gap-1.5">
                     <span className="text-[12px] font-semibold text-slate-600">คนขับ</span>
                     <select
                       value={selectedDriver}
                       onChange={(e) => setSelectedDriver(e.target.value)}
-                      className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      className="driver-summary-mobile-select"
                     >
                       <option value="ALL">คนขับทั้งหมด</option>
                       {driverOptions.map((driver) => (
@@ -1082,13 +1100,13 @@ export default function DriverSummary() {
                   </label>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <span className="text-[12px] font-semibold text-slate-500">
-                    ช่วงที่เลือก {selectedRange.label}
+                    ช่วงที่เลือก: {selectedRange.label}
                   </span>
                   <button
                     type="button"
-                    className="mobile-filter-button"
+                    className="mobile-filter-button ml-auto"
                     onClick={() => {
                       setRangeMode("today");
                       setCustomStart(toDateInputValue(startOfMonth(new Date())));
@@ -1105,7 +1123,8 @@ export default function DriverSummary() {
 
           <MobilePageSection
             title="รายการสรุปคนขับ"
-            subtitle={`${selectedRange.label}: ${formatThaiDateTime(selectedRange.start)} - ${formatThaiDateTime(selectedRange.end)}`}
+            subtitle={`${selectedRange.label}: ${formatThaiDateTimeFull(selectedRange.start)} - ${formatThaiDateTimeFull(selectedRange.end)}`}
+
             actions={
               <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
                 หน้า {tablePage}/{totalTablePages}

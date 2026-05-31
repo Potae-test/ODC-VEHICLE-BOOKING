@@ -2,6 +2,10 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-05-31
+- Added a dedicated mobile-only queue management layout to `src/pages/DriverQueue.jsx` with a header card, current queue card, and compact queue list cards while preserving the existing desktop table, drag/drop, queue save, reset, and SweetAlert workflows unchanged.
+- Added mobile-only queue card styling in `src/styles/main.css` for the DriverQueue mobile layout, including current/next/inactive accent borders and compact action buttons, without changing desktop queue styling.
+
 ## 2026-05-29
 - Redesigned the mobile view of `src/pages/DriverUnavailable.jsx` with the shared booking-style mobile header, summary grid, collapsible filter card, and compact expandable cards while keeping the desktop table layout and all unavailable-workflow logic unchanged.
 - Removed the leftover legacy mobile card list from the desktop branch of `src/pages/DriverUnavailable.jsx` so the desktop view stays on the original table layout while mobile uses only the new compact card stack.

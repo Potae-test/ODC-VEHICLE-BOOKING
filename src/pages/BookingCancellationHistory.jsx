@@ -647,33 +647,101 @@ export default function BookingCancellationHistory() {
                       value={filters.requester}
                       onChange={(value) => setFilter("requester", value)}
                       placeholder="ค้นหาชื่อผู้จอง"
-                      labelClassName="text-[15px] font-semibold text-slate-700"
-                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
+                      labelClassName="text-[15px] font-semibold text-slate-600"
+                      inputClassName="
+                          mobile-filter-input
+                          h-10
+                          w-full
+                          rounded-xl
+                          border
+                          border-slate-200
+                          bg-white
+                          px-3
+                          text-[13px]
+                          text-slate-800
+                          shadow-sm
+                          outline-none
+                          transition
+                          focus:border-blue-400
+                          focus:ring-2
+                          focus:ring-blue-100
+                        "
+                      /> 
                     <FilterField
                       label="ปลายทาง"
                       value={filters.destination}
                       onChange={(value) => setFilter("destination", value)}
                       placeholder="ค้นหาปลายทาง"
-                      labelClassName="text-[15px] font-semibold text-slate-700"
-                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
+                      labelClassName="text-[15px] font-semibold text-slate-600"
+                      inputClassName="
+                          mobile-filter-input
+                          h-10
+                          w-full
+                          rounded-xl
+                          border
+                          border-slate-200
+                          bg-white
+                          px-3
+                          text-[13px]
+                          text-slate-800
+                          shadow-sm
+                          outline-none
+                          transition
+                          focus:border-blue-400
+                          focus:ring-2
+                          focus:ring-blue-100
+                        "
+                      /> 
                     <FilterField
                       label="เหตุผล"
                       value={filters.reason}
                       onChange={(value) => setFilter("reason", value)}
                       placeholder="ค้นหาเหตุผล"
-                      labelClassName="text-[15px] font-semibold text-slate-700"
-                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
+                      labelClassName="text-[15px] font-semibold text-slate-600"
+                      inputClassName="
+                          mobile-filter-input
+                          h-10
+                          w-full
+                          rounded-xl
+                          border
+                          border-slate-200
+                          bg-white
+                          px-3
+                          text-[13px]
+                          text-slate-800
+                          shadow-sm
+                          outline-none
+                          transition
+                          focus:border-blue-400
+                          focus:ring-2
+                          focus:ring-blue-100
+                        "
+                      /> 
                     <FilterField
                       label="ผู้ยกเลิก"
                       value={filters.cancelled_by}
                       onChange={(value) => setFilter("cancelled_by", value)}
                       placeholder="ค้นหาผู้ยกเลิก"
-                      labelClassName="text-[15px] font-semibold text-slate-700"
-                      inputClassName="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition placeholder:text-[12px] placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
+                      labelClassName="text-[15px] font-semibold text-slate-600"
+                      inputClassName="
+                          mobile-filter-input
+                          h-10
+                          w-full
+                          rounded-xl
+                          border
+                          border-slate-200
+                          bg-white
+                          px-3
+                          text-[13px]
+                          text-slate-800
+                          shadow-sm
+                          outline-none
+                          transition
+                          focus:border-blue-400
+                          focus:ring-2
+                          focus:ring-blue-100
+                        "
+                      /> 
                   </MobileGrid>
 
                   <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">

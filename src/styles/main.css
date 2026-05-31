@@ -519,7 +519,7 @@
 
   .driver-summary-mobile-compact-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
 
@@ -878,6 +878,59 @@
   .driver-jobs-mobile .page-header {
     display: none !important;
   }
+
+  .driver-summary-mobile-range-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .driver-summary-mobile-range-button {
+    min-height: 36px;
+    padding: 0 6px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .driver-summary-mobile-range-button--active {
+    border-color: #1455c8;
+    background: #1455c8;
+    color: #ffffff;
+  }
+
+  .driver-summary-mobile-input,
+  .driver-summary-mobile-select {
+    width: 100%;
+    min-height: 42px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 13px !important;
+    padding: 0 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .driver-summary-mobile-input::placeholder {
+    font-size: 10px !important;
+  }
+
+  .driver-summary-mobile-input:focus,
+  .driver-summary-mobile-select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+  }
+
+  .driver-summary-mobile-input:disabled {
+    background: #f8fafc;
+    color: #64748b;
+  }
 }
 
 @media (min-width: 768px) {
@@ -887,5 +940,186 @@
 
   .driver-jobs-desktop {
     display: block !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .driver-queue-mobile {
+    display: grid;
+    gap: 12px;
+  }
+
+  .driver-queue-mobile-state-card {
+    border: 1px solid #dbe6f3;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    padding: 14px;
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .driver-queue-mobile-current-card {
+    border: 1px solid #dbe6f3;
+    border-left: 4px solid #16a34a;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .driver-queue-mobile-current-name {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #0f172a;
+  }
+
+  .driver-queue-mobile-current-meta,
+  .driver-queue-mobile-current-next {
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .driver-queue-mobile-current-next span {
+    color: #1455c8;
+    font-weight: 800;
+  }
+
+  .driver-queue-mobile-helper {
+    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .driver-queue-mobile-card {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #dbe6f3;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    padding: 14px;
+  }
+
+  .driver-queue-mobile-card--current {
+    border-left: 4px solid #16a34a;
+  }
+
+  .driver-queue-mobile-card--next {
+    border-left: 4px solid #2563eb;
+  }
+
+  .driver-queue-mobile-card--inactive {
+    border-left: 4px solid #94a3b8;
+  }
+
+  .driver-queue-mobile-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .driver-queue-mobile-card-title {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.25;
+    color: #0f172a;
+  }
+
+  .driver-queue-mobile-card-subtitle {
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .driver-queue-mobile-card-body {
+    display: grid;
+    gap: 8px;
+  }
+
+  .driver-queue-mobile-card-label {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+  }
+
+  .driver-queue-mobile-card-value {
+    font-size: 13px;
+    line-height: 1.45;
+    color: #0f172a;
+    word-break: break-word;
+  }
+
+  .driver-queue-mobile-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .driver-queue-mobile-action-button {
+    min-height: 38px;
+    border-radius: 12px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 0 10px;
+  }
+
+  .driver-queue-mobile-action-button:hover:not(:disabled) {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1455c8;
+  }
+
+  .driver-queue-mobile-action-button--full {
+    width: 100%;
+  }
+
+  .driver-queue-mobile-action-button--warning {
+    border-color: #fcd34d;
+    background: #fff7ed;
+    color: #b45309;
+  }
+
+  .driver-queue-mobile-action-button--warning:hover:not(:disabled) {
+    border-color: #f59e0b;
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .driver-queue-mobile-action-button--success {
+    border-color: #86efac;
+    background: #f0fdf4;
+    color: #15803d;
+  }
+
+  .driver-queue-mobile-action-button--success:hover:not(:disabled) {
+    border-color: #4ade80;
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .driver-queue-mobile .mobile-filter-button,
+  .driver-queue-mobile .warning-button {
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .driver-queue-mobile .mobile-page-section {
+    margin-bottom: 0;
   }
 }

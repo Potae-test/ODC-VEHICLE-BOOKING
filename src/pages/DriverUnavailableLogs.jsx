@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDriverUnavailableLogs } from "../api";
+import MobileGrid from "../layouts/MobileGrid";
+import MobilePageHeader from "../layouts/MobilePageHeader";
+import MobilePageSection from "../layouts/MobilePageSection";
+import useIsMobile from "../hooks/useIsMobile";
 import { formatThaiDateTime } from "../utils/date";
 import { showError } from "../utils/alert";
+
+
+const LOGS_PER_PAGE = 5;
 
 function sortLatestFirst(items) {
   return [...items].sort((a, b) => {
@@ -50,11 +57,68 @@ function getActionLabel(action) {
   return action || "-";
 }
 
+function getActionTone(action) {
+  const normalized = String(action || "").trim().toUpperCase();
+  if (normalized === "CREATED") return "green";
+  if (normalized === "UPDATED") return "blue";
+  if (normalized === "CANCELLED") return "red";
+  return "gray";
+}
+
+function getLogSummary(log) {
+  const nextValue = summarizeValue(log.new_value);
+  return nextValue !== "-" ? nextValue : summarizeValue(log.old_value);
+}
+
+function MobilePagination({ page, total, onChange }) {
+  if (total <= 1) return null;
+
+  return (
+    <div className="mt-3 flex items-center justify-center gap-1.5">
+      <button
+        type="button"
+        className="inline-flex h-9 min-w-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={page <= 1}
+        onClick={() => onChange((current) => Math.max(1, current - 1))}
+      >
+        ก่อนหน้า
+      </button>
+
+      {Array.from({ length: total }).map((_, index) => (
+        <button
+          key={index}
+          type="button"
+          className={[
+            "inline-flex h-9 min-w-9 items-center justify-center rounded-xl border px-3 text-[13px] font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50",
+            page === index + 1
+              ? "border-blue-600 bg-blue-600 text-white"
+              : "border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:bg-blue-50",
+          ].join(" ")}
+          onClick={() => onChange(index + 1)}
+        >
+          {index + 1}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        className="inline-flex h-9 min-w-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[13px] font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={page >= total}
+        onClick={() => onChange((current) => Math.min(total, current + 1))}
+      >
+        ถัดไป
+      </button>
+    </div>
+  );
+}
+
 export default function DriverUnavailableLogs() {
+  const isMobile = useIsMobile();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   async function loadData(options = {}) {
     try {
@@ -82,6 +146,146 @@ export default function DriverUnavailableLogs() {
   }, []);
 
   const visibleLogs = useMemo(() => sortLatestFirst(Array.isArray(logs) ? logs : []), [logs]);
+  const summaryCounts = useMemo(() => {
+    return visibleLogs.reduce(
+      (counts, log) => {
+        counts.totalCount += 1;
+        const action = String(log.action || "").trim().toUpperCase();
+        if (action === "CREATED") counts.createdCount += 1;
+        if (action === "UPDATED") counts.updatedCount += 1;
+        if (action === "CANCELLED") counts.cancelledCount += 1;
+        return counts;
+      },
+      {
+        totalCount: 0,
+        createdCount: 0,
+        updatedCount: 0,
+        cancelledCount: 0,
+      }
+    );
+  }, [visibleLogs]);
+  const historyPages = useMemo(() => Math.max(1, Math.ceil(visibleLogs.length / LOGS_PER_PAGE)), [visibleLogs.length]);
+  const pageItems = useMemo(() => visibleLogs.slice((page - 1) * LOGS_PER_PAGE, page * LOGS_PER_PAGE), [visibleLogs, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [visibleLogs]);
+
+  if (isMobile) {
+    const pageStart = visibleLogs.length === 0 ? 0 : (page - 1) * LOGS_PER_PAGE + 1;
+    const pageEnd = Math.min(page * LOGS_PER_PAGE, visibleLogs.length);
+
+    return (
+      <div className="driver-unavailable-logs-mobile mt-[57px] flex w-full flex-col gap-3 pb-6">
+        <MobilePageHeader
+          title="ประวัติการปฏิบัติงาน"
+          subtitle="บันทึกการสร้าง แก้ไข และยกเลิกวันที่ไม่ปฏิบัติงาน"
+          actions={
+            <button
+              type="button"
+              className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+              disabled={refreshing || loading}
+              onClick={() => loadData({ refreshOnly: true })}
+            >
+              <span>{refreshing ? "กำลังรีเฟรช..." : "รีเฟรช"}</span>
+            </button>
+          }
+        />
+
+        {/* <MobilePageSection title="สรุปภาพรวม" subtitle="สรุปจำนวนรายการตามประเภทการเปลี่ยนแปลง">
+          <MobileGrid columns={{ base: 2 }} gap="sm">
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-[13px] font-semibold text-slate-500">ทั้งหมด</div>
+              <div className="mt-1 text-[24px] font-bold text-slate-900">{summaryCounts.totalCount}</div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-[13px] font-semibold text-emerald-600">สร้าง</div>
+              <div className="mt-1 text-[24px] font-bold text-emerald-600">{summaryCounts.createdCount}</div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-[13px] font-semibold text-blue-600">แก้ไข</div>
+              <div className="mt-1 text-[24px] font-bold text-blue-600">{summaryCounts.updatedCount}</div>
+            </div>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-[13px] font-semibold text-red-600">ยกเลิก</div>
+              <div className="mt-1 text-[24px] font-bold text-red-600">{summaryCounts.cancelledCount}</div>
+            </div>
+          </MobileGrid>
+        </MobilePageSection> */}
+
+        <MobilePageSection
+          title="ประวัติรายการ"
+          subtitle={
+            visibleLogs.length > 0
+              ? `แสดง ${pageStart}-${pageEnd} จากทั้งหมด ${visibleLogs.length} รายการ`
+              : "ไม่พบประวัติการปฏิบัติงาน"
+          }
+          actions={
+            <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+              หน้า {page}/{historyPages}
+            </span>
+          }
+        >
+          {loading ? (
+            <div className="mobile-empty-state">กำลังโหลดข้อมูล...</div>
+          ) : error ? (
+            <div className="mobile-empty-state">
+              <span className="text-sm font-medium text-red-700">{error}</span>
+            </div>
+          ) : pageItems.length === 0 ? (
+            <div className="mobile-empty-state">ไม่พบประวัติการปฏิบัติงาน</div>
+          ) : (
+            <div className="grid gap-[10px]">
+              {pageItems.map((log) => (
+                <article key={log.log_id} className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-[16px] font-bold leading-5 text-slate-900">
+                        {log.driver_name || "-"}
+                      </div>
+                      <div className="mt-1 text-[12px] font-semibold text-slate-500">ผู้ปฏิบัติงาน</div>
+                    </div>
+                    <span
+                      className={[
+                        "inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-bold",
+                        getActionTone(log.action) === "green"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : getActionTone(log.action) === "blue"
+                            ? "bg-blue-100 text-blue-700"
+                            : getActionTone(log.action) === "red"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-slate-100 text-slate-700",
+                      ].join(" ")}
+                    >
+                      {getActionLabel(log.action)}
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                    <div className="text-[12px] font-semibold text-slate-500">รายละเอียด</div>
+                    <div className="mt-1 text-[14px] font-medium leading-5 text-slate-900">{getLogSummary(log)}</div>
+                  </div>
+
+                  <div className="grid gap-1 text-[13px] text-slate-700">
+                    <div>
+                      <span className="font-semibold text-slate-500">วันที่:</span>{" "}
+                      <span>{formatThaiDateTime(log.created_at)}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-500">ผู้บันทึก:</span>{" "}
+                      <span>{log.created_by || "-"}</span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <MobilePagination page={page} total={historyPages} onChange={setPage} />
+        </MobilePageSection>
+      </div>
+    );
+  }
 
   return (
     <div>

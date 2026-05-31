@@ -21,14 +21,14 @@ import thLocale from "@fullcalendar/core/locales/th";
 
 const CALENDAR_MESSAGES = {
  th: {
-    today: "วันนี้",
-    previous: "ก่อนหน้า",
-    next: "ถัดไป",
+    today: "📅 วันนี้",
+    previous: "◀ ก่อนหน้า",
+    next: "ถัดไป ▶",
   },
   en: {
-    today: "Today",
-    previous: "Previous",
-    next: "Next",
+    today: "📅 Today",
+    previous: "◀ Previous",
+    next: "Next ▶",
   },
   month: "เดือน",
   week: "สัปดาห์",
@@ -1512,28 +1512,36 @@ export default function CalendarPage() {
           >
             {canViewActiveDriversSummary && (
               <div className="calendar-summary-card flex min-w-0 flex-col gap-3 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm sm:gap-4 sm:p-5">
-                <div className="flex flex-col gap-2.5 sm:gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 sm:h-12 sm:w-12">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 sm:h-12 sm:w-12">
                       <UsersIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                     </span>
-                    <h4 className="m-0 text-[21px] font-bold leading-tight text-blue-900 sm:text-[28px]">พขร. พร้อมปฏิบัติงาน</h4>
+
+                    <h4 className="m-0 truncate text-[21px] font-bold leading-tight text-blue-900 sm:text-[28px]">
+                      พขร. พร้อมปฏิบัติงาน
+                    </h4>
                   </div>
-                  <span className="status green calendar-summary-chip border border-emerald-200 text-[16px] font-bold sm:text-[22px]">
+
+                  <span className="status green calendar-summary-chip shrink-0 border border-emerald-200 text-[14px] font-bold sm:text-[22px]">
                     จำนวน {activeDriversNow.length} คน
                   </span>
                 </div>
+
                 <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                   {activeDriversNow.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {activeDriversNow.map((driver) => (
-                        <span key={driver.user_id} className="status blue calendar-summary-chip border border-blue-200 text-[16px] font-bold sm:text-[21px]">
-                          {driver.name}
-                        </span>
-                      ))}
-                    </div>
+                    activeDriversNow.map((driver) => (
+                      <span
+                        key={driver.user_id}
+                        className="status blue calendar-summary-chip border border-blue-200 text-[16px] font-bold sm:text-[21px]"
+                      >
+                        {driver.name}
+                      </span>
+                    ))
                   ) : (
-                    <span className="text-[17px] text-slate-500 sm:text-[22px]">ไม่มีคนขับที่พร้อมรับงานในตอนนี้</span>
+                    <span className="text-[17px] text-slate-500 sm:text-[22px]">
+                      ไม่มีคนขับที่พร้อมรับงานในตอนนี้
+                    </span>
                   )}
                 </div>
               </div>
