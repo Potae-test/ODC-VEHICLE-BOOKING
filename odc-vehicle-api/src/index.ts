@@ -60,6 +60,7 @@ const postRouteActions: Record<string, string> = {
   "/api/checkDriverUnavailable": "checkDriverUnavailable",
   "/api/updateDriverQueue": "updateDriverQueue",
   "/api/updateDriverQueueMaster": "updateDriverQueueMaster",
+  "/api/deleteDriverQueueLog": "deleteDriverQueueLog",
   "/api/resetDriverQueueState": "resetDriverQueueState",
   "/api/resetDriverQueuePointer": "resetDriverQueuePointer",
   "/api/setCurrentDriverQueuePointer": "setCurrentDriverQueuePointer",

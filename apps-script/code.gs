@@ -116,6 +116,7 @@ function doPost(e) {
     }
     if (action === "updateDriverQueue") return updateDriverQueue(body.data);
     if (action === "updateDriverQueueMaster") return updateDriverQueueMaster(body.data);
+    if (action === "deleteDriverQueueLog") return deleteDriverQueueLog(body.data || body);
     if (action === "resetDriverQueueState") return resetDriverQueueState(body.data);
     if (action === "resetDriverQueuePointer") return resetDriverQueuePointer(body.data);
     if (action === "setCurrentDriverQueuePointer") return setCurrentDriverQueuePointer(body.data);
@@ -4342,11 +4343,72 @@ function getDriverQueueLogs() {
     });
   }
 
+  const data = rows.map((row, index) => {
+    const mappedRow = rowsToObjects(headers, [row])[0] || {};
+
+    return {
+      ...mappedRow,
+      row_number: index + 2,
+    };
+  });
+
   return jsonOutput({
     success: true,
     total: rows.length,
-    data: rowsToObjects(headers, rows),
+    data,
   });
+}
+
+function deleteDriverQueueLog(data) {
+  const sheet = ensureDriverQueueLogsSheet();
+  const payload = data || {};
+  const normalized = payload && payload.data ? payload.data : payload;
+  Logger.log("RAW PAYLOAD = " + JSON.stringify(payload));
+  Logger.log("NORMALIZED DATA = " + JSON.stringify(normalized));
+  Logger.log("SHEET NAME = " + sheet.getName());
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) {
+    throw new Error("ไม่พบรายการที่ต้องการลบ");
+  }
+
+  const headers = values[0].map((h) => String(h || "").trim());
+  Logger.log(JSON.stringify(headers));
+
+  const logIdIndex = headers.indexOf("log_id");
+  if (logIdIndex < 0) {
+    throw new Error("ไม่พบคอลัมน์ log_id");
+  }
+
+  const targetId = String(
+    normalized.log_id ||
+    normalized.id ||
+    normalized.queue_log_id ||
+    ""
+  ).trim();
+  Logger.log("TARGET ID = " + targetId);
+
+  for (let i = 1; i < values.length; i++) {
+    const currentId = String(values[i][logIdIndex] || "").trim();
+    Logger.log(
+      "COMPARE => current=" +
+      currentId +
+      " target=" +
+      targetId
+    );
+
+    if (currentId === targetId) {
+      Logger.log("MATCH FOUND ROW = " + (i + 1));
+      sheet.deleteRow(i + 1);
+
+      return jsonOutput({
+        success: true,
+        message: "ลบประวัติคิวคนขับสำเร็จ",
+      });
+    }
+  }
+
+  throw new Error(`ไม่พบรายการที่ต้องการลบ (${targetId})`);
 }
 
 function getNextQueueOrderFromState_(queueRows, lastAssignedQueueOrder) {

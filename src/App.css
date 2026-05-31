@@ -4676,11 +4676,16 @@ label {
     border: 0;
     background: transparent;
     display: grid;
-    grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: 40px 90px minmax(0, 1fr) auto;
     align-items: center;
     gap: 8px;
     text-align: left;
     box-shadow: none;
+  }
+
+  .driver-queue-logs-mobile-card.is-expanded .driver-queue-logs-mobile-card-summary,
+  .driver-queue-logs-mobile-card.is-expanded .driver-queue-logs-mobile-card-summary:hover {
+    background: #1455c8;
   }
 
   .driver-queue-logs-mobile-card-summary-index {
@@ -4698,6 +4703,15 @@ label {
     font-size: 15px;
     font-weight: 700;
     color: #0f172a;
+  }
+
+  .driver-queue-logs-mobile-card-date,
+  .driver-queue-logs-mobile-card-user {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #0f2f5c;
   }
 
   .driver-queue-logs-mobile-card-summary-side {
@@ -4729,6 +4743,13 @@ label {
     flex-shrink: 0;
   }
 
+  .driver-queue-logs-mobile-card.is-expanded .booking-mobile-card-summary-index,
+  .driver-queue-logs-mobile-card.is-expanded .driver-queue-logs-mobile-card-date,
+  .driver-queue-logs-mobile-card.is-expanded .driver-queue-logs-mobile-card-user,
+  .driver-queue-logs-mobile-card.is-expanded .driver-queue-logs-mobile-card-expand-icon {
+    color: #ffffff;
+  }
+
   .driver-queue-logs-mobile-card-expand-icon.is-expanded {
     transform: rotate(180deg);
   }
@@ -4739,6 +4760,21 @@ label {
     padding-top: 10px;
     margin-top: 2px;
     border-top: 1px solid #e2e8f0;
+  }
+
+  .driver-queue-log-delete-button {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #fecaca;
+    background: #fff;
+    color: #dc2626;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .driver-queue-log-delete-button:hover:not(:disabled) {
+    background: #fef2f2;
   }
 
   .driver-queue-logs-mobile-card .booking-mobile-card-body {
@@ -6525,4 +6561,19 @@ label {
 
 .mobile-filter-input:-ms-input-placeholder {
   font-size: 13px !important;
+}
+@media (max-width: 767px) {
+  .driver-queue-log-expanded-detail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  .driver-queue-log-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
 }

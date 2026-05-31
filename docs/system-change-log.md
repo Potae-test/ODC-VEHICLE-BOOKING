@@ -3,6 +3,11 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-05-31
+- Fixed `deleteDriverQueueLog` in `apps-script/code.gs` to log the delete payload and header row, then match the Google Sheet `log_id` column by exact value only, using the actual `DriverQueueLogs` sheet and throwing the requested Thai not-found error when no row matches.
+- Hardened `DriverQueueLogs` delete debugging by logging the selected row payload and delete identifier in `src/pages/DriverQueueLogs.jsx` while keeping the current delete flow unchanged.
+- Hardened `getDriverQueueLogs` and `deleteDriverQueueLog` in `apps-script/code.gs` so each queue log row now returns `row_number` and delete can match by `log_id`, `id`, `queue_log_id`, or direct sheet row number before returning the existing Thai success/error messages.
+- Added mobile and desktop filters to `src/pages/DriverQueueLogs.jsx` for keyword, assign mode, and created-by searching, while keeping the existing sorting, pagination, refresh, and expanded-card behavior unchanged.
+- Added a mobile-only delete action inside expanded DriverQueueLogs cards and wired a new `deleteDriverQueueLog` API path through `src/api.js`, `apps-script/code.gs`, and `odc-vehicle-api/src/index.ts` so queue log rows can be removed without affecting the desktop layout.
 - Added a dedicated mobile-only queue management layout to `src/pages/DriverQueue.jsx` with a header card, current queue card, and compact queue list cards while preserving the existing desktop table, drag/drop, queue save, reset, and SweetAlert workflows unchanged.
 - Added mobile-only queue card styling in `src/styles/main.css` for the DriverQueue mobile layout, including current/next/inactive accent borders and compact action buttons, without changing desktop queue styling.
 

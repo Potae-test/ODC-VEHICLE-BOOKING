@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { getDriverQueueLogs } from "../api";
+import { deleteDriverQueueLog, getDriverQueueLogs } from "../api";
 import MobilePageHeader from "../layouts/MobilePageHeader";
 import MobilePageSection from "../layouts/MobilePageSection";
 import useIsMobile from "../hooks/useIsMobile";
 import { formatThaiDateTime } from "../utils/date";
-import { showError } from "../utils/alert";
+import { showConfirm, showError, showSuccess } from "../utils/alert";
 
 const MOBILE_ROWS_PER_PAGE = 5;
 
@@ -64,6 +64,30 @@ function getMobileSummaryLabel(mode) {
   return getAssignModeMobileLabel(mode);
 }
 
+function formatMobileShortDateTime(value) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "-";
+  }
+
+  return `${String(date.getDate()).padStart(2, "0")}/${String(
+    date.getMonth() + 1
+  ).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+const ASSIGN_MODE_OPTIONS = [
+  { value: "", label: "ทั้งหมด" },
+  { value: "AUTO_RECOMMENDED", label: "ระบบแนะนำ" },
+  { value: "MANUAL_OVERRIDE", label: "เลือกจริง" },
+  { value: "SKIPPED_UNAVAILABLE", label: "ข้ามคิว: ไม่ว่าง" },
+  { value: "SKIPPED_BUSY", label: "ข้ามคิว: มีงานทับ" },
+];
+
 function ChevronDownIcon({ className = "" }) {
   return (
     <svg
@@ -79,6 +103,41 @@ function ChevronDownIcon({ className = "" }) {
     >
       <path d="m6 9 6 6 6-6" />
     </svg>
+  );
+}
+
+function FilterField({
+  label,
+  value,
+  onChange,
+  placeholder = "",
+  type = "text",
+  as = "input",
+  options = [],
+  labelClassName = "text-[13px] font-semibold text-slate-600",
+  inputClassName = "h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[15px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100",
+}) {
+  return (
+    <label className="grid gap-1">
+      <span className={labelClassName}>{label}</span>
+      {as === "select" ? (
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClassName}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={inputClassName}
+        />
+      )}
+    </label>
   );
 }
 
@@ -107,6 +166,13 @@ export default function DriverQueueLogs() {
   const [error, setError] = useState("");
   const [expandedRowId, setExpandedRowId] = useState("");
   const [mobilePage, setMobilePage] = useState(1);
+  const [deletingId, setDeletingId] = useState("");
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    keyword: "",
+    assignMode: "",
+    createdBy: "",
+  });
 
   async function loadData(options = {}) {
     try {
@@ -134,7 +200,40 @@ export default function DriverQueueLogs() {
   }, []);
 
   const sortedLogs = useMemo(() => sortLatestFirst(Array.isArray(logs) ? logs : []), [logs]);
-  const visibleLogs = sortedLogs;
+  const filteredLogs = useMemo(() => {
+    const keyword = filters.keyword.trim().toLowerCase();
+    const assignMode = String(filters.assignMode || "").trim().toUpperCase();
+    const createdBy = filters.createdBy.trim().toLowerCase();
+
+    return sortedLogs.filter((log) => {
+      if (assignMode && String(log.assign_mode || "").trim().toUpperCase() !== assignMode) {
+        return false;
+      }
+
+      if (createdBy && !String(log.created_by || "").toLowerCase().includes(createdBy)) {
+        return false;
+      }
+
+      if (keyword) {
+        const haystack = [
+          log.booking_no,
+          log.booking_id,
+          log.recommended_driver_name,
+          log.assigned_driver_name,
+          log.reason,
+        ]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ");
+
+        if (!haystack.includes(keyword)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filters, sortedLogs]);
+  const visibleLogs = filteredLogs;
   const mobileTotalPages = useMemo(
     () => Math.max(1, Math.ceil(visibleLogs.length / MOBILE_ROWS_PER_PAGE)),
     [visibleLogs.length]
@@ -147,7 +246,7 @@ export default function DriverQueueLogs() {
   useEffect(() => {
     setExpandedRowId("");
     setMobilePage(1);
-  }, [visibleLogs]);
+  }, [filters, sortedLogs]);
 
   useEffect(() => {
     if (mobilePage > mobileTotalPages) {
@@ -155,12 +254,82 @@ export default function DriverQueueLogs() {
     }
   }, [mobilePage, mobileTotalPages]);
 
+  function setFilter(field, value) {
+    setFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function clearFilters() {
+    setFilters({
+      keyword: "",
+      assignMode: "",
+      createdBy: "",
+    });
+  }
+
+async function handleDeleteLog(log) {
+  console.log("DELETE LOG =", log);
+
+  const logId = String(
+    log.log_id ||
+    log.id ||
+    log.queue_log_id ||
+    log.row_number ||
+    ""
+  ).trim();
+
+  console.log("DELETE ID =", logId);
+
+  if (!logId) {
+    showError("ไม่พบรหัสรายการที่ต้องการลบ");
+    return;
+  }
+
+  const confirmed = await showConfirm("ต้องการลบประวัติคิวคนขับรายการนี้ใช่หรือไม่?");
+  if (!confirmed) return;
+
+  try {
+    setDeletingId(logId);
+
+    await deleteDriverQueueLog({
+      log_id: logId,
+      id: log.id || "",
+      queue_log_id: log.queue_log_id || "",
+      row_number: log.row_number || "",
+    });
+
+    setLogs((current) =>
+      current.filter((item) => {
+        const itemId = String(
+          item.log_id ||
+          item.id ||
+          item.queue_log_id ||
+          item.row_number ||
+          ""
+        ).trim();
+
+        return itemId !== logId;
+      })
+    );
+
+    setExpandedRowId("");
+    showSuccess("ลบรายการสำเร็จ");
+  } catch (err) {
+    showError(err.message || "ลบรายการไม่สำเร็จ");
+  } finally {
+    setDeletingId("");
+  }
+}
+
   const renderToneClass = (tone) => {
     if (tone === "blue") return "bg-blue-100 text-blue-700";
     if (tone === "amber") return "bg-amber-100 text-amber-700";
     if (tone === "green") return "bg-emerald-100 text-emerald-700";
     return "bg-slate-100 text-slate-700";
   };
+  const activeFilterCount = [filters.keyword, filters.assignMode, filters.createdBy].filter(Boolean).length;
 
   if (isMobile) {
     const mobileStart = visibleLogs.length === 0 ? 0 : (mobilePage - 1) * MOBILE_ROWS_PER_PAGE + 1;
@@ -189,6 +358,67 @@ export default function DriverQueueLogs() {
         ) : error ? (
           <div className="driver-queue-logs-mobile-state-card text-red-700">{error}</div>
         ) : (
+          <>
+          <MobilePageSection
+            title="ตัวกรองข้อมูล"
+            subtitle="ค้นหาประวัติคิวคนขับ"
+            actions={
+              <button
+                type="button"
+                onClick={() => setIsMobileFilterOpen((current) => !current)}
+                aria-expanded={isMobileFilterOpen}
+                className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+              >
+                <span>{isMobileFilterOpen ? "ซ่อนตัวกรอง" : "ตัวกรอง"}</span>
+              </button>
+            }
+          >
+            {isMobileFilterOpen ? (
+              <div className="booking-mobile-filter-panel">
+                <div className="booking-mobile-filter-panel-actions grid gap-3">
+                  <FilterField
+                    label="ค้นหา"
+                    value={filters.keyword}
+                    onChange={(value) => setFilter("keyword", value)}
+                    placeholder="ค้นหาเลขที่จอง ชื่อคนขับ เหตุผล"
+                    labelClassName="text-[15px] font-semibold text-slate-600"
+                    inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <FilterField
+                    label="รูปแบบ"
+                    value={filters.assignMode}
+                    onChange={(value) => setFilter("assignMode", value)}
+                    as="select"
+                    options={ASSIGN_MODE_OPTIONS}
+                    labelClassName="text-[15px] font-semibold text-slate-600"
+                    inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <FilterField
+                    label="ผู้บันทึก"
+                    value={filters.createdBy}
+                    onChange={(value) => setFilter("createdBy", value)}
+                    placeholder="ค้นหาผู้บันทึก"
+                    labelClassName="text-[15px] font-semibold text-slate-600"
+                    inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                  <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                    <span className="text-[13px] font-semibold text-slate-500">
+                      ตัวกรองที่ใช้งาน {activeFilterCount || 0}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="mobile-action-button border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                    >
+                      ล้างตัวกรอง
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </MobilePageSection>
+
           <MobilePageSection
             title="รายการบันทึกคิว"
             subtitle={`แสดง ${mobileStart}-${mobileEnd} จากทั้งหมด ${visibleLogs.length} รายการ`}
@@ -203,12 +433,11 @@ export default function DriverQueueLogs() {
             ) : (
               <div className="grid gap-[10px]">
                 {mobilePageItems.map((log, index) => {
-                  const bookingNo = log.booking_no || log.booking_id || "-";
                   const assignTone = getAssignModeTone(log.assign_mode);
-                  const summaryLabel = getMobileSummaryLabel(log.assign_mode);
                   const rowNumber = (mobilePage - 1) * MOBILE_ROWS_PER_PAGE + index + 1;
                   const rowKey = String(log.log_id || `${mobilePage}-${index}`);
                   const isExpanded = expandedRowId === rowKey;
+                  const isDeleting = deletingId === String(log.log_id || "");
                   const skippedDrivers = safeJsonSummary(log.skipped_drivers_json);
                   const queueBefore = log.queue_before_index ?? log.queue_before ?? "-";
                   const queueAfter = log.queue_after_index ?? log.queue_after ?? "-";
@@ -227,14 +456,20 @@ export default function DriverQueueLogs() {
                         }
                       >
                         <div className="booking-mobile-card-summary-index">#{rowNumber}</div>
-                        <div className="booking-mobile-card-summary-requester" title={log.driver_name || "-"}>
-                          {log.driver_name || "-"}
+                        <div
+                          className="driver-queue-logs-mobile-card-date"
+                          title={formatThaiDateTime(log.created_at)}
+                        >
+                          {formatMobileShortDateTime(log.created_at)}
                         </div>
-                        <div className="booking-mobile-card-summary-destination" title={summaryLabel}>
-                          {summaryLabel}
+                        <div
+                          className="driver-queue-logs-mobile-card-user"
+                          title={log.created_by || "-"}
+                        >
+                          {log.created_by || "-"}
                         </div>
                         <div className="booking-mobile-card-summary-side">
-                          <span className={`driver-queue-logs-mobile-card-summary-badge ${renderToneClass(assignTone)}`}>
+                            <span className={`driver-queue-logs-mobile-card-summary-badge ${renderToneClass(assignTone)}`}>
                             {getAssignModeMobileLabel(log.assign_mode)}
                           </span>
                           <ChevronDownIcon
@@ -289,6 +524,17 @@ export default function DriverQueueLogs() {
                           <div className="driver-queue-log-detail-item">
                             <span>ผู้บันทึก</span>
                             <b>{log.created_by || "-"}</b>
+                          </div>
+
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteLog(log)}
+                              disabled={isDeleting}
+                              className="driver-queue-log-delete-button"
+                            >
+                              {isDeleting ? "กำลังลบ..." : "ลบรายการ"}
+                            </button>
                           </div>
                         </div>
                       ) : null}
@@ -354,6 +600,7 @@ export default function DriverQueueLogs() {
               </button>
             </div>
           </MobilePageSection>
+          </>
         )}
       </div>
     );
@@ -377,6 +624,52 @@ export default function DriverQueueLogs() {
 
       {!loading && !error && (
         <div className="form-card">
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="text-[20px] font-bold text-slate-900">ตัวกรองข้อมูล</h3>
+                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                  ค้นหาตามเลขที่จอง คนขับ เหตุผล หรือผู้บันทึก
+                </p>
+              </div>
+              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-slate-600 shadow-sm">
+                ใช้งาน {activeFilterCount || 0} ตัวกรอง
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <FilterField
+                label="ค้นหา"
+                value={filters.keyword}
+                onChange={(value) => setFilter("keyword", value)}
+                placeholder="เลขที่จอง ชื่อคนขับ เหตุผล"
+              />
+              <FilterField
+                label="รูปแบบ"
+                value={filters.assignMode}
+                onChange={(value) => setFilter("assignMode", value)}
+                as="select"
+                options={ASSIGN_MODE_OPTIONS}
+              />
+              <FilterField
+                label="ผู้บันทึก"
+                value={filters.createdBy}
+                onChange={(value) => setFilter("createdBy", value)}
+                placeholder="ค้นหาผู้บันทึก"
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                ล้างตัวกรอง
+              </button>
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table>
               <thead>

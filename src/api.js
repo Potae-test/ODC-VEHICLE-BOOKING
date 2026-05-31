@@ -71,7 +71,9 @@ async function getCachedCollection(key, fetcher) {
 }
 
 async function apiRequest(action, options = {}) {
-  if (options.method === "POST") {
+  const isDeletePayload = action.startsWith("delete") && options && !options.method;
+
+  if (options.method === "POST" || isDeletePayload) {
     const json = await fetchJson(`${API_BASE_URL}/api/${action}`, {
       method: "POST",
       headers: {
@@ -79,7 +81,7 @@ async function apiRequest(action, options = {}) {
       },
       body: JSON.stringify({
         action,
-        data: options.body || {},
+        data: options.body || options || {},
       }),
     });
 
@@ -566,6 +568,10 @@ export async function getDriverQueueState(options = {}) {
 
 export async function getDriverQueueLogs(options = {}) {
   return apiRequest("getDriverQueueLogs", options);
+}
+
+export async function deleteDriverQueueLog(payload) {
+  return apiRequest("deleteDriverQueueLog", payload);
 }
 
 export async function updateDriverQueue(data) {

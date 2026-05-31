@@ -65,6 +65,46 @@ function getActionTone(action) {
   return "gray";
 }
 
+const ACTION_FILTER_OPTIONS = [
+  { value: "", label: "ทั้งหมด" },
+  { value: "CREATED", label: "สร้าง" },
+  { value: "UPDATED", label: "แก้ไข" },
+  { value: "CANCELLED", label: "ยกเลิก" },
+];
+
+function FilterField({
+  label,
+  value,
+  onChange,
+  placeholder = "",
+  as = "input",
+  options = [],
+  labelClassName = "text-[13px] font-semibold text-slate-600",
+  inputClassName = "h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[15px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100",
+}) {
+  return (
+    <label className="grid gap-1">
+      <span className={labelClassName}>{label}</span>
+      {as === "select" ? (
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClassName}>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={inputClassName}
+        />
+      )}
+    </label>
+  );
+}
+
 function getLogSummary(log) {
   const nextValue = summarizeValue(log.new_value);
   return nextValue !== "-" ? nextValue : summarizeValue(log.old_value);
@@ -119,6 +159,12 @@ export default function DriverUnavailableLogs() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({
+    keyword: "",
+    action: "",
+    createdBy: "",
+  });
 
   async function loadData(options = {}) {
     try {
@@ -145,7 +191,34 @@ export default function DriverUnavailableLogs() {
     loadData();
   }, []);
 
-  const visibleLogs = useMemo(() => sortLatestFirst(Array.isArray(logs) ? logs : []), [logs]);
+  const sortedLogs = useMemo(() => sortLatestFirst(Array.isArray(logs) ? logs : []), [logs]);
+  const visibleLogs = useMemo(() => {
+    const keyword = filters.keyword.trim().toLowerCase();
+    const action = String(filters.action || "").trim().toUpperCase();
+    const createdBy = filters.createdBy.trim().toLowerCase();
+
+    return sortedLogs.filter((log) => {
+      if (action && String(log.action || "").trim().toUpperCase() !== action) {
+        return false;
+      }
+
+      if (createdBy && !String(log.created_by || "").toLowerCase().includes(createdBy)) {
+        return false;
+      }
+
+      if (keyword) {
+        const haystack = [log.driver_name, getLogSummary(log), log.created_by]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ");
+
+        if (!haystack.includes(keyword)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filters, sortedLogs]);
   const summaryCounts = useMemo(() => {
     return visibleLogs.reduce(
       (counts, log) => {
@@ -169,7 +242,24 @@ export default function DriverUnavailableLogs() {
 
   useEffect(() => {
     setPage(1);
-  }, [visibleLogs]);
+  }, [filters, sortedLogs]);
+
+  function setFilter(field, value) {
+    setFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
+
+  function clearFilters() {
+    setFilters({
+      keyword: "",
+      action: "",
+      createdBy: "",
+    });
+  }
+
+  const activeFilterCount = [filters.keyword, filters.action, filters.createdBy].filter(Boolean).length;
 
   if (isMobile) {
     const pageStart = visibleLogs.length === 0 ? 0 : (page - 1) * LOGS_PER_PAGE + 1;
@@ -191,6 +281,66 @@ export default function DriverUnavailableLogs() {
             </button>
           }
         />
+
+        <MobilePageSection
+          title="ตัวกรองข้อมูล"
+          subtitle="ค้นหาประวัติการปฏิบัติงาน"
+          actions={
+            <button
+              type="button"
+              className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+              aria-expanded={isMobileFilterOpen}
+              onClick={() => setIsMobileFilterOpen((current) => !current)}
+            >
+              <span>{isMobileFilterOpen ? "ซ่อนตัวกรอง" : "ตัวกรอง"}</span>
+            </button>
+          }
+        >
+          {isMobileFilterOpen ? (
+            <div className="booking-mobile-filter-panel">
+              <div className="booking-mobile-filter-panel-actions grid gap-3">
+                <FilterField
+                  label="ค้นหา"
+                  value={filters.keyword}
+                  onChange={(value) => setFilter("keyword", value)}
+                  placeholder="ค้นหาคนขับ รายละเอียด ผู้บันทึก"
+                  labelClassName="text-[15px] font-semibold text-slate-600"
+                  inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <FilterField
+                  label="action"
+                  value={filters.action}
+                  onChange={(value) => setFilter("action", value)}
+                  as="select"
+                  options={ACTION_FILTER_OPTIONS}
+                  labelClassName="text-[15px] font-semibold text-slate-600"
+                  inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+                <FilterField
+                  label="ผู้บันทึก"
+                  value={filters.createdBy}
+                  onChange={(value) => setFilter("createdBy", value)}
+                  placeholder="ค้นหาผู้บันทึก"
+                  labelClassName="text-[15px] font-semibold text-slate-600"
+                  inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+
+                <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-[13px] font-semibold text-slate-500">
+                    ตัวกรองที่ใช้งาน {activeFilterCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="mobile-action-button border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </MobilePageSection>
 
         {/* <MobilePageSection title="สรุปภาพรวม" subtitle="สรุปจำนวนรายการตามประเภทการเปลี่ยนแปลง">
           <MobileGrid columns={{ base: 2 }} gap="sm">
@@ -232,7 +382,9 @@ export default function DriverUnavailableLogs() {
             <div className="mobile-empty-state">
               <span className="text-sm font-medium text-red-700">{error}</span>
             </div>
-          ) : pageItems.length === 0 ? (
+          ) : visibleLogs.length === 0 ? (
+            <div className="mobile-empty-state">ไม่พบประวัติการปฏิบัติงาน</div>
+          ) : pageItems.length === 0 && visibleLogs.length > 0 ? (
             <div className="mobile-empty-state">ไม่พบประวัติการปฏิบัติงาน</div>
           ) : (
             <div className="grid gap-[10px]">
@@ -305,7 +457,56 @@ export default function DriverUnavailableLogs() {
 
       {!loading && !error && (
         <div className="form-card">
-          <div className="table-wrap">
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="text-[20px] font-bold text-slate-900">ตัวกรองข้อมูล</h3>
+                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                  ค้นหาตามคนขับ รายละเอียด หรือผู้บันทึก
+                </p>
+              </div>
+              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-slate-600 shadow-sm">
+                ใช้งาน {activeFilterCount} ตัวกรอง
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <FilterField
+                label="ค้นหา"
+                value={filters.keyword}
+                onChange={(value) => setFilter("keyword", value)}
+                placeholder="ค้นหาคนขับ รายละเอียด ผู้บันทึก"
+              />
+              <FilterField
+                label="action"
+                value={filters.action}
+                onChange={(value) => setFilter("action", value)}
+                as="select"
+                options={ACTION_FILTER_OPTIONS}
+              />
+              <FilterField
+                label="ผู้บันทึก"
+                value={filters.createdBy}
+                onChange={(value) => setFilter("createdBy", value)}
+                placeholder="ค้นหาผู้บันทึก"
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+              >
+                ล้างตัวกรอง
+              </button>
+            </div>
+          </div>
+
+          {visibleLogs.length === 0 ? (
+            <div className="mobile-empty-state">ไม่พบประวัติการปฏิบัติงาน</div>
+          ) : (
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -338,7 +539,8 @@ export default function DriverUnavailableLogs() {
                 )}
               </tbody>
             </table>
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>
