@@ -2109,59 +2109,50 @@ label {
   }
 }
 
-.booking-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.booking-detail-modal {
   text-align: left;
 }
 
-.booking-detail-section {
+.booking-detail-group-list {
   display: grid;
   gap: 12px;
 }
 
-.booking-detail-section + .booking-detail-section {
-  margin-top: 18px;
-}
-
-.booking-detail-section-title {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 14px;
-  border: 1px solid #cddbf0;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
-  color: #173b69;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.booking-detail-grid > div {
+.booking-detail-group {
   border: 1px solid #dbe6f3;
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 14px;
   background: #f8fbff;
+  padding: 12px 14px;
 }
 
-.booking-detail-full {
-  grid-column: 1 / -1;
+.booking-detail-group-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #073b8e;
+}
+
+.booking-detail-row {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 5px 0;
 }
 
 .booking-detail-label {
   display: block;
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 700;
-  color: #5b6b84;
-  margin-bottom: 4px;
+  color: #64748b;
 }
 
 .booking-detail-value {
   display: block;
-  font-size: 25px;
+  font-size: 16px;
   font-weight: 700;
-  color: #10233f;
+  color: #0f172a;
+  line-height: 1.45;
   word-break: break-word;
 }
 
@@ -2189,9 +2180,26 @@ label {
   outline: none;
 }
 
-@media (max-width: 768px) {
-  .booking-detail-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 480px) {
+  .booking-detail-group {
+    padding: 11px 12px;
+  }
+
+  .booking-detail-group-title {
+    font-size: 17px;
+  }
+
+  .booking-detail-row {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .booking-detail-label {
+    font-size: 14px;
+  }
+
+  .booking-detail-value {
+    font-size: 15px;
   }
 }
 
@@ -5746,6 +5754,529 @@ label {
     font-size: 12px;
     min-height: 36px;
     border-radius: 12px;
+  }
+}
+
+@media (max-width: 600px) {
+  .swal2-popup.booking-backdate-popup {
+    width: min(100vw - 12px, 720px) !important;
+    max-width: min(100vw - 12px, 720px) !important;
+    padding: 14px !important;
+    border-radius: 22px !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-title {
+    font-size: 28px !important;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-html-container {
+    margin: 0;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal-form.booking-backdate-form {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    text-align: left;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal-form.booking-backdate-form label {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f2f5c;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-input,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-date-col input,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-hour-input,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-minute-input {
+    min-height: 48px !important;
+    height: 48px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 14px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .booking-datetime-stack {
+    gap: 8px;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-label-row {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-input-row {
+    grid-template-columns: minmax(0, 1fr) 70px 70px !important;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-main-label,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-time-labels {
+    font-size: 16px;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-date-col,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-time-row {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-date-col input,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-picker-input.flatpickr-input {
+    min-height: 56px !important;
+    height: 56px;
+    padding: 8px 10px !important;
+    font-size: 16px !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-datetime-time-row {
+    grid-template-columns: 70px auto 70px;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-hour-input,
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-minute-input {
+    min-height: 50px;
+    height: 50px;
+    padding: 6px 6px;
+    font-size: 16px !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-form .thai-time-separator {
+    font-size: 16px;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-top: 14px !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .booking-backdate-confirm,
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .booking-backdate-cancel {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .booking-backdate-confirm,
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .swal2-confirm {
+    background: #1455c8 !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .booking-backdate-cancel,
+  .swal2-popup.booking-backdate-popup .swal2-actions.booking-backdate-actions .swal2-cancel {
+    background: #64748b !important;
+  }
+
+  .swal2-popup.booking-backdate-popup .booking-backdate-actions button {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 600px) {
+  .swal2-popup.vehicle-office-modal {
+    width: min(100vw - 12px, 720px) !important;
+    max-width: min(100vw - 12px, 720px) !important;
+    padding: 14px !important;
+    border-radius: 22px !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-title {
+    font-size: 28px !important;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .swal2-popup.vehicle-office-modal .vehicle-office-html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-html-container {
+    margin: 0;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal-form.vehicle-office-form {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    text-align: left;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal-form.vehicle-office-form label {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f2f5c;
+  }
+
+  .swal2-popup.vehicle-office-modal .vehicle-office-textarea {
+    width: 100% !important;
+    min-height: 120px !important;
+    padding: 10px 12px !important;
+    margin: 0 !important;
+    font-size: 18px !important;
+    line-height: 1.35;
+    border-radius: 14px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    resize: vertical;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-top: 14px !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .vehicle-office-confirm,
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .vehicle-office-cancel {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .vehicle-office-confirm,
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .swal2-confirm {
+    background: #1455c8 !important;
+    border-color: #1455c8 !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .vehicle-office-confirm:hover,
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .swal2-confirm:hover {
+    background: #0f429f !important;
+    border-color: #0f429f !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .vehicle-office-cancel,
+  .swal2-popup.vehicle-office-modal .swal2-actions.vehicle-office-actions .swal2-cancel {
+    background: #64748b !important;
+  }
+
+  .swal2-popup.vehicle-office-modal .vehicle-office-actions button {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 600px) {
+  .swal2-popup.booking-cancel-modal {
+    width: min(100vw - 12px, 720px) !important;
+    max-width: min(100vw - 12px, 720px) !important;
+    padding: 14px !important;
+    border-radius: 22px !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-title {
+    font-size: 28px !important;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .swal2-popup.booking-cancel-modal .booking-cancel-html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-html-container {
+    margin: 0;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal-form.booking-cancel-form {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    text-align: left;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal-form.booking-cancel-form label {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f2f5c;
+  }
+
+  .swal2-popup.booking-cancel-modal .booking-cancel-textarea {
+    width: 100% !important;
+    min-height: 120px !important;
+    padding: 10px 12px !important;
+    margin: 0 !important;
+    font-size: 18px !important;
+    line-height: 1.35;
+    border-radius: 14px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    resize: vertical;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-top: 14px !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .booking-cancel-confirm,
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .booking-cancel-cancel {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .booking-cancel-confirm,
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .swal2-confirm {
+    background: #dc2626 !important;
+    border-color: #dc2626 !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .booking-cancel-confirm:hover,
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .swal2-confirm:hover {
+    background: #b91c1c !important;
+    border-color: #b91c1c !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .booking-cancel-cancel,
+  .swal2-popup.booking-cancel-modal .swal2-actions.booking-cancel-actions .swal2-cancel {
+    background: #64748b !important;
+  }
+
+  .swal2-popup.booking-cancel-modal .booking-cancel-actions button {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-height: 46px;
+  }
+}
+
+@media (max-width: 600px) {
+  .swal2-popup.booking-approve-modal {
+    width: min(100vw - 12px, 760px) !important;
+    max-width: min(100vw - 12px, 760px) !important;
+    padding: 14px !important;
+    border-radius: 22px !important;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-title {
+    font-size: 28px !important;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-html-container {
+    margin: 0;
+  }
+
+  .swal2-popup.booking-approve-modal .swal-form.booking-approve-form {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    text-align: left;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card {
+    margin: 0;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-form label {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f2f5c;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-input,
+  .swal2-popup.booking-approve-modal .booking-approve-form .swal2-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 48px !important;
+    height: 48px;
+    padding: 8px 12px !important;
+    margin: 0 !important;
+    font-size: 18px !important;
+    line-height: 1.15;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    border-radius: 14px !important;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 120px !important;
+    padding: 10px 12px !important;
+    margin: 0 !important;
+    font-size: 18px !important;
+    line-height: 1.35;
+    border-radius: 14px !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    resize: vertical;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-textarea::placeholder {
+    font-size: 0.85em !important;
+    line-height: 1.4;
+    color: #94a3b8 !important;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-skipped-list {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-skipped-title {
+    font-weight: 800;
+    font-size: 0.92em;
+    color: #0f2d5c;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-skipped-card {
+    border: 1px solid #dbe6f3;
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: #f8fbff;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-skipped-name {
+    font-weight: 700;
+    font-size: 0.88em;
+    line-height: 1.35;
+    color: #0f2d5c;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-skipped-reason {
+    margin-top: 2px;
+    font-size: 0.78em;
+    line-height: 1.35;
+    color: #64748b;
+    word-break: break-word;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card {
+    padding: 14px 16px;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card,
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card p,
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card div,
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card span {
+    font-size: 0.88em;
+    line-height: 1.45;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card strong,
+  .swal2-popup.booking-approve-modal .booking-queue-recommendation-card b {
+    font-size: 0.95em;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-queue-row {
+    gap: 6px;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-top: 14px !important;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .booking-approve-confirm,
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .booking-approve-cancel {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 12px !important;
+    font-size: 18px !important;
+    border-radius: 12px !important;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .booking-approve-confirm,
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .swal2-confirm {
+    background: #1455c8 !important;
+    border-color: #1455c8 !important;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .booking-approve-confirm:hover,
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .swal2-confirm:hover {
+    background: #0f429f !important;
+    border-color: #0f429f !important;
+  }
+
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .booking-approve-cancel,
+  .swal2-popup.booking-approve-modal .swal2-actions.booking-approve-actions .swal2-cancel {
+    background: #64748b !important;
+  }
+
+  .swal2-popup.booking-approve-modal .booking-approve-actions button {
+    flex: 1 1 0;
+    max-width: 220px;
+    min-height: 46px;
   }
 }
 

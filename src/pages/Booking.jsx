@@ -567,6 +567,20 @@ function getBookingDetailFields({ booking, vehicleMap }) {
   ];
 }
 
+function getBookingDetailGroupName(field) {
+  const key = String(field?.key || "").trim();
+  if (["requester_name", "department", "phone"].includes(key)) return "ข้อมูลผู้จอง";
+  if (["start_datetime", "end_datetime", "actual_start_datetime", "actual_return_datetime"].includes(key)) {
+    return "ข้อมูลการเดินทาง";
+  }
+  if (["destination", "purpose"].includes(key)) return "ข้อมูลการใช้งานรถ";
+  if (["assigned_user_name", "status", "staff_note"].includes(key)) return "การมอบหมายงาน";
+  if (["is_backdated", "booking_id", "booking_no", "created_at", "updated_at"].includes(key)) {
+    return "ข้อมูลระบบ / ผู้ดูแลระบบ";
+  }
+  return "ข้อมูลเพิ่มเติม";
+}
+
 function formatBookingDateTimeDisplay(value) {
   if (!value) return "-";
 
@@ -907,19 +921,26 @@ function buildDriverOptionsHtml(availableDrivers, recommendedDriverId) {
 function buildSkippedDriversHtml(skippedDrivers, resolveDriverName) {
   if (skippedDrivers.length === 0) return "";
 
+  const skippedCards = skippedDrivers
+    .map((item) => {
+      const name = resolveDriverName(
+        item.driver_user_id || item.user_id || item.driver_id,
+        item.driver_name || ""
+      );
+
+      return `
+        <div class="booking-skipped-card">
+          <div class="booking-skipped-name">${escapeHtml(name || "-")}</div>
+          <div class="booking-skipped-reason">เหตุผล: ${escapeHtml(item.reason || "-")}</div>
+        </div>
+      `;
+    })
+    .join("");
+
   return `
-    <div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;">
-      <div style="font-weight:800;margin-bottom:8px;">รายการที่ข้าม</div>
-      <div style="display:grid;gap:6px;text-align:left;">
-        ${skippedDrivers
-          .map(
-            (item) =>
-              `<div style="color:#475569;">${escapeHtml(
-                resolveDriverName(item.driver_user_id || item.user_id || item.driver_id, item.driver_name || "")
-              )} - ${escapeHtml(item.reason || "-")}</div>`
-          )
-          .join("")}
-      </div>
+    <div class="booking-skipped-list">
+      <div class="booking-skipped-title">รายการที่ข้าม</div>
+      ${skippedCards}
     </div>
   `;
 }
@@ -2081,10 +2102,10 @@ export default function Booking() {
     const driverOptionsHtml = buildDriverOptionsHtml(driverOptions, recommendedDriverId);
     const skippedDriversHtml = buildSkippedDriversHtml(skippedDrivers, resolveDriverName);
 
-    const result = await Swal.fire({
+      const result = await Swal.fire({
       title: "ดำเนินการมอบหมายงาน",
       html: `
-        <div class="swal-form">
+        <div class="swal-form booking-approve-form">
           <div class="booking-queue-recommendation-card">
             <div class="booking-queue-row">
               <span>คนขับที่ระบบแนะนำ:</span>
@@ -2106,7 +2127,7 @@ export default function Booking() {
             FEATURES.vehicleModule
               ? `
           <label>เลือกรถ</label>
-          <select id="vehicle_id" class="swal2-select">
+          <select id="vehicle_id" class="swal2-select booking-approve-input">
             <option value="">-- เลือกรถ --</option>
             ${vehicleOptionsHtml}
           </select>
@@ -2115,7 +2136,7 @@ export default function Booking() {
           }
 
           <label>เลือกผู้ใช้</label>
-          <select id="assigned_user_id" class="swal2-select">
+          <select id="assigned_user_id" class="swal2-select booking-approve-input">
             <option value="">-- เลือกผู้ใช้ --</option>
             ${driverOptionsHtml}
           </select>
@@ -2123,7 +2144,7 @@ export default function Booking() {
           <label>เหตุผลที่เลือกคนขับเอง</label>
           <textarea
             id="manual_override_reason"
-            class="swal2-textarea"
+            class="swal2-textarea booking-approve-textarea"
             rows="3"
             placeholder="ระบุเมื่อเลือกคนขับไม่ตรงกับที่ระบบแนะนำ"
           ></textarea>
@@ -2131,7 +2152,7 @@ export default function Booking() {
           ${skippedDriversHtml}
 
           <label>หมายเหตุ</label>
-          <input id="staff_note" class="swal2-input" placeholder="-">
+          <input id="staff_note" class="swal2-input booking-approve-input" placeholder="-">
         </div>
       `,
       width: 760,
@@ -2140,6 +2161,13 @@ export default function Booking() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#1455c8",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "booking-approve-modal",
+        htmlContainer: "booking-approve-html",
+        actions: "booking-approve-actions",
+        confirmButton: "booking-approve-confirm",
+        cancelButton: "booking-approve-cancel",
+      },
       preConfirm: () => {
         const vehicle_id = FEATURES.vehicleModule
           ? document.getElementById("vehicle_id")?.value || ""
@@ -2253,9 +2281,9 @@ export default function Booking() {
       const result = await Swal.fire({
         title: "บันทึกงานย้อนหลัง",
         html: `
-          <div class="swal-form">
+          <div class="swal-form booking-backdate-form">
             <label>คนขับ</label>
-            <select id="backdate_assigned_user_id" class="swal2-select">
+            <select id="backdate_assigned_user_id" class="swal2-select booking-backdate-input">
               <option value="">-- เลือกคนขับ --</option>
               ${activeDrivers
                 .map((driver) => `<option value="${escapeHtml(driver.user_id)}">${escapeHtml(driver.name || "-")}</option>`)
@@ -2268,10 +2296,18 @@ export default function Booking() {
         `,
         width: 760,
         showCancelButton: true,
-        confirmButtonText: "บันทึก",
+        reverseButtons: false,
+        confirmButtonText: "บันทึกงานย้อนหลัง",
         cancelButtonText: "ยกเลิก",
-        confirmButtonColor: "#f59e0b",
+        confirmButtonColor: "#1455c8",
         cancelButtonColor: "#64748b",
+        customClass: {
+          popup: "booking-backdate-popup",
+          htmlContainer: "booking-backdate-html",
+          actions: "booking-backdate-actions",
+          confirmButton: "booking-backdate-confirm",
+          cancelButton: "booking-backdate-cancel",
+        },
         didOpen: () => {
           const startEl = document.getElementById("backdate_actual_start_container");
           const returnEl = document.getElementById("backdate_actual_return_container");
@@ -2414,21 +2450,51 @@ export default function Booking() {
       const detailFields = getBookingDetailFields({ booking, vehicleMap }).filter((field) =>
         field.roles.includes(currentRole)
       );
-      const detailRows = detailFields
-        .map(
-          (field) => `
-    <div>
-      <span class="booking-detail-label">${escapeHtml(field.label)}</span>
-      <span class="booking-detail-value">${escapeHtml(field.value)}</span>
-    </div>
-  `
-        )
+      const detailGroups = detailFields.reduce((groups, field) => {
+        const groupName = getBookingDetailGroupName(field);
+        if (!groups.has(groupName)) {
+          groups.set(groupName, []);
+        }
+        groups.get(groupName).push(field);
+        return groups;
+      }, new Map());
+
+      const groupOrder = [
+        "ข้อมูลผู้จอง",
+        "ข้อมูลการเดินทาง",
+        "ข้อมูลการใช้งานรถ",
+        "การมอบหมายงาน",
+        "ข้อมูลระบบ / ผู้ดูแลระบบ",
+        "ข้อมูลเพิ่มเติม",
+      ];
+
+      const detailGroupsHtml = groupOrder
+        .filter((groupName) => (detailGroups.get(groupName) || []).length > 0)
+        .map((groupName) => {
+          const rowsHtml = (detailGroups.get(groupName) || [])
+            .map(
+              (field) => `
+              <div class="booking-detail-row">
+                <span class="booking-detail-label">${escapeHtml(field.label)}</span>
+                <span class="booking-detail-value">${escapeHtml(field.value)}</span>
+              </div>
+            `
+            )
+            .join("");
+
+          return `
+            <section class="booking-detail-group">
+              <h3 class="booking-detail-group-title">${escapeHtml(groupName)}</h3>
+              ${rowsHtml}
+            </section>
+          `;
+        })
         .join("");
 
       const detailHtml = `
         <div class="swal-form booking-detail-modal">
-          <div class="booking-detail-grid">
-            ${detailRows}
+          <div class="booking-detail-group-list">
+            ${detailGroupsHtml}
           </div>
         </div>
       `;
@@ -2451,9 +2517,9 @@ export default function Booking() {
     const result = await Swal.fire({
       title: normalizeStatus(booking.status) === "PENDING" ? "ยกเลิกรายการจอง" : "ยกเลิกรายการจอง",
       html: `
-        <div class="swal-form">
+        <div class="swal-form booking-cancel-form">
           <label>เหตุผลการยกเลิก</label>
-          <textarea id="cancel_reason" class="swal2-textarea" rows="5" placeholder="ระบุเหตุผลให้ชัดเจน"></textarea>
+          <textarea id="cancel_reason" class="swal2-textarea booking-cancel-textarea" rows="5" placeholder="ระบุเหตุผลให้ชัดเจน"></textarea>
         </div>
       `,
       width: 720,
@@ -2462,6 +2528,13 @@ export default function Booking() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#dc2626",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "booking-cancel-modal",
+        htmlContainer: "booking-cancel-html",
+        actions: "booking-cancel-actions",
+        confirmButton: "booking-cancel-confirm",
+        cancelButton: "booking-cancel-cancel",
+      },
       preConfirm: () => {
         const reason = document.getElementById("cancel_reason").value.trim();
 
@@ -2578,12 +2651,12 @@ export default function Booking() {
     const result = await Swal.fire({
       title: "ใช้รถ สนง.กลาง",
       html: `
-        <div class="swal-form">
+        <div class="swal-form vehicle-office-form">
           <div style="text-align:left; line-height:1.7; margin-bottom: 8px;">
             <div>รายการนี้จะถูกปิดงานทันทีโดยมอบหมายให้ <b>${escapeHtml(CENTRAL_OFFICE_DRIVER_NAME)}</b></div>
           </div>
           <label>เหตุผล</label>
-          <textarea id="central_vehicle_reason" class="swal2-textarea" rows="4">${escapeHtml(reasonDefault)}</textarea>
+          <textarea id="central_vehicle_reason" class="swal2-textarea vehicle-office-textarea" rows="4">${escapeHtml(reasonDefault)}</textarea>
         </div>
       `,
       width: 720,
@@ -2592,6 +2665,13 @@ export default function Booking() {
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: "#f59e0b",
       cancelButtonColor: "#64748b",
+      customClass: {
+        popup: "vehicle-office-modal",
+        htmlContainer: "vehicle-office-html",
+        actions: "vehicle-office-actions",
+        confirmButton: "vehicle-office-confirm",
+        cancelButton: "vehicle-office-cancel",
+      },
       preConfirm: () => {
         const reason = document.getElementById("central_vehicle_reason")?.value.trim() || "";
         if (!reason) {

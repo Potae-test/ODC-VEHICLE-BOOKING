@@ -564,19 +564,28 @@ const MobileMonthCalendar = memo(function MobileMonthCalendar({
 
               <div className="mobile-month-calendar-event-stack">
                 {dayEvents.slice(0, 3).map((event) => (
-                  <button
+                  <div
                     key={`${dateKey}-${event.id}`}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     className={`mobile-month-calendar-event-pill ${getMobileEventStatusClassName(event)}`}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
                       onSelectDate(day);
                       onSelectEvent(event);
                     }}
+                    onKeyDown={(keyboardEvent) => {
+                      if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+                        keyboardEvent.preventDefault();
+                        keyboardEvent.stopPropagation();
+                        onSelectDate(day);
+                        onSelectEvent(event);
+                      }
+                    }}
                     title={event.title || getMobileEventShortLabel(event)}
                   >
                     {getMobileEventShortLabel(event)}
-                  </button>
+                  </div>
                 ))}
 
                 {overflowCount > 0 && (
