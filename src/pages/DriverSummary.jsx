@@ -925,7 +925,7 @@ export default function DriverSummary() {
         </div>
 
         <div className="form-card">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2">
             <div>
               <h3>ตารางสรุปรายงานรายละเอียดงาน</h3>
               <div className="section-counter">
@@ -1126,7 +1126,8 @@ export default function DriverSummary() {
             subtitle={`${selectedRange.label}: ${formatThaiDateTimeFull(selectedRange.start)} - ${formatThaiDateTimeFull(selectedRange.end)}`}
 
             actions={
-              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+              <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 items-center
+justify-center">
                 หน้า {tablePage}/{totalTablePages}
               </span>
             }

@@ -10,6 +10,8 @@ import NotificationBell from "./components/notifications/NotificationBell";
 import PageSkeleton from "./components/skeletons/PageSkeleton";
 import { FEATURES } from "./config/features";
 import "./App.css";
+import LOGO_ODC from "./assets/LOGO_ODC.png";
+
 
 const Cars = lazy(() => import("./pages/Cars"));
 const Booking = lazy(() => import("./pages/Booking"));
@@ -533,7 +535,9 @@ export default function App() {
           <div className="min-w-0 md:flex-1">
             <div className="flex items-center gap-3 md:gap-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1455c8] shadow-sm md:h-[70px] md:w-[70px] md:rounded-[22px]">
-                <BuildingIcon className="h-6 w-6 md:h-9 md:w-9" />
+                  <img src={LOGO_ODC} alt="ODC Logo" className="h-6 w-auto md:h-11 md:w-16" />
+
+                 {/* <BuildingIcon className="h-6 w-6 md:h-9 md:w-9" /> */}
               </div>
               <div className="min-w-0">
                 <h1 className="m-0 break-words text-[23px] font-bold leading-tight text-white sm:text-[25px] md:max-w-[16ch] md:text-[36px] lg:max-w-none">

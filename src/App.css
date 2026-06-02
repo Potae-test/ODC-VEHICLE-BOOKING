@@ -2690,10 +2690,11 @@ label {
 
 .driver-summary-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
   margin-bottom: 18px;
   align-items: stretch;
+  width: 100%;
 }
 
 .driver-summary-card {
@@ -3634,6 +3635,7 @@ label {
   width: 100%;
   padding: 0 6px;
   line-height: 1;
+  color: #000000;
 }
 
 .fc .fc-daygrid-event .fc-event-main-frame {
@@ -3807,6 +3809,7 @@ label {
 .fc .fc-daygrid-event.fc-booking-approved {
   background: #dbeafe !important;
   border-color: #93c5fd !important;
+  
 }
 
 .fc .fc-daygrid-event.fc-booking-approved .fc-event-main-frame::before {
@@ -7738,6 +7741,14 @@ label {
     width: 100%;
   }
 }
+
+/* desktop Filter Placeholder */
+.desktop-filter-input::placeholder {
+  font-size: 20px !important;
+  font-weight: 500 !important;
+  color: #94a3b8 !important;
+}
+
 /* Mobile Filter Placeholder */
 
 .mobile-filter-input::placeholder {

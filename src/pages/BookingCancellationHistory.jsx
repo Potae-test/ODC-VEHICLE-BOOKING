@@ -424,7 +424,7 @@ export default function BookingCancellationHistory() {
       ) : (
         <>
           <div className="booking-cancellation-desktop flex w-full flex-col gap-2 pb-6">
-            <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:block">
+            <section className="hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 md:block mb-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h3 className="inline-flex items-center gap-2 text-[20px] font-bold text-slate-900 sm:text-[22px]">
@@ -452,24 +452,29 @@ export default function BookingCancellationHistory() {
                 value={filters.requester}
                 onChange={(value) => setFilter("requester", value)}
                 placeholder="ค้นหาชื่อผู้จอง"
-              />
+                labelClassName="text-[20px] font-semibold text-slate-600"
+                inputClassName="desktop-filter-input"/>
               <FilterField
                 label="ปลายทาง"
                 value={filters.destination}
                 onChange={(value) => setFilter("destination", value)}
                 placeholder="ค้นหาปลายทาง"
-              />
+                labelClassName="text-[20px] font-semibold text-slate-600"
+                inputClassName="desktop-filter-input"/>
               <FilterField
                 label="เหตุผล"
                 value={filters.reason}
                 onChange={(value) => setFilter("reason", value)}
                 placeholder="ค้นหาเหตุผล"
-              />
+                labelClassName="text-[20px] font-semibold text-slate-600"
+                inputClassName="desktop-filter-input"/>
               <FilterField
                 label="ผู้ยกเลิก"
                 value={filters.cancelled_by}
                 onChange={(value) => setFilter("cancelled_by", value)}
                 placeholder="ค้นหาผู้ยกเลิก"
+                labelClassName="text-[20px] font-semibold text-slate-600"
+                inputClassName="desktop-filter-input"
               />
             </div>
 

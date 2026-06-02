@@ -1520,7 +1520,7 @@ export default function CalendarPage() {
             }`}
           >
             {canViewActiveDriversSummary && (
-              <div className="calendar-summary-card flex min-w-0 flex-col gap-3 rounded-3xl border border-emerald-100 bg-emerald-50/70 p-3 shadow-sm sm:gap-4 sm:p-5">
+              <div className="calendar-summary-card flex min-w-0 flex-col gap-3 rounded-3xl border border-emerald-100 p-3 shadow-sm sm:gap-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 sm:h-12 sm:w-12">
