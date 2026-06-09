@@ -1,3 +1,5 @@
+import { buildPushHTTPRequest } from "@pushforge/builder";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -74,6 +76,9 @@ type Env = {
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_CLIENT_EMAIL?: string;
   FIREBASE_PRIVATE_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_SUBJECT?: string;
 };
 
 type SheetResponse = {
@@ -85,26 +90,41 @@ type SheetResponse = {
 };
 
 type WorkerNotification = {
+  notification_id?: string;
   target_user_id?: string;
+  target_role?: string;
   title?: string;
   message?: string;
   url?: string;
   type?: string;
   booking_id?: string;
+  created_at?: string;
 };
 
 type PushSubscriptionRecord = {
   subscription_id?: string;
   user_id?: string;
+  endpoint?: string;
+  p256dh?: string;
+  auth?: string;
   fcm_token?: string;
   provider?: string;
   status?: string;
   user_agent?: string;
+  created_at?: string;
+};
+
+type UserRecord = {
+  user_id?: string;
+  role?: string;
+  status?: string;
 };
 
 const FIREBASE_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const FIREBASE_TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
 const FIREBASE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const DEFAULT_WEB_PUSH_PUBLIC_KEY =
+  "BPpPeIzc5st3eP-_CHOKS9wenNrMuvwe1wuXGppeECxdxo4lruVNDq_r4U5KmUaVzTNwqfZDj76KY9P1ZnLMKSo";
 const textEncoder = new TextEncoder();
 
 let firebaseAccessTokenCache: {
@@ -305,6 +325,41 @@ async function getPushSubscriptionsByUserId(userId: string) {
   return Array.isArray(response.data) ? (response.data as PushSubscriptionRecord[]) : [];
 }
 
+async function getUsers() {
+  const response = await forwardSheetGet("users");
+
+  if (!response.success) {
+    throw new Error(response.message || "Unable to get users");
+  }
+
+  return Array.isArray(response.data) ? (response.data as UserRecord[]) : [];
+}
+
+async function getActiveUserIdsByRoles(roles: string[]) {
+  const normalizedRoles = Array.from(
+    new Set(
+      (roles || [])
+        .map((role) => String(role || "").trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalizedRoles.length === 0) {
+    return [] as string[];
+  }
+
+  const users = await getUsers();
+  return Array.from(
+    new Set(
+      users
+        .filter((user) => String(user.status || "").trim().toUpperCase() === "ACTIVE")
+        .filter((user) => normalizedRoles.includes(String(user.role || "").trim().toUpperCase()))
+        .map((user) => String(user.user_id || "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 function getDeviceTypeFromUserAgent(userAgent: string) {
   const normalized = String(userAgent || "").trim().toLowerCase();
   if (!normalized) return "unknown";
@@ -341,15 +396,24 @@ function normalizeFcmSubscriptions(subscriptions: PushSubscriptionRecord[]) {
 function dedupeFcmSubscriptionsByToken(subscriptions: PushSubscriptionRecord[]) {
   const seenTokens = new Set<string>();
   const uniqueSubscriptions: PushSubscriptionRecord[] = [];
+  let duplicateCount = 0;
 
   for (const subscription of subscriptions) {
     const token = String(subscription.fcm_token || "").trim();
-    if (!token || seenTokens.has(token)) continue;
-    seenTokens.add(token);
+    const dedupeKey = `FCM:${token}`;
+    if (!token) continue;
+    if (seenTokens.has(dedupeKey)) {
+      duplicateCount += 1;
+      continue;
+    }
+    seenTokens.add(dedupeKey);
     uniqueSubscriptions.push(subscription);
   }
 
-  return uniqueSubscriptions;
+  return {
+    subscriptions: uniqueSubscriptions,
+    duplicate_count: duplicateCount,
+  };
 }
 
 function isInvalidFcmTokenResponse(status: number, payload: any) {
@@ -369,14 +433,152 @@ function isInvalidFcmTokenResponse(status: number, payload: any) {
   );
 }
 
-async function disableFcmToken(fcmToken: string) {
+async function disablePushSubscriptionRecord(options: { fcm_token?: string; endpoint?: string }) {
   const response = await forwardSheetPost("disablePushSubscription", {
-    fcm_token: fcmToken,
+    fcm_token: String(options?.fcm_token || "").trim(),
+    endpoint: String(options?.endpoint || "").trim(),
   });
 
   if (!response.success) {
     throw new Error(response.message || "Unable to disable push subscription");
   }
+}
+
+function decodeBase64Url(value: string) {
+  const normalized = String(value || "").trim().replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function encodeBase64UrlBytes(bytes: Uint8Array) {
+  return base64UrlEncode(bytes);
+}
+
+function normalizeWebPushPublicKey(env: Env) {
+  return String(env.VAPID_PUBLIC_KEY || DEFAULT_WEB_PUSH_PUBLIC_KEY).trim();
+}
+
+function parseWebPushPublicKey(env: Env) {
+  const publicKey = normalizeWebPushPublicKey(env);
+  const bytes = decodeBase64Url(publicKey);
+
+  if (bytes.length !== 65 || bytes[0] !== 4) {
+    throw new Error("VAPID public key must be an uncompressed P-256 key");
+  }
+
+  return {
+    publicKey,
+    x: encodeBase64UrlBytes(bytes.slice(1, 33)),
+    y: encodeBase64UrlBytes(bytes.slice(33, 65)),
+  };
+}
+
+async function getWebPushPrivateJwk(env: Env) {
+  const privateKey = String(env.VAPID_PRIVATE_KEY || "").trim();
+  if (!privateKey) {
+    throw new Error("VAPID_PRIVATE_KEY is not configured");
+  }
+
+  if (privateKey.startsWith("{")) {
+    return JSON.parse(privateKey) as JsonWebKey;
+  }
+
+  if (privateKey.includes("BEGIN PRIVATE KEY")) {
+    const cryptoKey = await crypto.subtle.importKey(
+      "pkcs8",
+      pemToArrayBuffer(privateKey),
+      {
+        name: "ECDSA",
+        namedCurve: "P-256",
+      },
+      true,
+      ["sign"]
+    );
+    return (await crypto.subtle.exportKey("jwk", cryptoKey)) as JsonWebKey;
+  }
+
+  const publicKey = parseWebPushPublicKey(env);
+  return {
+    kty: "EC",
+    crv: "P-256",
+    d: privateKey,
+    x: publicKey.x,
+    y: publicKey.y,
+    ext: true,
+  } as JsonWebKey;
+}
+
+function buildPushMessageContent(notification: WorkerNotification) {
+  return {
+    title: String(notification.title || "ODC Vehicle Booking").trim() || "ODC Vehicle Booking",
+    body: String(notification.message || "").trim(),
+    url: String(notification.url || "/").trim() || "/",
+    type: String(notification.type || "").trim(),
+    booking_id: String(notification.booking_id || "").trim(),
+    notification_id: String(notification.notification_id || "").trim(),
+  };
+}
+
+function buildPushTopic(notification: WorkerNotification) {
+  const notificationId = String(notification.notification_id || "").trim();
+  if (notificationId) return notificationId;
+
+  const bookingId = String(notification.booking_id || "").trim();
+  const type = String(notification.type || "").trim();
+  return bookingId || type || "odc-notification";
+}
+
+function normalizeWebPushSubscriptions(subscriptions: PushSubscriptionRecord[]) {
+  return (Array.isArray(subscriptions) ? subscriptions : [])
+    .filter((subscription) => String(subscription.provider || "").trim().toUpperCase() === "WEB_PUSH")
+    .filter((subscription) => String(subscription.status || "").trim().toUpperCase() === "ACTIVE")
+    .filter((subscription) => String(subscription.endpoint || "").trim().length > 0)
+    .filter((subscription) => String(subscription.p256dh || "").trim().length > 0)
+    .filter((subscription) => String(subscription.auth || "").trim().length > 0);
+}
+
+function dedupeWebPushSubscriptionsByEndpoint(subscriptions: PushSubscriptionRecord[]) {
+  const seenEndpoints = new Set<string>();
+  const uniqueSubscriptions: PushSubscriptionRecord[] = [];
+  let duplicateCount = 0;
+
+  for (const subscription of subscriptions) {
+    const endpoint = String(subscription.endpoint || "").trim();
+    const dedupeKey = `WEB_PUSH:${endpoint}`;
+    if (!endpoint) continue;
+    if (seenEndpoints.has(dedupeKey)) {
+      duplicateCount += 1;
+      continue;
+    }
+    seenEndpoints.add(dedupeKey);
+    uniqueSubscriptions.push(subscription);
+  }
+
+  return {
+    subscriptions: uniqueSubscriptions,
+    duplicate_count: duplicateCount,
+  };
+}
+
+function buildSubscriptionDeliveryKey(subscription: PushSubscriptionRecord, notification: WorkerNotification) {
+  const notificationId = String(notification.notification_id || "").trim();
+  if (!notificationId) {
+    return "";
+  }
+
+  const provider = String(subscription.provider || "").trim().toUpperCase() || "FCM";
+  const providerTarget =
+    provider === "WEB_PUSH"
+      ? String(subscription.endpoint || "").trim()
+      : String(subscription.fcm_token || "").trim();
+  return `${provider}|${providerTarget}|${notificationId}`;
 }
 
 async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotification) {
@@ -387,6 +589,9 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
 
   const maskedToken = `${fcmToken.slice(0, 10)}...`;
   const accessToken = await getFirebaseAccessToken(env);
+  const content = buildPushMessageContent(notification);
+  const notificationCreatedAt = String(notification.created_at || "").trim();
+  const pushSendStartedAt = new Date().toISOString();
   const response = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
     {
@@ -399,34 +604,41 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
         message: {
           token: fcmToken,
           notification: {
-            title: notification.title || "ODC Vehicle Booking",
-            body: notification.message || "",
+            title: content.title,
+            body: content.body,
           },
           data: {
-            url: notification.url || "/",
-            type: notification.type || "",
-            booking_id: notification.booking_id || "",
+            url: content.url,
+            type: content.type,
+            booking_id: content.booking_id,
+            notification_id: content.notification_id,
+          },
+          android: {
+            priority: "high",
           },
           webpush: {
             headers: {
               Urgency: "high",
+              TTL: "30",
+              Topic: buildPushTopic(notification),
             },
             notification: {
-              title: notification.title || "ODC Vehicle Booking",
-              body: notification.message || "มีการแจ้งเตือนใหม่",
+              title: content.title,
+              body: content.body || content.title,
               icon: "/icon-192.png",
               badge: "/icon-192.png",
-              tag: notification.booking_id || notification.type || "odc-notification",
+              tag: buildPushTopic(notification),
               renotify: true,
               requireInteraction: false,
               data: {
-                url: notification.url || "/",
-                type: notification.type || "",
-                booking_id: notification.booking_id || "",
+                url: content.url,
+                type: content.type,
+                booking_id: content.booking_id,
+                notification_id: content.notification_id,
               },
             },
             fcm_options: {
-              link: notification.url || "/",
+              link: content.url,
             },
           },
         },
@@ -434,6 +646,7 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     }
   );
 
+  const fcmResponseAt = new Date().toISOString();
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     console.warn("[push] send fail", {
@@ -441,11 +654,17 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
       type: notification.type || "",
       booking_id: notification.booking_id || "",
       status: response.status,
+      notification_created_at: notificationCreatedAt,
+      push_send_started_at: pushSendStartedAt,
+      fcm_response_at: fcmResponseAt,
     });
     console.warn("[push] firebase response status", {
       status: response.status,
       token: maskedToken,
       type: notification.type || "",
+      notification_created_at: notificationCreatedAt,
+      push_send_started_at: pushSendStartedAt,
+      fcm_response_at: fcmResponseAt,
     });
     const error = new Error(
       typeof payload?.error?.message === "string"
@@ -460,14 +679,111 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     throw error;
   }
 
+  console.log("[push] firebase send ok", {
+    token: maskedToken,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+    notification_created_at: notificationCreatedAt,
+    push_send_started_at: pushSendStartedAt,
+    fcm_response_at: fcmResponseAt,
+  });
+
   return payload;
+}
+
+function isInvalidWebPushResponse(status: number) {
+  return status === 404 || status === 410;
+}
+
+async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notification: WorkerNotification) {
+  const endpoint = String(subscription.endpoint || "").trim();
+  if (!endpoint) {
+    throw new Error("WEB_PUSH endpoint is required");
+  }
+  const p256dh = String(subscription.p256dh || "").trim();
+  const auth = String(subscription.auth || "").trim();
+  if (!p256dh || !auth) {
+    throw new Error("WEB_PUSH subscription keys are required");
+  }
+
+  const notificationCreatedAt = String(notification.created_at || "").trim();
+  const pushSendStartedAt = new Date().toISOString();
+  const content = buildPushMessageContent(notification);
+  const topic = buildPushTopic(notification);
+  const privateJWK = await getWebPushPrivateJwk(env);
+  const subject = String(env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
+  const { endpoint: targetEndpoint, headers, body } = await buildPushHTTPRequest({
+    privateJWK,
+    subscription: {
+      endpoint,
+      keys: {
+        p256dh,
+        auth,
+      },
+    },
+    message: {
+      payload: {
+        title: content.title,
+        body: content.body || content.title,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: content.notification_id || topic,
+        renotify: true,
+        requireInteraction: false,
+        data: {
+          url: content.url,
+          type: content.type,
+          booking_id: content.booking_id,
+          notification_id: content.notification_id,
+        },
+      },
+      adminContact: subject,
+      options: {
+        ttl: 30,
+        urgency: "high",
+        topic,
+      },
+    },
+  });
+  const response = await fetch(targetEndpoint, {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  const fcmResponseAt = new Date().toISOString();
+  if (!response.ok) {
+    const error = new Error(`Web Push send failed with status ${response.status}`) as Error & {
+      status?: number;
+    };
+    error.status = response.status;
+    console.warn("[push] web push send fail", {
+      endpoint,
+      type: content.type,
+      booking_id: content.booking_id,
+      status: response.status,
+      notification_created_at: notificationCreatedAt,
+      push_send_started_at: pushSendStartedAt,
+      fcm_response_at: fcmResponseAt,
+    });
+    throw error;
+  }
+
+  console.log("[push] web push send ok", {
+    endpoint,
+    type: content.type,
+    booking_id: content.booking_id,
+    notification_created_at: notificationCreatedAt,
+    push_send_started_at: pushSendStartedAt,
+    fcm_response_at: fcmResponseAt,
+  });
 }
 
 async function sendPushNotificationBatch(
   env: Env,
   userId: string,
   notification: WorkerNotification,
-  options?: { logPrefix?: string }
+  options?: { logPrefix?: string; sentNotificationKeys?: Set<string> }
 ) {
   const targetUserId = String(userId || "").trim();
   const logPrefix = String(options?.logPrefix || "[push]").trim() || "[push]";
@@ -497,8 +813,17 @@ async function sendPushNotificationBatch(
     throw error;
   }
 
-  const activeSubscriptions = normalizeFcmSubscriptions(subscriptions);
-  const uniqueSubscriptions = dedupeFcmSubscriptionsByToken(activeSubscriptions);
+  const activeFcmSubscriptions = normalizeFcmSubscriptions(subscriptions);
+  const uniqueFcmResult = dedupeFcmSubscriptionsByToken(activeFcmSubscriptions);
+  const uniqueFcmSubscriptions = uniqueFcmResult.subscriptions;
+  const activeWebPushSubscriptions = normalizeWebPushSubscriptions(subscriptions);
+  const uniqueWebPushResult = dedupeWebPushSubscriptionsByEndpoint(activeWebPushSubscriptions);
+  const uniqueWebPushSubscriptions = uniqueWebPushResult.subscriptions;
+  const activeSubscriptions = activeFcmSubscriptions.concat(activeWebPushSubscriptions);
+  const subscriptionsBeforeDedupe = activeSubscriptions.length;
+  const subscriptionsAfterDedupe = uniqueFcmSubscriptions.length + uniqueWebPushSubscriptions.length;
+  const duplicateSubscriptionCount =
+    uniqueFcmResult.duplicate_count + uniqueWebPushResult.duplicate_count;
   const userAgents = Array.from(
     new Set(
       activeSubscriptions
@@ -518,13 +843,37 @@ async function sendPushNotificationBatch(
     user_id: targetUserId,
     type: notification.type || "",
     booking_id: notification.booking_id || "",
+    notification_created_at: String(notification.created_at || "").trim(),
   });
   console.log(`${logPrefix} subscription count per user_id`, {
     user_id: targetUserId,
-    subscription_count: activeSubscriptions.length,
-    token_count: uniqueSubscriptions.length,
+    subscription_count: subscriptionsBeforeDedupe,
+    token_count: subscriptionsAfterDedupe,
     type: notification.type || "",
     booking_id: notification.booking_id || "",
+    notification_created_at: String(notification.created_at || "").trim(),
+  });
+  console.log(`${logPrefix} subscriptions before dedupe`, {
+    user_id: targetUserId,
+    total: subscriptionsBeforeDedupe,
+    fcm: activeFcmSubscriptions.length,
+    web_push: activeWebPushSubscriptions.length,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+  });
+  console.log(`${logPrefix} subscriptions after dedupe`, {
+    user_id: targetUserId,
+    total: subscriptionsAfterDedupe,
+    fcm: uniqueFcmSubscriptions.length,
+    web_push: uniqueWebPushSubscriptions.length,
+    skipped_duplicate_count: duplicateSubscriptionCount,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+  });
+  console.log(`${logPrefix} provider counts`, {
+    user_id: targetUserId,
+    fcm: uniqueFcmSubscriptions.length,
+    web_push: uniqueWebPushSubscriptions.length,
   });
   console.log(`${logPrefix} target user_id list`, [targetUserId]);
   console.log(`${logPrefix} subscription metadata`, {
@@ -535,6 +884,7 @@ async function sendPushNotificationBatch(
 
   const results: Array<{
     token: string;
+    provider: string;
     user_agent: string;
     device_type: string;
     success: boolean;
@@ -543,82 +893,165 @@ async function sendPushNotificationBatch(
     invalid_token?: boolean;
   }> = [];
 
-  for (const subscription of uniqueSubscriptions) {
-    const token = String(subscription.fcm_token || "").trim();
-    const userAgent = String(subscription.user_agent || "").trim();
-    const deviceType = getDeviceTypeFromUserAgent(userAgent);
-    const maskedToken = `${token.slice(0, 10)}...`;
+  const sentNotificationKeys = options?.sentNotificationKeys || null;
+  let skippedNotificationDuplicateCount = 0;
+  const deliveryQueue = uniqueFcmSubscriptions
+    .map((subscription) => ({
+      ...subscription,
+      send_provider: "FCM",
+    }))
+    .concat(
+      uniqueWebPushSubscriptions.map((subscription) => ({
+        ...subscription,
+        send_provider: "WEB_PUSH",
+      }))
+    )
+    .filter((subscription) => {
+      if (!sentNotificationKeys) {
+        return true;
+      }
 
-    console.log(`${logPrefix} send token`, {
+      const deliveryKey = buildSubscriptionDeliveryKey(subscription, notification);
+      if (!deliveryKey) {
+        return true;
+      }
+      if (sentNotificationKeys.has(deliveryKey)) {
+        skippedNotificationDuplicateCount += 1;
+        return false;
+      }
+      sentNotificationKeys.add(deliveryKey);
+      return true;
+    });
+
+  if (skippedNotificationDuplicateCount > 0) {
+    console.log(`${logPrefix} skipped duplicate notification deliveries`, {
       user_id: targetUserId,
-      token: maskedToken,
-      user_agent: userAgent,
-      device_type: deviceType,
+      skipped_duplicate_delivery_count: skippedNotificationDuplicateCount,
+      notification_id: String(notification.notification_id || "").trim(),
       type: notification.type || "",
       booking_id: notification.booking_id || "",
     });
+  }
 
-    try {
-      await sendFcmPush(env, token, notification);
-      console.log(`${logPrefix} send success`, {
+  const settledResults = await Promise.allSettled(
+    deliveryQueue.map(async (subscription) => {
+        const token = String(subscription.fcm_token || "").trim();
+        const endpoint = String(subscription.endpoint || "").trim();
+        const userAgent = String(subscription.user_agent || "").trim();
+      const deviceType = getDeviceTypeFromUserAgent(userAgent);
+      const maskedTarget = token ? `${token.slice(0, 10)}...` : endpoint ? `${endpoint.slice(0, 42)}...` : "";
+      const pushSendStartedAt = new Date().toISOString();
+      const sendProvider = String((subscription as PushSubscriptionRecord & { send_provider?: string }).send_provider || subscription.provider || "").trim().toUpperCase();
+
+      console.log(`${logPrefix} send token`, {
         user_id: targetUserId,
-        token: maskedToken,
+        provider: sendProvider,
+        token: maskedTarget,
         user_agent: userAgent,
         device_type: deviceType,
         type: notification.type || "",
         booking_id: notification.booking_id || "",
-      });
-      results.push({
-        token: maskedToken,
-        user_agent: userAgent,
-        device_type: deviceType,
-        success: true,
-      });
-    } catch (error) {
-      const status = Number((error as { status?: number })?.status || 0);
-      const payload = (error as { payload?: unknown })?.payload;
-      const invalidToken = isInvalidFcmTokenResponse(status, payload);
-      const errorCodes = extractFcmErrorCodes(payload);
-
-      console.warn(`${logPrefix} send fail`, {
-        user_id: targetUserId,
-        token: maskedToken,
-        user_agent: userAgent,
-        device_type: deviceType,
-        type: notification.type || "",
-        booking_id: notification.booking_id || "",
-        invalid_token: invalidToken,
-        firebase_status: status,
-        error_codes: errorCodes,
-        error: error instanceof Error ? error.message : String(error),
+        notification_created_at: String(notification.created_at || "").trim(),
+        push_send_started_at: pushSendStartedAt,
       });
 
-      if (invalidToken) {
-        try {
-          console.warn(`${logPrefix} disabling invalid token`, maskedToken);
-          await disableFcmToken(token);
-          console.info(`${logPrefix} invalid token cleaned`, {
-            user_id: targetUserId,
-            type: notification.type || "",
-          });
-        } catch (cleanupError) {
-          console.warn(`${logPrefix} invalid token cleanup failed`, {
-            user_id: targetUserId,
-            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-          });
+      try {
+        if (sendProvider === "WEB_PUSH") {
+          await sendWebPush(env, subscription, notification);
+        } else {
+          await sendFcmPush(env, token, notification);
         }
-      }
+        console.log(`${logPrefix} send success`, {
+          user_id: targetUserId,
+          provider: sendProvider,
+          token: maskedTarget,
+          user_agent: userAgent,
+          device_type: deviceType,
+          type: notification.type || "",
+          booking_id: notification.booking_id || "",
+          notification_created_at: String(notification.created_at || "").trim(),
+          push_send_started_at: pushSendStartedAt,
+        });
+        return {
+          token: maskedTarget,
+          provider: sendProvider,
+          user_agent: userAgent,
+          device_type: deviceType,
+          success: true,
+        };
+      } catch (error) {
+        const status = Number((error as { status?: number })?.status || 0);
+        const payload = (error as { payload?: unknown })?.payload;
+        const invalidToken =
+          sendProvider === "WEB_PUSH"
+            ? isInvalidWebPushResponse(status)
+            : isInvalidFcmTokenResponse(status, payload);
+        const errorCodes = extractFcmErrorCodes(payload);
 
-      results.push({
-        token: maskedToken,
-        user_agent: userAgent,
-        device_type: deviceType,
-        success: false,
-        status,
-        error_codes: errorCodes,
-        invalid_token: invalidToken,
-      });
+        console.warn(`${logPrefix} send fail`, {
+          user_id: targetUserId,
+          provider: sendProvider,
+          token: maskedTarget,
+          user_agent: userAgent,
+          device_type: deviceType,
+          type: notification.type || "",
+          booking_id: notification.booking_id || "",
+          invalid_token: invalidToken,
+          firebase_status: status,
+          error_codes: errorCodes,
+          error: error instanceof Error ? error.message : String(error),
+          notification_created_at: String(notification.created_at || "").trim(),
+          push_send_started_at: pushSendStartedAt,
+          fcm_response_at: new Date().toISOString(),
+        });
+
+        if (invalidToken) {
+          try {
+            console.warn(`${logPrefix} disabling invalid token`, maskedTarget);
+            await disablePushSubscriptionRecord(
+              sendProvider === "WEB_PUSH"
+                ? { endpoint }
+                : { fcm_token: token }
+            );
+            console.info(`${logPrefix} invalid token cleaned`, {
+              user_id: targetUserId,
+              type: notification.type || "",
+            });
+          } catch (cleanupError) {
+            console.warn(`${logPrefix} invalid token cleanup failed`, {
+              user_id: targetUserId,
+              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+            });
+          }
+        }
+
+        return {
+          token: maskedTarget,
+          provider: sendProvider,
+          user_agent: userAgent,
+          device_type: deviceType,
+          success: false,
+          status,
+          error_codes: errorCodes,
+          invalid_token: invalidToken,
+        };
+      }
+    })
+  );
+
+  for (const settledResult of settledResults) {
+    if (settledResult.status === "fulfilled") {
+      results.push(settledResult.value);
+      continue;
     }
+
+    console.warn(`${logPrefix} unexpected send task rejection`, {
+      user_id: targetUserId,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+      error: settledResult.reason instanceof Error ? settledResult.reason.message : String(settledResult.reason),
+      notification_created_at: String(notification.created_at || "").trim(),
+    });
   }
 
   const successCount = results.filter((result) => result.success).length;
@@ -627,8 +1060,8 @@ async function sendPushNotificationBatch(
 
   return {
     target_user_id: targetUserId,
-    subscription_count: activeSubscriptions.length,
-    token_count: uniqueSubscriptions.length,
+    subscription_count: subscriptionsBeforeDedupe,
+    token_count: deliveryQueue.length,
     success_count: successCount,
     failure_count: failureCount,
     user_agents: userAgents,
@@ -639,37 +1072,67 @@ async function sendPushNotificationBatch(
 }
 
 async function deliverNotificationPushes(env: Env, notifications: WorkerNotification[]) {
-  const targetUserIds = Array.from(
-    new Set(
-      (notifications || [])
-        .map((notification) => String(notification?.target_user_id || "").trim())
-        .filter(Boolean)
-    )
-  );
-
-  console.log("[push] target user_id list", targetUserIds);
+  const targetUserIds = new Set<string>();
+  const sentNotificationKeys = new Set<string>();
 
   for (const notification of notifications) {
     const targetUserId = String(notification?.target_user_id || "").trim();
-    if (!targetUserId) continue;
+    const targetRole = String(notification?.target_role || "").trim().toUpperCase();
+    let resolvedTargetUserIds = targetUserId ? [targetUserId] : [];
+
+    if (!targetUserId && targetRole) {
+      try {
+        resolvedTargetUserIds = await getActiveUserIdsByRoles([targetRole]);
+      } catch (error) {
+        console.warn("[push] role target resolution failed", {
+          target_role: targetRole,
+          type: notification.type || "",
+          booking_id: notification.booking_id || "",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+    }
+
+    resolvedTargetUserIds = Array.from(
+      new Set(
+        resolvedTargetUserIds
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    for (const resolvedUserId of resolvedTargetUserIds) {
+      targetUserIds.add(resolvedUserId);
+    }
 
     console.log("[push] dispatch notification", {
       target_user_id: targetUserId,
+      target_role: targetRole,
+      resolved_target_user_ids: resolvedTargetUserIds,
       type: notification.type || "",
       booking_id: notification.booking_id || "",
     });
 
-    try {
-      await sendPushNotificationBatch(env, targetUserId, notification, { logPrefix: "[push]" });
-    } catch (error) {
-      console.warn("[push] dispatch failed", {
-        user_id: targetUserId,
-        type: notification.type || "",
-        booking_id: notification.booking_id || "",
-        error: error instanceof Error ? error.message : String(error),
-      });
+    for (const resolvedUserId of resolvedTargetUserIds) {
+      try {
+        await sendPushNotificationBatch(env, resolvedUserId, notification, {
+          logPrefix: "[push]",
+          sentNotificationKeys,
+        });
+      } catch (error) {
+        console.warn("[push] dispatch failed", {
+          user_id: resolvedUserId,
+          target_role: targetRole,
+          type: notification.type || "",
+          booking_id: notification.booking_id || "",
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
+
+  console.log("[push] target user_id list", Array.from(targetUserIds));
 }
 
 async function maybeDeliverCreatedNotifications(env: Env, response: SheetResponse) {
@@ -685,8 +1148,51 @@ async function maybeDeliverCreatedNotifications(env: Env, response: SheetRespons
   await deliverNotificationPushes(env, response.created_notifications);
 }
 
+async function handlePushTest(request: Request, env: Env) {
+  const body = await readRequestBody(request);
+  const userId = String(body.user_id || "").trim();
+  const title = String(body.title || "").trim();
+  const message = String(body.body || "").trim();
+
+  if (!userId || !title || !message) {
+    return jsonResponse(
+      {
+        success: false,
+        message: "user_id, title, and body are required",
+      },
+      400
+    );
+  }
+
+  const delivery = await sendPushNotificationBatch(
+    env,
+    userId,
+    {
+      target_user_id: userId,
+      title,
+      message,
+      type: "PUSH_TEST",
+      url: "/booking",
+    },
+    { logPrefix: "[push-test]" }
+  );
+
+  return jsonResponse({
+    success: true,
+    message: "Push test completed",
+    data: {
+      user_id: userId,
+      token_count: delivery.token_count,
+      user_agents: delivery.user_agents,
+      success_count: delivery.success_count,
+      failure_count: delivery.failure_count,
+      error_codes: delivery.error_codes,
+    },
+  });
+}
+
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
@@ -714,6 +1220,10 @@ export default {
     }
 
     if (request.method === "POST") {
+      if (url.pathname === "/push/test") {
+        return handlePushTest(request, env);
+      }
+
       const body = await readRequestBody(request);
 
       if (url.pathname === "/api/thai_holidays") {
@@ -725,7 +1235,14 @@ export default {
       const action = postRouteActions[url.pathname];
       if (action) {
         const response = await forwardSheetPost(action, body);
-        await maybeDeliverCreatedNotifications(env, response);
+        ctx.waitUntil(
+          maybeDeliverCreatedNotifications(env, response).catch((error) => {
+            console.warn("[push] async delivery failed", {
+              path: url.pathname,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          })
+        );
         return jsonResponse(response);
       }
     }

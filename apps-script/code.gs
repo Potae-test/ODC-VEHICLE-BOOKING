@@ -853,6 +853,11 @@ function getPushSubscriptionsByUserId(data) {
       const status =
         String(row.status || "").trim().toUpperCase();
       const fcmToken = String(row.fcm_token || "").trim();
+      const endpoint = String(row.endpoint || "").trim();
+      const p256dh = String(row.p256dh || "").trim();
+      const auth = String(row.auth || "").trim();
+      const isFcm = provider === "FCM" && fcmToken.length > 0;
+      const isWebPush = provider === "WEB_PUSH" && endpoint.length > 0 && p256dh.length > 0 && auth.length > 0;
 
       console.log("[push-subscriptions]", {
         normalizedUserId: normalizedUserId,
@@ -860,12 +865,14 @@ function getPushSubscriptionsByUserId(data) {
         provider: provider,
         status: status,
         hasToken: !!fcmToken,
+        hasEndpoint: !!endpoint,
+        hasP256dh: !!p256dh,
+        hasAuth: !!auth,
       });
 
       return rowUserId === normalizedUserId &&
-        provider === "FCM" &&
         status === "ACTIVE" &&
-        fcmToken.length > 0;
+        (isFcm || isWebPush);
     });
 
     console.log("[push-subscriptions] matched:", results.length);
@@ -951,6 +958,34 @@ function savePushSubscription(data) {
       return nextValues;
     }
 
+    function deactivateDuplicateWebPushRows_(keepIndex) {
+      for (let index = 0; index < table.rows.length; index += 1) {
+        if (index === keepIndex) {
+          continue;
+        }
+
+        const rowValues = table.rows[index];
+        const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+        const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
+
+        if (
+          rowUserId !== userId ||
+          rowProvider !== "WEB_PUSH" ||
+          rowUserAgent !== userAgent ||
+          rowStatus !== "ACTIVE"
+        ) {
+          continue;
+        }
+
+        const nextValues = rowValues.slice();
+        nextValues[columnMap.status] = "INACTIVE";
+        nextValues[columnMap.updated_at] = nowIso;
+        setRowValues(sheet, index + 2, nextValues);
+      }
+    }
+
     if (provider === "FCM") {
       for (let index = 0; index < table.rows.length; index += 1) {
         const rowValues = table.rows[index];
@@ -1012,11 +1047,40 @@ function savePushSubscription(data) {
     } else {
       for (let index = 0; index < table.rows.length; index += 1) {
         const rowValues = table.rows[index];
-        if (String(rowValues[columnMap.endpoint] || "").trim() === endpoint) {
+        const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowEndpoint = String(rowValues[columnMap.endpoint] || "").trim();
+        const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+
+        if (
+          rowUserId === userId &&
+          rowProvider === "WEB_PUSH" &&
+          rowEndpoint === endpoint
+        ) {
           savedRowValues = updateRow_(rowValues, false);
           savedRowIndex = index;
           setRowValues(sheet, index + 2, savedRowValues);
           break;
+        }
+      }
+
+      if (!savedRowValues) {
+        for (let index = 0; index < table.rows.length; index += 1) {
+          const rowValues = table.rows[index];
+          const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+          const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+          const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+
+          if (
+            rowUserId === userId &&
+            rowProvider === "WEB_PUSH" &&
+            rowUserAgent === userAgent
+          ) {
+            savedRowValues = updateRow_(rowValues, false);
+            savedRowIndex = index;
+            setRowValues(sheet, index + 2, savedRowValues);
+            break;
+          }
         }
       }
     }
@@ -1065,6 +1129,8 @@ function savePushSubscription(data) {
         nextValues[columnMap.updated_at] = nowIso;
         setRowValues(sheet, index + 2, nextValues);
       }
+    } else if (provider === "WEB_PUSH") {
+      deactivateDuplicateWebPushRows_(savedRowIndex);
     }
 
     return jsonOutput({
@@ -1153,8 +1219,16 @@ function getActivePushSubscriptionsByUserId_(userId) {
       String(row.user_id || "").trim() === normalizedUserId &&
       String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
       (
-        String(row.endpoint || "").trim() ||
-        String(row.fcm_token || "").trim()
+        (
+          (String(row.provider || "").trim().toUpperCase() || "FCM") === "FCM" &&
+          String(row.fcm_token || "").trim()
+        ) ||
+        (
+          String(row.provider || "").trim().toUpperCase() === "WEB_PUSH" &&
+          String(row.endpoint || "").trim() &&
+          String(row.p256dh || "").trim() &&
+          String(row.auth || "").trim()
+        )
       )
     )
     .map((row) => ({
@@ -1719,7 +1793,8 @@ function createBooking(data) {
         assigned_user_id: data.assigned_user_id || "",
         assigned_user_name: data.assigned_user_name || "",
         is_backdated: bookingRow[isBackdatedCol],
-      }
+      },
+      created_notifications: getCreatedNotifications_(),
     });
   } catch (err) {
     return jsonOutput({ success: false, message: String(err.message || err) });

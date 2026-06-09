@@ -408,6 +408,62 @@ button:hover {
   flex-direction: column;
 }
 
+.notification-debug-card {
+  margin: 14px 18px 0;
+  padding: 14px 16px;
+  border: 1px solid #d6e4f5;
+  border-radius: 16px;
+  background: #ffffff;
+  display: grid;
+  gap: 10px;
+}
+
+.notification-debug-row {
+  display: grid;
+  gap: 4px;
+}
+
+.notification-debug-row span {
+  font-size: 14px;
+  font-weight: 700;
+  color: #47607f;
+}
+
+.notification-debug-row strong,
+.notification-debug-row code {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #10233f;
+  word-break: break-word;
+}
+
+.notification-debug-row code {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.notification-debug-error {
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff4f4;
+  border: 1px solid #f3c7c7;
+}
+
+.notification-debug-error-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #b42318;
+}
+
+.notification-debug-error pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #7a271a;
+  font-family: Consolas, "Courier New", monospace;
+}
+
 .notification-panel.is-expanded .notification-panel-body {
   flex: 1;
   min-height: 0;
@@ -569,6 +625,11 @@ button:hover {
   max-width: 100%;
   text-align: center;
   white-space: normal;
+}
+
+.notification-text-button.notification-text-button-danger {
+  background: #fff1f2;
+  color: #c62828;
 }
 
 .notification-text-button:disabled {

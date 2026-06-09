@@ -5,10 +5,16 @@ import {
   markNotificationRead,
   savePushSubscription,
 } from "../../api";
-import { showError, showSuccess } from "../../utils/alert";
+import { showConfirm, showError, showSuccess } from "../../utils/alert";
 import {
+  formatTokenPreview,
+  getPushDebugInfo,
+  getPreferredPushProvider,
+  getPushDeviceLabel,
   isPushSupported,
   listenForegroundMessages,
+  registerWebPushSubscription,
+  recoverFirebaseMessagingRegistration,
   requestFcmToken,
   requestNotificationPermission,
 } from "../../utils/pushNotifications";
@@ -17,6 +23,7 @@ const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 const NOTIFICATIONS_PER_PAGE = 3;
 const PUSH_TOKEN_STORAGE_KEY = "odc_fcm_token_current";
 const PUSH_TOKEN_USER_ID_STORAGE_KEY = "odc_fcm_token_user_id";
+const PUSH_PROVIDER_STORAGE_KEY = "odc_push_provider";
 const PUSH_LAST_SYNC_STORAGE_KEY = "odc_fcm_token_last_sync_at";
 const PUSH_SYNC_THROTTLE_MS = 5 * 60 * 1000;
 function formatNotificationDateTime(value) {
@@ -99,6 +106,14 @@ function writeLocalStorageValue(key, value) {
   }
 }
 
+function removeLocalStorageValue(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage remove failures during push recovery.
+  }
+}
+
 function getDeviceType() {
   if (typeof window === "undefined") {
     return "unknown";
@@ -125,6 +140,16 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   const [markingAll, setMarkingAll] = useState(false);
   const [pushStatus, setPushStatus] = useState("loading");
   const [page, setPage] = useState(1);
+  const [debugPushOpen, setDebugPushOpen] = useState(false);
+  const [debugPushLoading, setDebugPushLoading] = useState(false);
+  const [debugPushInfo, setDebugPushInfo] = useState({
+    permission: typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+    serviceWorkerScriptUrl: "",
+    provider: getPreferredPushProvider(),
+    device: getPushDeviceLabel(),
+    tokenPreview: "",
+    error: null,
+  });
   const rootRef = useRef(null);
 
   const userId = String(currentUser?.user_id || "").trim();
@@ -204,20 +229,66 @@ export default function NotificationBell({ currentUser, onNavigate }) {
 
       const storedToken = String(readLocalStorageValue(PUSH_TOKEN_STORAGE_KEY) || "").trim();
       const storedUserId = String(readLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY) || "").trim();
+      const storedProvider = String(readLocalStorageValue(PUSH_PROVIDER_STORAGE_KEY) || "").trim().toUpperCase();
       const lastSyncAt = Number(readLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY) || 0);
+      const provider = getPreferredPushProvider();
       const canUseThrottle = Boolean(storedToken) && storedUserId === userId;
-      if (!force && canUseThrottle && lastSyncAt > 0 && Date.now() - lastSyncAt < PUSH_SYNC_THROTTLE_MS) {
+      if (!force && canUseThrottle && storedProvider === provider && lastSyncAt > 0 && Date.now() - lastSyncAt < PUSH_SYNC_THROTTLE_MS) {
         setPushStatus("enabled");
-        return { synced: false, reason: "throttled" };
+        return { synced: false, reason: "throttled", provider };
+      }
+
+      if (provider === "WEB_PUSH") {
+        const webPushSubscription = await registerWebPushSubscription();
+        const endpoint = String(webPushSubscription.endpoint || "").trim();
+        if (!endpoint) {
+          setPushStatus("not_enabled");
+          return { synced: false, reason: "missing_endpoint", provider };
+        }
+
+        const subscriptionChanged = storedToken !== endpoint || storedUserId !== userId || storedProvider !== provider;
+
+        if (force || subscriptionChanged) {
+          await savePushSubscription({
+            user_id: userId,
+            user_name: String(currentUser?.name || "").trim(),
+            role,
+            endpoint,
+            p256dh: webPushSubscription.p256dh,
+            auth: webPushSubscription.auth,
+            subscription: webPushSubscription.subscription.toJSON(),
+            provider,
+            user_agent: navigator.userAgent || "",
+            platform: navigator.platform || "",
+            device_type: getDeviceType(),
+            status: "ACTIVE",
+          });
+        }
+
+        writeLocalStorageValue(PUSH_TOKEN_STORAGE_KEY, endpoint);
+        writeLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY, userId);
+        writeLocalStorageValue(PUSH_PROVIDER_STORAGE_KEY, provider);
+        writeLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY, String(Date.now()));
+        setPushStatus("enabled");
+
+        return {
+          synced: force || subscriptionChanged,
+          reason: force || subscriptionChanged ? "saved" : "unchanged",
+          provider,
+          endpoint,
+        };
       }
 
       const fcmToken = String(await requestFcmToken()).trim();
       if (!fcmToken) {
         setPushStatus("not_enabled");
-        return { synced: false, reason: "missing_token" };
+        return { synced: false, reason: "missing_token", provider };
       }
 
-      const tokenChanged = storedToken !== fcmToken || storedUserId !== userId;
+      const tokenChanged =
+        storedToken !== fcmToken ||
+        storedUserId !== userId ||
+        storedProvider !== provider;
 
       if (force || tokenChanged) {
         await savePushSubscription({
@@ -225,8 +296,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           user_name: String(currentUser?.name || "").trim(),
           role,
           fcm_token: fcmToken,
-          previous_fcm_token: storedToken,
-          provider: "FCM",
+          previous_fcm_token: storedProvider === "FCM" ? storedToken : "",
+          provider,
           user_agent: navigator.userAgent || "",
           platform: navigator.platform || "",
           device_type: getDeviceType(),
@@ -236,12 +307,14 @@ export default function NotificationBell({ currentUser, onNavigate }) {
 
       writeLocalStorageValue(PUSH_TOKEN_STORAGE_KEY, fcmToken);
       writeLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY, userId);
+      writeLocalStorageValue(PUSH_PROVIDER_STORAGE_KEY, provider);
       writeLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY, String(Date.now()));
       setPushStatus("enabled");
 
       return {
         synced: force || tokenChanged,
         reason: force || tokenChanged ? "saved" : "unchanged",
+        provider,
         token: fcmToken,
       };
     },
@@ -481,6 +554,55 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     }
   };
 
+  const handleDebugPush = async () => {
+    setDebugPushOpen(true);
+    setDebugPushLoading(true);
+
+    try {
+      const debugInfo = await getPushDebugInfo({ requestToken: true });
+      setDebugPushInfo({
+        permission: debugInfo.permission,
+        serviceWorkerScriptUrl: debugInfo.serviceWorkerScriptUrl,
+        provider: getPreferredPushProvider(),
+        device: getPushDeviceLabel(),
+        tokenPreview: debugInfo.tokenPreview || formatTokenPreview(debugInfo.token),
+        error: debugInfo.error,
+      });
+    } catch (err) {
+      setDebugPushInfo({
+        permission: typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+        serviceWorkerScriptUrl: "",
+        provider: getPreferredPushProvider(),
+        device: getPushDeviceLabel(),
+        tokenPreview: "",
+        error: {
+          code: String(err?.code || "").trim(),
+          message: String(err?.message || err).trim(),
+          stack: String(err?.stack || "").trim(),
+        },
+      });
+    } finally {
+      setDebugPushLoading(false);
+    }
+  };
+
+  const handleRecoverPush = async () => {
+    const confirmed = await showConfirm("ลบโทเคน Firebase บนอุปกรณ์นี้ รีเซ็ต service worker แล้วโหลดหน้าใหม่ใช่หรือไม่");
+    if (!confirmed) return;
+
+    removeLocalStorageValue(PUSH_TOKEN_STORAGE_KEY);
+    removeLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY);
+    removeLocalStorageValue(PUSH_PROVIDER_STORAGE_KEY);
+    removeLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY);
+
+    try {
+      await recoverFirebaseMessagingRegistration();
+    } catch (err) {
+      console.warn("push recovery failed", err);
+      await showError(err?.message || "ไม่สามารถรีเซ็ตการแจ้งเตือนบนอุปกรณ์นี้ได้");
+    }
+  };
+
   return (
     <div className="notification-bell" ref={rootRef}>
       <button
@@ -520,6 +642,41 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           </div>
 
           <div className="notification-panel-body">
+            {debugPushOpen && (
+              <div className="notification-debug-card">
+                <div className="notification-debug-row">
+                  <span>Provider</span>
+                  <strong>{debugPushInfo.provider || "-"}</strong>
+                </div>
+                <div className="notification-debug-row">
+                  <span>Device</span>
+                  <strong>{debugPushInfo.device || "-"}</strong>
+                </div>
+                <div className="notification-debug-row">
+                  <span>Permission</span>
+                  <strong>{debugPushInfo.permission || "-"}</strong>
+                </div>
+                <div className="notification-debug-row">
+                  <span>Service Worker</span>
+                  <code>{debugPushInfo.serviceWorkerScriptUrl || "-"}</code>
+                </div>
+                <div className="notification-debug-row">
+                  <span>FCM Token</span>
+                  <code>
+                    {debugPushLoading
+                      ? "Checking..."
+                      : debugPushInfo.tokenPreview || (debugPushInfo.error ? "-" : "No token")}
+                  </code>
+                </div>
+                {debugPushInfo.error && (
+                  <div className="notification-debug-error">
+                    <div className="notification-debug-error-title">getToken error</div>
+                    <pre>{JSON.stringify(debugPushInfo.error, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )}
+
             {loading && (
               <div className="notification-list">
                 {[0, 1, 2].map((item) => (
@@ -633,6 +790,22 @@ export default function NotificationBell({ currentUser, onNavigate }) {
               disabled={!userId || pushStatus === "enabled" || pushStatus === "unsupported" || pushStatus === "blocked"}
             >
               {pushStatus === "loading" ? "เปิดแจ้งเตือนบนเครื่องนี้" : getPushStatusLabel(pushStatus)}
+            </button>
+            <button
+              type="button"
+              className="notification-text-button"
+              onClick={handleDebugPush}
+              disabled={debugPushLoading}
+            >
+              {debugPushLoading ? "Checking..." : "Debug Push"}
+            </button>
+            <button
+              type="button"
+              className="notification-text-button notification-text-button-danger"
+              onClick={handleRecoverPush}
+              disabled={!userId}
+            >
+              Recover Push
             </button>
             <button
               type="button"

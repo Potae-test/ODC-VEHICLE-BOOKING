@@ -9,6 +9,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@pushforge/builder": "^2.0.5",
     "chanfana": "^3.3.0",
     "hono": "^4.12.12",
     "zod": "^4.3.6"
