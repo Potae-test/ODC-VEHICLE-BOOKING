@@ -5,6 +5,7 @@ import {
   markNotificationRead,
   savePushSubscription,
 } from "../../api";
+import { showError, showSuccess } from "../../utils/alert";
 import {
   isPushSupported,
   listenForegroundMessages,
@@ -14,6 +15,10 @@ import {
 
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 const NOTIFICATIONS_PER_PAGE = 3;
+const PUSH_TOKEN_STORAGE_KEY = "odc_fcm_token_current";
+const PUSH_TOKEN_USER_ID_STORAGE_KEY = "odc_fcm_token_user_id";
+const PUSH_LAST_SYNC_STORAGE_KEY = "odc_fcm_token_last_sync_at";
+const PUSH_SYNC_THROTTLE_MS = 5 * 60 * 1000;
 function formatNotificationDateTime(value) {
   try {
     if (!value) return "";
@@ -76,6 +81,38 @@ function getPushStatusLabel(status) {
   if (status === "blocked") return "ถูกบล็อก";
   if (status === "enabled") return "เปิดแล้ว";
   return "ยังไม่ได้เปิด";
+}
+
+function readLocalStorageValue(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalStorageValue(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures so push registration still works.
+  }
+}
+
+function getDeviceType() {
+  if (typeof window === "undefined") {
+    return "unknown";
+  }
+
+  const userAgent = String(navigator.userAgent || "").toLowerCase();
+  const isStandalone =
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    window.navigator.standalone === true;
+
+  if (isStandalone) return "pwa";
+  if (/ipad|tablet/.test(userAgent)) return "tablet";
+  if (/mobi|android|iphone/.test(userAgent)) return "mobile";
+  return "desktop";
 }
 
 export default function NotificationBell({ currentUser, onNavigate }) {
@@ -147,6 +184,67 @@ export default function NotificationBell({ currentUser, onNavigate }) {
       }
     },
     [role, userId]
+  );
+
+  const syncCurrentDevicePushToken = useCallback(
+    async ({ force = false } = {}) => {
+      if (!userId) {
+        return { synced: false, reason: "missing_user" };
+      }
+
+      if (!isPushSupported()) {
+        setPushStatus("unsupported");
+        return { synced: false, reason: "unsupported" };
+      }
+
+      if (Notification.permission !== "granted") {
+        setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
+        return { synced: false, reason: "permission_not_granted" };
+      }
+
+      const storedToken = String(readLocalStorageValue(PUSH_TOKEN_STORAGE_KEY) || "").trim();
+      const storedUserId = String(readLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY) || "").trim();
+      const lastSyncAt = Number(readLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY) || 0);
+      const canUseThrottle = Boolean(storedToken) && storedUserId === userId;
+      if (!force && canUseThrottle && lastSyncAt > 0 && Date.now() - lastSyncAt < PUSH_SYNC_THROTTLE_MS) {
+        setPushStatus("enabled");
+        return { synced: false, reason: "throttled" };
+      }
+
+      const fcmToken = String(await requestFcmToken()).trim();
+      if (!fcmToken) {
+        setPushStatus("not_enabled");
+        return { synced: false, reason: "missing_token" };
+      }
+
+      const tokenChanged = storedToken !== fcmToken || storedUserId !== userId;
+
+      if (force || tokenChanged) {
+        await savePushSubscription({
+          user_id: userId,
+          user_name: String(currentUser?.name || "").trim(),
+          role,
+          fcm_token: fcmToken,
+          provider: "FCM",
+          user_agent: navigator.userAgent || "",
+          platform: navigator.platform || "",
+          device_type: getDeviceType(),
+          status: "ACTIVE",
+        });
+      }
+
+      writeLocalStorageValue(PUSH_TOKEN_STORAGE_KEY, fcmToken);
+      writeLocalStorageValue(PUSH_TOKEN_USER_ID_STORAGE_KEY, userId);
+      writeLocalStorageValue(PUSH_LAST_SYNC_STORAGE_KEY, String(Date.now()));
+      setPushStatus("enabled");
+
+      return {
+        synced: force || tokenChanged,
+        reason: force || tokenChanged ? "saved" : "unchanged",
+        token: fcmToken,
+      };
+    },
+    [currentUser?.name, role, userId]
   );
 
   useEffect(() => {
@@ -233,60 +331,57 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   useEffect(() => {
     let cancelled = false;
 
-    async function syncPushState() {
-      if (!isPushSupported()) {
-        if (!cancelled) setPushStatus("unsupported");
-        return;
+    syncCurrentDevicePushToken().catch((err) => {
+      console.warn("push sync failed", err);
+      if (!cancelled) {
+        setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
       }
-
-      if (Notification.permission === "denied") {
-        if (!cancelled) setPushStatus("blocked");
-        return;
-      }
-
-      try {
-        if (Notification.permission !== "granted") {
-          if (!cancelled) setPushStatus("not_enabled");
-          return;
-        }
-
-        const fcmToken = await requestFcmToken();
-        if (!fcmToken) {
-          if (!cancelled) setPushStatus("not_enabled");
-          return;
-        }
-
-        if (userId) {
-          await savePushSubscription({
-            user_id: userId,
-            fcm_token: fcmToken,
-            provider: "FCM",
-            user_agent: navigator.userAgent || "",
-          });
-        }
-
-        if (!cancelled) setPushStatus("enabled");
-      } catch (err) {
-        console.warn("push sync failed", err);
-        if (!cancelled) {
-          setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
-        }
-      }
-    }
-
-    syncPushState();
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [syncCurrentDevicePushToken]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        syncCurrentDevicePushToken().catch((err) => {
+          console.warn("push sync on visibility change failed", err);
+        });
+      }
+    };
+
+    const handleWindowFocus = () => {
+      syncCurrentDevicePushToken().catch((err) => {
+        console.warn("push sync on focus failed", err);
+      });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [syncCurrentDevicePushToken, userId]);
 
   const handleOpen = async () => {
     const nextOpen = !isOpen;
     setIsOpen(nextOpen);
 
     if (nextOpen) {
-      await loadNotifications({ silent: true });
+      try {
+        await Promise.all([
+          loadNotifications({ silent: true }),
+          syncCurrentDevicePushToken(),
+        ]);
+      } catch (err) {
+        console.warn("push sync on panel open failed", err);
+      }
     }
   };
 
@@ -364,21 +459,24 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     try {
       const permission = await requestNotificationPermission();
       if (permission !== "granted") {
-        setPushStatus(permission === "denied" ? "blocked" : "not_enabled");
+        const nextStatus = permission === "denied" ? "blocked" : "not_enabled";
+        setPushStatus(nextStatus);
+        await showError(
+          permission === "denied"
+            ? "เบราว์เซอร์บล็อกการแจ้งเตือน กรุณาเปิดสิทธิ์การแจ้งเตือนในการตั้งค่าอุปกรณ์"
+            : "ยังไม่ได้อนุญาตการแจ้งเตือนสำหรับอุปกรณ์นี้"
+        );
         return;
       }
 
-      const fcmToken = await requestFcmToken();
-      await savePushSubscription({
-        user_id: userId,
-        fcm_token: fcmToken,
-        provider: "FCM",
-        user_agent: navigator.userAgent || "",
-      });
-      setPushStatus("enabled");
+      const result = await syncCurrentDevicePushToken({ force: true });
+      if (result.synced) {
+        await showSuccess("เปิดการแจ้งเตือนบนอุปกรณ์นี้เรียบร้อยแล้ว");
+      }
     } catch (err) {
       console.warn("enable push failed", err);
       setPushStatus(Notification.permission === "denied" ? "blocked" : "not_enabled");
+      await showError(err?.message || "ไม่สามารถเปิดการแจ้งเตือนบนอุปกรณ์นี้ได้");
     }
   };
 
