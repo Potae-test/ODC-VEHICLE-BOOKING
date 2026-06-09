@@ -225,6 +225,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           user_name: String(currentUser?.name || "").trim(),
           role,
           fcm_token: fcmToken,
+          previous_fcm_token: storedToken,
           provider: "FCM",
           user_agent: navigator.userAgent || "",
           platform: navigator.platform || "",

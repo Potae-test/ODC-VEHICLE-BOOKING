@@ -896,8 +896,6 @@ function savePushSubscription(data) {
     const provider = String(payload.provider || "").trim().toUpperCase() || "FCM";
     const userAgent = String(payload.user_agent || "").trim();
     const nowIso = new Date().toISOString();
-    const matchColumnKey = provider === "FCM" ? "fcm_token" : "endpoint";
-    const matchValue = provider === "FCM" ? fcmToken : endpoint;
 
     if (!userId) {
       return jsonOutput({
@@ -924,19 +922,21 @@ function savePushSubscription(data) {
     const table = readSheetTable(sheet);
     const headers = table.headers;
     const columnMap = table.columnMap;
-    const matchCol = columnMap[matchColumnKey];
+    let savedRowValues = null;
+    let savedRowIndex = -1;
 
-    for (let index = 0; index < table.rows.length; index += 1) {
-      const rowValues = table.rows[index];
-      if (String(rowValues[matchCol] || "").trim() !== matchValue) {
-        continue;
-      }
-
+    function updateRow_(rowValues, preserveExistingEndpointFields) {
       const nextValues = rowValues.slice();
       nextValues[columnMap.user_id] = userId;
-      nextValues[columnMap.endpoint] = endpoint;
-      nextValues[columnMap.p256dh] = p256dh;
-      nextValues[columnMap.auth] = auth;
+      if (preserveExistingEndpointFields) {
+        if (endpoint) nextValues[columnMap.endpoint] = endpoint;
+        if (p256dh) nextValues[columnMap.p256dh] = p256dh;
+        if (auth) nextValues[columnMap.auth] = auth;
+      } else {
+        nextValues[columnMap.endpoint] = endpoint;
+        nextValues[columnMap.p256dh] = p256dh;
+        nextValues[columnMap.auth] = auth;
+      }
       nextValues[columnMap.fcm_token] = fcmToken;
       nextValues[columnMap.provider] = provider;
       nextValues[columnMap.user_agent] = userAgent;
@@ -948,34 +948,129 @@ function savePushSubscription(data) {
       if (!String(nextValues[columnMap.subscription_id] || "").trim()) {
         nextValues[columnMap.subscription_id] = "PS-" + Utilities.getUuid();
       }
-
-      setRowValues(sheet, index + 2, nextValues);
-
-      return jsonOutput({
-        success: true,
-        message: "Save push subscription success",
-        data: rowsToObjects(headers, [nextValues])[0] || {},
-      });
+      return nextValues;
     }
 
-    const row = Array(headers.length).fill("");
-    row[columnMap.subscription_id] = "PS-" + Utilities.getUuid();
-    row[columnMap.user_id] = userId;
-    row[columnMap.endpoint] = endpoint;
-    row[columnMap.p256dh] = p256dh;
-    row[columnMap.auth] = auth;
-    row[columnMap.fcm_token] = fcmToken;
-    row[columnMap.provider] = provider;
-    row[columnMap.user_agent] = userAgent;
-    row[columnMap.status] = "ACTIVE";
-    row[columnMap.created_at] = nowIso;
-    row[columnMap.updated_at] = nowIso;
-    appendSheetRow(sheet, row);
+    if (provider === "FCM") {
+      for (let index = 0; index < table.rows.length; index += 1) {
+        const rowValues = table.rows[index];
+        const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+
+        if (
+          rowUserId === userId &&
+          rowProvider === "FCM" &&
+          rowUserAgent === userAgent
+        ) {
+          savedRowValues = updateRow_(rowValues, true);
+          savedRowIndex = index;
+          setRowValues(sheet, index + 2, savedRowValues);
+          break;
+        }
+      }
+
+      if (!savedRowValues) {
+        for (let index = 0; index < table.rows.length; index += 1) {
+          const rowValues = table.rows[index];
+          if (String(rowValues[columnMap.fcm_token] || "").trim() === fcmToken) {
+            savedRowValues = updateRow_(rowValues, true);
+            savedRowIndex = index;
+            setRowValues(sheet, index + 2, savedRowValues);
+            break;
+          }
+        }
+      }
+
+      if (savedRowValues) {
+        for (let index = 0; index < table.rows.length; index += 1) {
+          if (index === savedRowIndex) {
+            continue;
+          }
+
+          const rowValues = table.rows[index];
+          const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+          const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+          const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+          const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
+
+          if (
+            rowUserId !== userId ||
+            rowProvider !== "FCM" ||
+            rowUserAgent !== userAgent ||
+            rowStatus !== "ACTIVE"
+          ) {
+            continue;
+          }
+
+          const nextValues = rowValues.slice();
+          nextValues[columnMap.status] = "INACTIVE";
+          nextValues[columnMap.updated_at] = nowIso;
+          setRowValues(sheet, index + 2, nextValues);
+        }
+      }
+    } else {
+      for (let index = 0; index < table.rows.length; index += 1) {
+        const rowValues = table.rows[index];
+        if (String(rowValues[columnMap.endpoint] || "").trim() === endpoint) {
+          savedRowValues = updateRow_(rowValues, false);
+          savedRowIndex = index;
+          setRowValues(sheet, index + 2, savedRowValues);
+          break;
+        }
+      }
+    }
+
+    if (!savedRowValues) {
+      const row = Array(headers.length).fill("");
+      row[columnMap.subscription_id] = "PS-" + Utilities.getUuid();
+      row[columnMap.user_id] = userId;
+      row[columnMap.endpoint] = endpoint;
+      row[columnMap.p256dh] = p256dh;
+      row[columnMap.auth] = auth;
+      row[columnMap.fcm_token] = fcmToken;
+      row[columnMap.provider] = provider;
+      row[columnMap.user_agent] = userAgent;
+      row[columnMap.status] = "ACTIVE";
+      row[columnMap.created_at] = nowIso;
+      row[columnMap.updated_at] = nowIso;
+      appendSheetRow(sheet, row);
+      savedRowValues = row;
+      savedRowIndex = table.rows.length;
+    }
+
+    if (provider === "FCM") {
+      for (let index = 0; index < table.rows.length; index += 1) {
+        if (index === savedRowIndex) {
+          continue;
+        }
+
+        const rowValues = table.rows[index];
+        const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
+        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
+        const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
+
+        if (
+          rowUserId !== userId ||
+          rowProvider !== "FCM" ||
+          rowUserAgent !== userAgent ||
+          rowStatus !== "ACTIVE"
+        ) {
+          continue;
+        }
+
+        const nextValues = rowValues.slice();
+        nextValues[columnMap.status] = "INACTIVE";
+        nextValues[columnMap.updated_at] = nowIso;
+        setRowValues(sheet, index + 2, nextValues);
+      }
+    }
 
     return jsonOutput({
       success: true,
       message: "Save push subscription success",
-      data: rowsToObjects(headers, [row])[0] || {},
+      data: rowsToObjects(headers, [savedRowValues])[0] || {},
     });
   } catch (err) {
     return jsonOutput({

@@ -99,6 +99,7 @@ type PushSubscriptionRecord = {
   fcm_token?: string;
   provider?: string;
   status?: string;
+  user_agent?: string;
 };
 
 const FIREBASE_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
@@ -304,6 +305,53 @@ async function getPushSubscriptionsByUserId(userId: string) {
   return Array.isArray(response.data) ? (response.data as PushSubscriptionRecord[]) : [];
 }
 
+function getDeviceTypeFromUserAgent(userAgent: string) {
+  const normalized = String(userAgent || "").trim().toLowerCase();
+  if (!normalized) return "unknown";
+  if (/(android|iphone|ipad|ipod|mobile|mobi)/.test(normalized)) return "mobile";
+  if (/(windows|macintosh|mac os|linux|x11)/.test(normalized)) return "desktop";
+  return "unknown";
+}
+
+function extractFcmErrorCodes(payload: any) {
+  const codes = new Set<string>();
+  const topLevelStatus = String(payload?.error?.status || "").trim();
+  const topLevelCode = String(payload?.error?.code || "").trim();
+
+  if (topLevelStatus) codes.add(topLevelStatus);
+  if (topLevelCode) codes.add(topLevelCode);
+
+  if (Array.isArray(payload?.error?.details)) {
+    for (const detail of payload.error.details) {
+      const detailCode = String(detail?.errorCode || detail?.status || detail?.code || "").trim();
+      if (detailCode) codes.add(detailCode);
+    }
+  }
+
+  return Array.from(codes);
+}
+
+function normalizeFcmSubscriptions(subscriptions: PushSubscriptionRecord[]) {
+  return (Array.isArray(subscriptions) ? subscriptions : [])
+    .filter((subscription) => String(subscription.provider || "").trim().toUpperCase() === "FCM")
+    .filter((subscription) => String(subscription.status || "").trim().toUpperCase() === "ACTIVE")
+    .filter((subscription) => String(subscription.fcm_token || "").trim().length > 0);
+}
+
+function dedupeFcmSubscriptionsByToken(subscriptions: PushSubscriptionRecord[]) {
+  const seenTokens = new Set<string>();
+  const uniqueSubscriptions: PushSubscriptionRecord[] = [];
+
+  for (const subscription of subscriptions) {
+    const token = String(subscription.fcm_token || "").trim();
+    if (!token || seenTokens.has(token)) continue;
+    seenTokens.add(token);
+    uniqueSubscriptions.push(subscription);
+  }
+
+  return uniqueSubscriptions;
+}
+
 function isInvalidFcmTokenResponse(status: number, payload: any) {
   const errorStatus = String(payload?.error?.status || "").trim().toUpperCase();
   const errorMessage = String(payload?.error?.message || "").trim().toUpperCase();
@@ -360,6 +408,23 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
             booking_id: notification.booking_id || "",
           },
           webpush: {
+            headers: {
+              Urgency: "high",
+            },
+            notification: {
+              title: notification.title || "ODC Vehicle Booking",
+              body: notification.message || "มีการแจ้งเตือนใหม่",
+              icon: "/icon-192.png",
+              badge: "/icon-192.png",
+              tag: notification.booking_id || notification.type || "odc-notification",
+              renotify: true,
+              requireInteraction: false,
+              data: {
+                url: notification.url || "/",
+                type: notification.type || "",
+                booking_id: notification.booking_id || "",
+              },
+            },
             fcm_options: {
               link: notification.url || "/",
             },
@@ -371,6 +436,12 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.warn("[push] send fail", {
+      token: maskedToken,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+      status: response.status,
+    });
     console.warn("[push] firebase response status", {
       status: response.status,
       token: maskedToken,
@@ -389,77 +460,214 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     throw error;
   }
 
-  console.log("[push] success:", maskedToken);
-  console.log("[push] firebase response status", response.status);
   return payload;
 }
 
+async function sendPushNotificationBatch(
+  env: Env,
+  userId: string,
+  notification: WorkerNotification,
+  options?: { logPrefix?: string }
+) {
+  const targetUserId = String(userId || "").trim();
+  const logPrefix = String(options?.logPrefix || "[push]").trim() || "[push]";
+
+  if (!targetUserId) {
+    return {
+      target_user_id: "",
+      subscription_count: 0,
+      token_count: 0,
+      success_count: 0,
+      failure_count: 0,
+      user_agents: [] as string[],
+      device_types: [] as string[],
+      error_codes: [] as string[],
+      results: [],
+    };
+  }
+
+  let subscriptions: PushSubscriptionRecord[] = [];
+  try {
+    subscriptions = await getPushSubscriptionsByUserId(targetUserId);
+  } catch (error) {
+    console.warn(`${logPrefix} subscription lookup failed`, {
+      user_id: targetUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+
+  const activeSubscriptions = normalizeFcmSubscriptions(subscriptions);
+  const uniqueSubscriptions = dedupeFcmSubscriptionsByToken(activeSubscriptions);
+  const userAgents = Array.from(
+    new Set(
+      activeSubscriptions
+        .map((subscription) => String(subscription.user_agent || "").trim())
+        .filter(Boolean)
+    )
+  );
+  const deviceTypes = Array.from(
+    new Set(
+      activeSubscriptions
+        .map((subscription) => getDeviceTypeFromUserAgent(subscription.user_agent || ""))
+        .filter(Boolean)
+    )
+  );
+
+  console.log(`${logPrefix} notification type`, {
+    user_id: targetUserId,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+  });
+  console.log(`${logPrefix} subscription count per user_id`, {
+    user_id: targetUserId,
+    subscription_count: activeSubscriptions.length,
+    token_count: uniqueSubscriptions.length,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+  });
+  console.log(`${logPrefix} target user_id list`, [targetUserId]);
+  console.log(`${logPrefix} subscription metadata`, {
+    user_id: targetUserId,
+    user_agents: userAgents,
+    device_types: deviceTypes,
+  });
+
+  const results: Array<{
+    token: string;
+    user_agent: string;
+    device_type: string;
+    success: boolean;
+    status?: number;
+    error_codes?: string[];
+    invalid_token?: boolean;
+  }> = [];
+
+  for (const subscription of uniqueSubscriptions) {
+    const token = String(subscription.fcm_token || "").trim();
+    const userAgent = String(subscription.user_agent || "").trim();
+    const deviceType = getDeviceTypeFromUserAgent(userAgent);
+    const maskedToken = `${token.slice(0, 10)}...`;
+
+    console.log(`${logPrefix} send token`, {
+      user_id: targetUserId,
+      token: maskedToken,
+      user_agent: userAgent,
+      device_type: deviceType,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+    });
+
+    try {
+      await sendFcmPush(env, token, notification);
+      console.log(`${logPrefix} send success`, {
+        user_id: targetUserId,
+        token: maskedToken,
+        user_agent: userAgent,
+        device_type: deviceType,
+        type: notification.type || "",
+        booking_id: notification.booking_id || "",
+      });
+      results.push({
+        token: maskedToken,
+        user_agent: userAgent,
+        device_type: deviceType,
+        success: true,
+      });
+    } catch (error) {
+      const status = Number((error as { status?: number })?.status || 0);
+      const payload = (error as { payload?: unknown })?.payload;
+      const invalidToken = isInvalidFcmTokenResponse(status, payload);
+      const errorCodes = extractFcmErrorCodes(payload);
+
+      console.warn(`${logPrefix} send fail`, {
+        user_id: targetUserId,
+        token: maskedToken,
+        user_agent: userAgent,
+        device_type: deviceType,
+        type: notification.type || "",
+        booking_id: notification.booking_id || "",
+        invalid_token: invalidToken,
+        firebase_status: status,
+        error_codes: errorCodes,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      if (invalidToken) {
+        try {
+          console.warn(`${logPrefix} disabling invalid token`, maskedToken);
+          await disableFcmToken(token);
+          console.info(`${logPrefix} invalid token cleaned`, {
+            user_id: targetUserId,
+            type: notification.type || "",
+          });
+        } catch (cleanupError) {
+          console.warn(`${logPrefix} invalid token cleanup failed`, {
+            user_id: targetUserId,
+            error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+          });
+        }
+      }
+
+      results.push({
+        token: maskedToken,
+        user_agent: userAgent,
+        device_type: deviceType,
+        success: false,
+        status,
+        error_codes: errorCodes,
+        invalid_token: invalidToken,
+      });
+    }
+  }
+
+  const successCount = results.filter((result) => result.success).length;
+  const failureCount = results.length - successCount;
+  const errorCodes = Array.from(new Set(results.flatMap((result) => result.error_codes || [])));
+
+  return {
+    target_user_id: targetUserId,
+    subscription_count: activeSubscriptions.length,
+    token_count: uniqueSubscriptions.length,
+    success_count: successCount,
+    failure_count: failureCount,
+    user_agents: userAgents,
+    device_types: deviceTypes,
+    error_codes: errorCodes,
+    results,
+  };
+}
+
 async function deliverNotificationPushes(env: Env, notifications: WorkerNotification[]) {
+  const targetUserIds = Array.from(
+    new Set(
+      (notifications || [])
+        .map((notification) => String(notification?.target_user_id || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  console.log("[push] target user_id list", targetUserIds);
+
   for (const notification of notifications) {
     const targetUserId = String(notification?.target_user_id || "").trim();
     if (!targetUserId) continue;
 
-    console.log("[push] sending to user:", targetUserId);
-    console.log("[push] notification type:", notification.type || "");
+    console.log("[push] dispatch notification", {
+      target_user_id: targetUserId,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+    });
 
-    let subscriptions: PushSubscriptionRecord[] = [];
     try {
-      subscriptions = await getPushSubscriptionsByUserId(targetUserId);
+      await sendPushNotificationBatch(env, targetUserId, notification, { logPrefix: "[push]" });
     } catch (error) {
-      console.warn("push subscription lookup failed", {
+      console.warn("[push] dispatch failed", {
         user_id: targetUserId,
+        type: notification.type || "",
+        booking_id: notification.booking_id || "",
         error: error instanceof Error ? error.message : String(error),
       });
-      continue;
-    }
-
-    console.log("[push] subscriptions:", subscriptions.length);
-
-    const tokens = Array.from(
-      new Set(
-        subscriptions
-          .filter((subscription) => String(subscription.provider || "").trim().toUpperCase() === "FCM")
-          .filter((subscription) => String(subscription.status || "").trim().toUpperCase() === "ACTIVE")
-          .map((subscription) => String(subscription.fcm_token || "").trim())
-          .filter(Boolean)
-      )
-    );
-
-    for (const token of tokens) {
-      try {
-        await sendFcmPush(env, token, notification);
-      } catch (error) {
-        const status = Number((error as { status?: number })?.status || 0);
-        const payload = (error as { payload?: unknown })?.payload;
-        const invalidToken = isInvalidFcmTokenResponse(status, payload);
-        const maskedToken = `${token.slice(0, 10)}...`;
-
-        console.warn("[push] failed", {
-          user_id: targetUserId,
-          type: notification.type || "",
-          booking_id: notification.booking_id || "",
-          invalid_token: invalidToken,
-          token: maskedToken,
-          firebase_status: status,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
-        if (invalidToken) {
-          try {
-            console.warn("[push] disabling invalid token", maskedToken);
-            await disableFcmToken(token);
-            console.info("invalid token cleaned", {
-              user_id: targetUserId,
-              type: notification.type || "",
-            });
-          } catch (cleanupError) {
-            console.warn("invalid token cleanup failed", {
-              user_id: targetUserId,
-              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-            });
-          }
-        }
-      }
     }
   }
 }

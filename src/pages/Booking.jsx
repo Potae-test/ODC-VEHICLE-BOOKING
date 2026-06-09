@@ -2575,24 +2575,26 @@ export default function Booking() {
     if (processingAction) return;
     if (normalizeStatus(booking.status) !== "APPROVED") return;
 
-    const currentDriverLabel = getBookingDriverLabel(booking);
     const result = await Swal.fire({
       title: "ดึงงานกลับ",
       html: `
-        <div class="swal-form">
-          <div style="text-align:left; line-height:1.7; margin-bottom: 8px;">
-            <div><b>คนขับปัจจุบัน:</b> ${escapeHtml(currentDriverLabel)}</div>
-          </div>
+        <div class="swal-form booking-recall-form">
+          <div class="booking-recall-description">รายการนี้จะถูกดึงกลับมาให้ดำเนินการต่อ</div>
           <label>เหตุผลการดึงงานกลับ</label>
-          <textarea id="unassign_reason" class="swal2-textarea" rows="5" placeholder="ระบุเหตุผลให้ชัดเจน"></textarea>
+          <textarea id="unassign_reason" class="swal2-textarea booking-recall-textarea" rows="5" placeholder="ระบุเหตุผลการดึงงานกลับ"></textarea>
         </div>
       `,
-      width: 720,
+      width: 560,
+      customClass: {
+        popup: "booking-recall-modal",
+        htmlContainer: "booking-recall-html",
+        actions: "booking-recall-actions",
+        confirmButton: "booking-recall-confirm",
+        cancelButton: "booking-recall-cancel",
+      },
       showCancelButton: true,
-      confirmButtonText: "ยืนยัน",
+      confirmButtonText: "ยืนยันดึงงานกลับ",
       cancelButtonText: "ยกเลิก",
-      confirmButtonColor: "#f59e0b",
-      cancelButtonColor: "#64748b",
       preConfirm: () => {
         const reason = document.getElementById("unassign_reason").value.trim();
 

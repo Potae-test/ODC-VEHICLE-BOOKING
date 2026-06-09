@@ -38,6 +38,11 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Log at minimum: driver assignment, manual override, driver cancellation, unavailable create/update/cancel, and queue movement.
 - After mutations, invalidate related caches such as `bookings`, `users`, `vehicles`, `driver_queue`, and `driver_unavailable`.
 
+## Push Notification Rules
+- Keep non-FCM push subscriptions matched by `endpoint`.
+- Keep FCM push subscriptions idempotent per device session by matching `user_id + provider + user_agent` first and falling back to `fcm_token` only when needed.
+- When an FCM token is saved, preserve `subscription_id` and `created_at` on update, refresh `fcm_token`, `endpoint`, `p256dh`, `auth`, `provider`, `user_agent`, `status`, and `updated_at`, and keep only the latest row `ACTIVE` for that device session.
+
 ## Permission Rules
 - Permissions are managed centrally.
 - Add new permissions to the admin management UI.

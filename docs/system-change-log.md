@@ -2,6 +2,11 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-09
+- Updated push subscription persistence in `apps-script/code.gs` so FCM rows now match by `user_id + provider + user_agent` before falling back to `fcm_token`, preserve `subscription_id` and `created_at` on updates, and retire older duplicate `ACTIVE` rows for the same device session while leaving non-FCM endpoint subscriptions unchanged.
+- Updated push delivery in `odc-vehicle-api/src/index.ts`, `src/utils/pushNotifications.js`, and `src/firebase-messaging-sw.js` so FCM sends explicit `webpush.notification` payloads, foreground messages prefer `serviceWorker.ready().showNotification()`, and background/mobile notifications use the same click-through payload structure with delivery logs.
+- Restyled only the Booking `ดึงงานกลับ` SweetAlert in `src/pages/Booking.jsx` and `src/App.css` so it now uses a compact scoped recall modal with a full-width textarea, same-row confirm/cancel actions, and mobile-safe spacing without changing the recall payload or booking status flow.
+
 ## 2026-06-01
 - Refined the mobile-only Admin page layout in `src/pages/Admin.jsx` and `src/App.css` so the management sections, permission cards, summary cards, and mobile action rows read as cleaner stacked cards on phones without changing Admin APIs, CRUD flows, permissions, or desktop layout.
 - Matched the Cars create/edit SweetAlert dialogs in `src/pages/Cars.jsx` to the shared Booking/Admin compact modal rhythm with scoped `admin-modal-*` classes, and added a Cars-only mobile card list for the vehicle table in `src/pages/Cars.jsx` and `src/App.css` so the page stays readable on phones without changing vehicle logic or payloads.

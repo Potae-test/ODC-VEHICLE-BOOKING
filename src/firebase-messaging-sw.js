@@ -48,14 +48,19 @@ function showNotificationFromPayload(payload) {
     payload?.data?.url ||
     payload?.url ||
     "/";
+  const notificationData = {
+    url,
+    payload,
+  };
 
   return self.registration.showNotification(title, {
     body,
     icon: "/icon-192.png",
     badge: "/icon-192.png",
-    data: {
-      url,
-    },
+    tag: payload?.data?.booking_id || payload?.data?.type || payload?.notification?.tag || "odc-notification",
+    renotify: true,
+    requireInteraction: false,
+    data: notificationData,
   });
 }
 
@@ -68,7 +73,14 @@ self.addEventListener("activate", (event) => {
 });
 
 messaging.onBackgroundMessage((payload) => {
-  return showNotificationFromPayload(payload || {});
+  console.log("[push] background payload received", payload);
+  return showNotificationFromPayload(payload || {})
+    .then(() => {
+      console.log("[push] background showNotification success");
+    })
+    .catch((error) => {
+      console.warn("[push] background showNotification fail", error);
+    });
 });
 
 self.addEventListener("push", (event) => {
@@ -84,7 +96,16 @@ self.addEventListener("push", (event) => {
     };
   }
 
-  event.waitUntil(showNotificationFromPayload(payload));
+  console.log("[push] background payload received", payload);
+  event.waitUntil(
+    showNotificationFromPayload(payload)
+      .then(() => {
+        console.log("[push] background showNotification success");
+      })
+      .catch((error) => {
+        console.warn("[push] background showNotification fail", error);
+      })
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {

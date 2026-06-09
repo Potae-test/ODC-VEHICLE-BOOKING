@@ -60,21 +60,60 @@ export async function listenForegroundMessages(onPayload) {
     const title = payload?.notification?.title || "แจ้งเตือน";
     const body = payload?.notification?.body || "";
     const url = payload?.fcmOptions?.link || payload?.data?.url || "/";
+    const payloadData = {
+      url,
+      payload,
+    };
 
-    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const browserNotification = new Notification(title, {
-        body,
-        icon: "/icon-192.png",
-        data: { url, payload },
-      });
+    console.log("[push] foreground payload received", payload);
 
-      browserNotification.onclick = () => {
-        window.focus();
-        if (url) {
-          window.location.assign(url);
+    const showFallbackNotification = () => {
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+        return;
+      }
+
+      try {
+        const browserNotification = new Notification(title, {
+          body,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          data: payloadData,
+        });
+
+        browserNotification.onclick = () => {
+          window.focus();
+          if (url) {
+            window.location.assign(url);
+          }
+        };
+
+        console.log("[push] foreground fallback notification success");
+      } catch (error) {
+        console.warn("[push] foreground fallback notification fail", error);
+      }
+    };
+
+    const showServiceWorkerNotification = async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        try {
+          await registration.showNotification(title, {
+            body,
+            icon: "/icon-192.png",
+            badge: "/icon-192.png",
+            data: payloadData,
+          });
+          console.log("[push] foreground showNotification success");
+        } catch (error) {
+          console.warn("[push] foreground showNotification fail", error);
         }
-      };
-    }
+      } catch (error) {
+        console.warn("[push] foreground serviceWorker.ready fail", error);
+        showFallbackNotification();
+      }
+    };
+
+    void showServiceWorkerNotification();
 
     if (typeof onPayload === "function") {
       onPayload(payload);
