@@ -248,10 +248,23 @@ export async function markAllNotificationsRead(data) {
 }
 
 export async function savePushSubscription(data) {
+  const fcmToken = String(data?.fcm_token ?? "").trim();
+  const endpoint = String(data?.endpoint ?? data?.subscription?.endpoint ?? "").trim();
+  const p256dh = String(data?.p256dh ?? data?.subscription?.keys?.p256dh ?? "").trim();
+  const auth = String(data?.auth ?? data?.subscription?.keys?.auth ?? "").trim();
+  const provider =
+    fcmToken
+      ? "FCM"
+      : endpoint && p256dh && auth
+        ? "WEB_PUSH"
+        : String(data?.provider ?? "").trim().toUpperCase();
   const payload = {
     ...data,
-    fcm_token: data?.fcm_token ?? "",
-    provider: data?.provider ?? "",
+    fcm_token: fcmToken,
+    endpoint,
+    p256dh,
+    auth,
+    provider,
   };
   const json = await fetchJson(`${API_BASE_URL}/api/push-subscriptions`, {
     method: "POST",

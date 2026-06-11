@@ -114,6 +114,19 @@ type PushSubscriptionRecord = {
   created_at?: string;
 };
 
+type PushDeliveryResult = {
+  provider: string;
+  token_preview: string;
+  endpoint_preview: string;
+  user_agent: string;
+  device_type: string;
+  success: boolean;
+  status_code?: number;
+  error_code?: string;
+  error_message?: string;
+  invalid_subscription?: boolean;
+};
+
 type UserRecord = {
   user_id?: string;
   role?: string;
@@ -368,6 +381,19 @@ function getDeviceTypeFromUserAgent(userAgent: string) {
   return "unknown";
 }
 
+function previewTarget(value: string, options?: { head?: number; tail?: number }) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+
+  const head = Math.max(1, Number(options?.head || 0) || 12);
+  const tail = Math.max(0, Number(options?.tail || 0) || 10);
+  if (normalized.length <= head + tail + 3) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, head)}...${normalized.slice(-tail)}`;
+}
+
 function extractFcmErrorCodes(payload: any) {
   const codes = new Set<string>();
   const topLevelStatus = String(payload?.error?.status || "").trim();
@@ -459,6 +485,21 @@ function decodeBase64Url(value: string) {
 
 function encodeBase64UrlBytes(bytes: Uint8Array) {
   return base64UrlEncode(bytes);
+}
+
+function extractWebPushErrorMessage(payload: unknown) {
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (payload && typeof payload === "object") {
+    const message = (payload as Record<string, unknown>).message;
+    if (typeof message === "string") {
+      return message.trim();
+    }
+  }
+
+  return "";
 }
 
 function normalizeWebPushPublicKey(env: Env) {
@@ -753,15 +794,21 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
 
   const fcmResponseAt = new Date().toISOString();
   if (!response.ok) {
+    const payloadText = await response.text().catch(() => "");
     const error = new Error(`Web Push send failed with status ${response.status}`) as Error & {
       status?: number;
+      code?: string;
+      payload?: unknown;
     };
     error.status = response.status;
+    error.code = `HTTP_${response.status}`;
+    error.payload = payloadText;
     console.warn("[push] web push send fail", {
       endpoint,
       type: content.type,
       booking_id: content.booking_id,
       status: response.status,
+      response_body: payloadText.slice(0, 300),
       notification_created_at: notificationCreatedAt,
       push_send_started_at: pushSendStartedAt,
       fcm_response_at: fcmResponseAt,
@@ -792,13 +839,16 @@ async function sendPushNotificationBatch(
     return {
       target_user_id: "",
       subscription_count: 0,
+      fcm_count: 0,
+      web_push_count: 0,
+      total_subscription_count: 0,
       token_count: 0,
       success_count: 0,
       failure_count: 0,
       user_agents: [] as string[],
       device_types: [] as string[],
       error_codes: [] as string[],
-      results: [],
+      results: [] as PushDeliveryResult[],
     };
   }
 
@@ -848,7 +898,7 @@ async function sendPushNotificationBatch(
   console.log(`${logPrefix} subscription count per user_id`, {
     user_id: targetUserId,
     subscription_count: subscriptionsBeforeDedupe,
-    token_count: subscriptionsAfterDedupe,
+    total_subscription_count: subscriptionsAfterDedupe,
     type: notification.type || "",
     booking_id: notification.booking_id || "",
     notification_created_at: String(notification.created_at || "").trim(),
@@ -882,16 +932,7 @@ async function sendPushNotificationBatch(
     device_types: deviceTypes,
   });
 
-  const results: Array<{
-    token: string;
-    provider: string;
-    user_agent: string;
-    device_type: string;
-    success: boolean;
-    status?: number;
-    error_codes?: string[];
-    invalid_token?: boolean;
-  }> = [];
+  const results: PushDeliveryResult[] = [];
 
   const sentNotificationKeys = options?.sentNotificationKeys || null;
   let skippedNotificationDuplicateCount = 0;
@@ -933,15 +974,35 @@ async function sendPushNotificationBatch(
     });
   }
 
+  const queuedFcmCount = deliveryQueue.filter(
+    (subscription) =>
+      String(
+        (subscription as PushSubscriptionRecord & { send_provider?: string }).send_provider ||
+          subscription.provider ||
+          ""
+      )
+        .trim()
+        .toUpperCase() === "FCM"
+  ).length;
+  const queuedWebPushCount = deliveryQueue.length - queuedFcmCount;
+
   const settledResults = await Promise.allSettled(
     deliveryQueue.map(async (subscription) => {
-        const token = String(subscription.fcm_token || "").trim();
-        const endpoint = String(subscription.endpoint || "").trim();
-        const userAgent = String(subscription.user_agent || "").trim();
+      const token = String(subscription.fcm_token || "").trim();
+      const endpoint = String(subscription.endpoint || "").trim();
+      const userAgent = String(subscription.user_agent || "").trim();
       const deviceType = getDeviceTypeFromUserAgent(userAgent);
-      const maskedTarget = token ? `${token.slice(0, 10)}...` : endpoint ? `${endpoint.slice(0, 42)}...` : "";
+      const tokenPreview = previewTarget(token, { head: 10, tail: 8 });
+      const endpointPreview = previewTarget(endpoint, { head: 42, tail: 14 });
+      const maskedTarget = tokenPreview || endpointPreview;
       const pushSendStartedAt = new Date().toISOString();
-      const sendProvider = String((subscription as PushSubscriptionRecord & { send_provider?: string }).send_provider || subscription.provider || "").trim().toUpperCase();
+      const sendProvider = String(
+        (subscription as PushSubscriptionRecord & { send_provider?: string }).send_provider ||
+          subscription.provider ||
+          ""
+      )
+        .trim()
+        .toUpperCase();
 
       console.log(`${logPrefix} send token`, {
         user_id: targetUserId,
@@ -973,8 +1034,9 @@ async function sendPushNotificationBatch(
           push_send_started_at: pushSendStartedAt,
         });
         return {
-          token: maskedTarget,
           provider: sendProvider,
+          token_preview: tokenPreview,
+          endpoint_preview: endpointPreview,
           user_agent: userAgent,
           device_type: deviceType,
           success: true,
@@ -982,11 +1044,22 @@ async function sendPushNotificationBatch(
       } catch (error) {
         const status = Number((error as { status?: number })?.status || 0);
         const payload = (error as { payload?: unknown })?.payload;
+        const errorCodeFromError = String((error as { code?: string })?.code || "").trim();
         const invalidToken =
           sendProvider === "WEB_PUSH"
             ? isInvalidWebPushResponse(status)
             : isInvalidFcmTokenResponse(status, payload);
-        const errorCodes = extractFcmErrorCodes(payload);
+        const fcmErrorCodes = extractFcmErrorCodes(payload);
+        const errorCode =
+          errorCodeFromError ||
+          fcmErrorCodes[0] ||
+          (sendProvider === "WEB_PUSH" && status ? `HTTP_${status}` : "");
+        const errorMessage =
+          sendProvider === "WEB_PUSH"
+            ? extractWebPushErrorMessage(payload) || (error instanceof Error ? error.message : String(error))
+            : error instanceof Error
+              ? error.message
+              : String(error);
 
         console.warn(`${logPrefix} send fail`, {
           user_id: targetUserId,
@@ -998,7 +1071,8 @@ async function sendPushNotificationBatch(
           booking_id: notification.booking_id || "",
           invalid_token: invalidToken,
           firebase_status: status,
-          error_codes: errorCodes,
+          error_code: errorCode,
+          error_message: errorMessage,
           error: error instanceof Error ? error.message : String(error),
           notification_created_at: String(notification.created_at || "").trim(),
           push_send_started_at: pushSendStartedAt,
@@ -1026,14 +1100,16 @@ async function sendPushNotificationBatch(
         }
 
         return {
-          token: maskedTarget,
           provider: sendProvider,
+          token_preview: tokenPreview,
+          endpoint_preview: endpointPreview,
           user_agent: userAgent,
           device_type: deviceType,
           success: false,
-          status,
-          error_codes: errorCodes,
-          invalid_token: invalidToken,
+          status_code: status || undefined,
+          error_code: errorCode || undefined,
+          error_message: errorMessage || undefined,
+          invalid_subscription: invalidToken,
         };
       }
     })
@@ -1056,11 +1132,16 @@ async function sendPushNotificationBatch(
 
   const successCount = results.filter((result) => result.success).length;
   const failureCount = results.length - successCount;
-  const errorCodes = Array.from(new Set(results.flatMap((result) => result.error_codes || [])));
+  const errorCodes = Array.from(
+    new Set(results.map((result) => String(result.error_code || "").trim()).filter(Boolean))
+  );
 
   return {
     target_user_id: targetUserId,
     subscription_count: subscriptionsBeforeDedupe,
+    fcm_count: queuedFcmCount,
+    web_push_count: queuedWebPushCount,
+    total_subscription_count: deliveryQueue.length,
     token_count: deliveryQueue.length,
     success_count: successCount,
     failure_count: failureCount,
@@ -1168,6 +1249,7 @@ async function handlePushTest(request: Request, env: Env) {
     env,
     userId,
     {
+      notification_id: crypto.randomUUID(),
       target_user_id: userId,
       title,
       message,
@@ -1182,11 +1264,15 @@ async function handlePushTest(request: Request, env: Env) {
     message: "Push test completed",
     data: {
       user_id: userId,
+      fcm_count: delivery.fcm_count,
+      web_push_count: delivery.web_push_count,
+      total_subscription_count: delivery.total_subscription_count,
       token_count: delivery.token_count,
       user_agents: delivery.user_agents,
       success_count: delivery.success_count,
       failure_count: delivery.failure_count,
       error_codes: delivery.error_codes,
+      results: delivery.results,
     },
   });
 }

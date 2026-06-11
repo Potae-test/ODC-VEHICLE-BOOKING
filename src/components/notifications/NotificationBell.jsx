@@ -11,6 +11,8 @@ import {
   getPushDebugInfo,
   getPreferredPushProvider,
   getPushDeviceLabel,
+  getPushVapidPreview,
+  getPushVapidSourceLabel,
   isPushSupported,
   listenForegroundMessages,
   registerWebPushSubscription,
@@ -148,6 +150,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     provider: getPreferredPushProvider(),
     device: getPushDeviceLabel(),
     tokenPreview: "",
+    vapidSource: getPushVapidSourceLabel(getPreferredPushProvider()),
+    vapidKeyPreview: getPushVapidPreview(getPreferredPushProvider()),
     error: null,
   });
   const rootRef = useRef(null);
@@ -257,7 +261,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
             p256dh: webPushSubscription.p256dh,
             auth: webPushSubscription.auth,
             subscription: webPushSubscription.subscription.toJSON(),
-            provider,
+            provider: "WEB_PUSH",
             user_agent: navigator.userAgent || "",
             platform: navigator.platform || "",
             device_type: getDeviceType(),
@@ -297,7 +301,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           role,
           fcm_token: fcmToken,
           previous_fcm_token: storedProvider === "FCM" ? storedToken : "",
-          provider,
+          provider: "FCM",
           user_agent: navigator.userAgent || "",
           platform: navigator.platform || "",
           device_type: getDeviceType(),
@@ -566,6 +570,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
         provider: getPreferredPushProvider(),
         device: getPushDeviceLabel(),
         tokenPreview: debugInfo.tokenPreview || formatTokenPreview(debugInfo.token),
+        vapidSource: debugInfo.vapidSource || getPushVapidSourceLabel(getPreferredPushProvider()),
+        vapidKeyPreview: debugInfo.vapidKeyPreview || getPushVapidPreview(getPreferredPushProvider()),
         error: debugInfo.error,
       });
     } catch (err) {
@@ -575,6 +581,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
         provider: getPreferredPushProvider(),
         device: getPushDeviceLabel(),
         tokenPreview: "",
+        vapidSource: getPushVapidSourceLabel(getPreferredPushProvider()),
+        vapidKeyPreview: getPushVapidPreview(getPreferredPushProvider()),
         error: {
           code: String(err?.code || "").trim(),
           message: String(err?.message || err).trim(),
@@ -661,11 +669,19 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   <code>{debugPushInfo.serviceWorkerScriptUrl || "-"}</code>
                 </div>
                 <div className="notification-debug-row">
-                  <span>FCM Token</span>
+                  <span>VAPID Source</span>
+                  <code>{debugPushInfo.vapidSource || "-"}</code>
+                </div>
+                <div className="notification-debug-row">
+                  <span>VAPID Key</span>
+                  <code>{debugPushInfo.vapidKeyPreview || "-"}</code>
+                </div>
+                <div className="notification-debug-row">
+                  <span>{debugPushInfo.provider === "WEB_PUSH" ? "WEB_PUSH Endpoint" : "FCM Token"}</span>
                   <code>
                     {debugPushLoading
                       ? "Checking..."
-                      : debugPushInfo.tokenPreview || (debugPushInfo.error ? "-" : "No token")}
+                      : debugPushInfo.tokenPreview || (debugPushInfo.error ? "-" : debugPushInfo.provider === "WEB_PUSH" ? "No subscription" : "No token")}
                   </code>
                 </div>
                 {debugPushInfo.error && (

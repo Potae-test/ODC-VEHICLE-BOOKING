@@ -68,6 +68,16 @@ function extractPushFields(payload) {
   };
 }
 
+function isFcmPushPayload(payload) {
+  return Boolean(
+    payload?.from ||
+    payload?.fcmOptions ||
+    payload?.notification ||
+    payload?.data?.provider === "FCM" ||
+    payload?.data?.fcm_token
+  );
+}
+
 function showNotificationFromPayload(payload) {
   const fields = extractPushFields(payload);
   const dedupeWindowMs = 30 * 1000;
@@ -174,6 +184,16 @@ self.addEventListener("push", (event) => {
     booking_id: payload?.data?.booking_id || payload?.booking_id || "",
     client_received_at: clientReceivedAt,
   });
+
+  if (isFcmPushPayload(payload)) {
+    console.log("[push] skip FCM payload in generic push handler", {
+      type: payload?.data?.type || payload?.type || "",
+      booking_id: payload?.data?.booking_id || payload?.booking_id || "",
+      client_received_at: clientReceivedAt,
+    });
+    return;
+  }
+
   event.waitUntil(
     showNotificationFromPayload(payload)
       .then(() => {

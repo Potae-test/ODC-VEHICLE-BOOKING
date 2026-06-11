@@ -2,10 +2,44 @@ import { deleteToken, getToken, onMessage } from "firebase/messaging";
 import { getFirebaseMessaging } from "../firebase";
 
 const FCM_SERVICE_WORKER_PATH = "/firebase-messaging-sw.js";
-const VAPID_PUBLIC_KEY = String(
+const DEFAULT_FIREBASE_VAPID_PUBLIC_KEY =
+  "BJNJG_0BFWzfHPqrNPI0qaHoGHKEFpW9OPZxAJ-t2q-XkI1ff6oDe18PaUcX4DYV84hMCuD1Zl2pFEW8v4L3_HE";
+const DEFAULT_WEB_PUSH_VAPID_PUBLIC_KEY =
+  "BPpPeIzc5st3eP-_CHOKS9wenNrMuvwe1wuXGppeECxdxo4lruVNDq_r4U5KmUaVzTNwqfZDj76KY9P1ZnLMKSo";
+const FIREBASE_VAPID_PUBLIC_KEY = String(
   import.meta.env.VITE_FIREBASE_VAPID_KEY ||
-    "BPpPeIzc5st3eP-_CHOKS9wenNrMuvwe1wuXGppeECxdxo4lruVNDq_r4U5KmUaVzTNwqfZDj76KY9P1ZnLMKSo"
+    DEFAULT_FIREBASE_VAPID_PUBLIC_KEY
 ).trim();
+const WEB_PUSH_VAPID_PUBLIC_KEY = String(
+  import.meta.env.VITE_WEB_PUSH_VAPID_PUBLIC_KEY ||
+    DEFAULT_WEB_PUSH_VAPID_PUBLIC_KEY
+).trim();
+
+export function getPushVapidSources(provider = "") {
+  const normalizedProvider = String(provider || "").trim().toUpperCase();
+  if (normalizedProvider === "WEB_PUSH") {
+    return {
+      provider: "WEB_PUSH",
+      envKey: "VITE_WEB_PUSH_VAPID_PUBLIC_KEY",
+      vapidKey: WEB_PUSH_VAPID_PUBLIC_KEY,
+    };
+  }
+
+  return {
+    provider: "FCM",
+    envKey: "VITE_FIREBASE_VAPID_KEY",
+    vapidKey: FIREBASE_VAPID_PUBLIC_KEY,
+  };
+}
+
+export function getPushVapidSourceLabel(provider = "") {
+  const source = getPushVapidSources(provider);
+  return `${source.provider}:${source.envKey}`;
+}
+
+export function getPushVapidPreview(provider = "") {
+  return formatTokenPreview(getPushVapidSources(provider).vapidKey);
+}
 
 export function isPushSupported() {
   return (
@@ -169,7 +203,7 @@ export async function ensureFirebaseMessagingServiceWorkerRegistration() {
 }
 
 export async function registerWebPushSubscription() {
-  if (!VAPID_PUBLIC_KEY) {
+  if (!WEB_PUSH_VAPID_PUBLIC_KEY) {
     throw new Error("Web Push VAPID public key is required");
   }
 
@@ -181,7 +215,7 @@ export async function registerWebPushSubscription() {
     existingSubscription ||
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: base64UrlToUint8Array(VAPID_PUBLIC_KEY),
+      applicationServerKey: base64UrlToUint8Array(WEB_PUSH_VAPID_PUBLIC_KEY),
     }));
 
   const json = subscription.toJSON();
@@ -222,6 +256,8 @@ export async function getPushDebugInfo(options = {}) {
     device: getPushDeviceLabel(),
     token: "",
     tokenPreview: "",
+    vapidSource: getPushVapidSourceLabel(provider),
+    vapidKeyPreview: getPushVapidPreview(provider),
     error: null,
   };
 
@@ -252,6 +288,8 @@ export async function getPushDebugInfo(options = {}) {
       debugInfo.token = token;
       debugInfo.tokenPreview = formatTokenPreview(token);
     }
+    debugInfo.vapidSource = getPushVapidSourceLabel(provider);
+    debugInfo.vapidKeyPreview = getPushVapidPreview(provider);
   } catch (error) {
     debugInfo.error = buildDebugErrorInfo(error);
   }
@@ -291,7 +329,7 @@ export async function recoverFirebaseMessagingRegistration() {
 }
 
 export async function requestFcmToken() {
-  if (!VAPID_PUBLIC_KEY) {
+  if (!FIREBASE_VAPID_PUBLIC_KEY) {
     throw new Error("Firebase VAPID key is required");
   }
 
@@ -310,7 +348,7 @@ export async function requestFcmToken() {
 
   try {
     const token = await getToken(messaging, {
-      vapidKey: VAPID_PUBLIC_KEY,
+      vapidKey: FIREBASE_VAPID_PUBLIC_KEY,
       serviceWorkerRegistration,
     });
     return String(token || "").trim();

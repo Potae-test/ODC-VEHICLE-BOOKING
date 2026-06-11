@@ -56,6 +56,7 @@
   if (action === "getPushSubscriptionsByUserId") {
     return getPushSubscriptionsByUserId({
       user_id: e && e.parameter ? e.parameter.user_id : "",
+      debug: e && e.parameter ? e.parameter.debug : "",
     });
   }
   
@@ -126,7 +127,7 @@ function doPost(e) {
     if (action === "markAllNotificationsRead") return markAllNotificationsRead(body.data);
     if (action === "savePushSubscription") return savePushSubscription(body.data);
     if (action === "disablePushSubscription") return disablePushSubscription(body.data);
-    if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data);
+    if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data || body);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
@@ -837,6 +838,7 @@ function getPushSubscriptionsByUserId(data) {
     const userId = String(data && data.user_id || "").trim();
     const normalizedUserId =
       String(userId || "").trim().toUpperCase();
+    const debugEnabled = String(data && data.debug || "").trim() === "1";
 
     if (!normalizedUserId) {
       return jsonOutput({
@@ -845,35 +847,14 @@ function getPushSubscriptionsByUserId(data) {
       });
     }
 
-    const results = getActivePushSubscriptionsByUserId_(userId).filter(function (row) {
-      const rowUserId =
-        String(row.user_id || "").trim().toUpperCase();
-      const provider =
-        String(row.provider || "").trim().toUpperCase();
-      const status =
-        String(row.status || "").trim().toUpperCase();
-      const fcmToken = String(row.fcm_token || "").trim();
-      const endpoint = String(row.endpoint || "").trim();
-      const p256dh = String(row.p256dh || "").trim();
-      const auth = String(row.auth || "").trim();
-      const isFcm = provider === "FCM" && fcmToken.length > 0;
-      const isWebPush = provider === "WEB_PUSH" && endpoint.length > 0 && p256dh.length > 0 && auth.length > 0;
-
-      console.log("[push-subscriptions]", {
-        normalizedUserId: normalizedUserId,
-        rowUserId: rowUserId,
-        provider: provider,
-        status: status,
-        hasToken: !!fcmToken,
-        hasEndpoint: !!endpoint,
-        hasP256dh: !!p256dh,
-        hasAuth: !!auth,
+    const diagnostics = getPushSubscriptionDiagnosticsByUserId_(userId);
+    const results = diagnostics
+      .filter(function (row) {
+        return row.include_row;
+      })
+      .map(function (row) {
+        return row.subscription;
       });
-
-      return rowUserId === normalizedUserId &&
-        status === "ACTIVE" &&
-        (isFcm || isWebPush);
-    });
 
     console.log("[push-subscriptions] matched:", results.length);
 
@@ -881,6 +862,19 @@ function getPushSubscriptionsByUserId(data) {
       success: true,
       total: results.length,
       data: results,
+      debug: debugEnabled ? diagnostics.map(function (row) {
+        return {
+          row_number: row.row_number,
+          user_id_match: row.user_id_match,
+          status: row.status,
+          status_match: row.status_match,
+          provider: row.provider,
+          has_endpoint: row.has_endpoint,
+          has_p256dh: row.has_p256dh,
+          has_auth: row.has_auth,
+          include_reason: row.include_reason,
+        };
+      }) : undefined,
     });
   } catch (err) {
     return jsonOutput({
@@ -888,6 +882,24 @@ function getPushSubscriptionsByUserId(data) {
       message: String(err && err.message ? err.message : err),
     });
   }
+}
+
+function inferPushSubscriptionProvider_(providerValue, fcmToken, endpoint, p256dh, auth) {
+  const normalizedProvider = String(providerValue || "").trim().toUpperCase();
+  const normalizedFcmToken = String(fcmToken || "").trim();
+  const normalizedEndpoint = String(endpoint || "").trim();
+  const normalizedP256dh = String(p256dh || "").trim();
+  const normalizedAuth = String(auth || "").trim();
+
+  if (normalizedFcmToken) {
+    return "FCM";
+  }
+
+  if (normalizedEndpoint && normalizedP256dh && normalizedAuth) {
+    return "WEB_PUSH";
+  }
+
+  return normalizedProvider;
 }
 
 function savePushSubscription(data) {
@@ -900,7 +912,7 @@ function savePushSubscription(data) {
     const p256dh = String(keys.p256dh || payload.p256dh || "").trim();
     const auth = String(keys.auth || payload.auth || "").trim();
     const fcmToken = String(payload.fcm_token || "").trim();
-    const provider = String(payload.provider || "").trim().toUpperCase() || "FCM";
+    const provider = inferPushSubscriptionProvider_(payload.provider, fcmToken, endpoint, p256dh, auth);
     const userAgent = String(payload.user_agent || "").trim();
     const nowIso = new Date().toISOString();
 
@@ -918,10 +930,17 @@ function savePushSubscription(data) {
       });
     }
 
-    if (provider !== "FCM" && !endpoint) {
+    if (provider === "WEB_PUSH" && (!endpoint || !p256dh || !auth)) {
       return jsonOutput({
         success: false,
-        message: "subscription endpoint is required",
+        message: "WEB_PUSH requires endpoint, p256dh, and auth",
+      });
+    }
+
+    if (!provider) {
+      return jsonOutput({
+        success: false,
+        message: "provider could not be determined",
       });
     }
 
@@ -966,7 +985,13 @@ function savePushSubscription(data) {
 
         const rowValues = table.rows[index];
         const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowProvider = inferPushSubscriptionProvider_(
+          rowValues[columnMap.provider],
+          rowValues[columnMap.fcm_token],
+          rowValues[columnMap.endpoint],
+          rowValues[columnMap.p256dh],
+          rowValues[columnMap.auth]
+        );
         const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
         const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
 
@@ -990,7 +1015,13 @@ function savePushSubscription(data) {
       for (let index = 0; index < table.rows.length; index += 1) {
         const rowValues = table.rows[index];
         const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowProvider = inferPushSubscriptionProvider_(
+          rowValues[columnMap.provider],
+          rowValues[columnMap.fcm_token],
+          rowValues[columnMap.endpoint],
+          rowValues[columnMap.p256dh],
+          rowValues[columnMap.auth]
+        );
         const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
 
         if (
@@ -1025,7 +1056,13 @@ function savePushSubscription(data) {
 
           const rowValues = table.rows[index];
           const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-          const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+          const rowProvider = inferPushSubscriptionProvider_(
+            rowValues[columnMap.provider],
+            rowValues[columnMap.fcm_token],
+            rowValues[columnMap.endpoint],
+            rowValues[columnMap.p256dh],
+            rowValues[columnMap.auth]
+          );
           const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
           const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
 
@@ -1048,7 +1085,13 @@ function savePushSubscription(data) {
       for (let index = 0; index < table.rows.length; index += 1) {
         const rowValues = table.rows[index];
         const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowProvider = inferPushSubscriptionProvider_(
+          rowValues[columnMap.provider],
+          rowValues[columnMap.fcm_token],
+          rowValues[columnMap.endpoint],
+          rowValues[columnMap.p256dh],
+          rowValues[columnMap.auth]
+        );
         const rowEndpoint = String(rowValues[columnMap.endpoint] || "").trim();
         const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
 
@@ -1068,7 +1111,13 @@ function savePushSubscription(data) {
         for (let index = 0; index < table.rows.length; index += 1) {
           const rowValues = table.rows[index];
           const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-          const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+          const rowProvider = inferPushSubscriptionProvider_(
+            rowValues[columnMap.provider],
+            rowValues[columnMap.fcm_token],
+            rowValues[columnMap.endpoint],
+            rowValues[columnMap.p256dh],
+            rowValues[columnMap.auth]
+          );
           const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
 
           if (
@@ -1111,7 +1160,13 @@ function savePushSubscription(data) {
 
         const rowValues = table.rows[index];
         const rowUserId = String(rowValues[columnMap.user_id] || "").trim();
-        const rowProvider = String(rowValues[columnMap.provider] || "").trim().toUpperCase() || "FCM";
+        const rowProvider = inferPushSubscriptionProvider_(
+          rowValues[columnMap.provider],
+          rowValues[columnMap.fcm_token],
+          rowValues[columnMap.endpoint],
+          rowValues[columnMap.p256dh],
+          rowValues[columnMap.auth]
+        );
         const rowUserAgent = String(rowValues[columnMap.user_agent] || "").trim();
         const rowStatus = String(rowValues[columnMap.status] || "").trim().toUpperCase();
 
@@ -1208,42 +1263,106 @@ function disablePushSubscription(data) {
 }
 
 function getActivePushSubscriptionsByUserId_(userId) {
-  const normalizedUserId = String(userId || "").trim();
+  return getPushSubscriptionDiagnosticsByUserId_(userId)
+    .filter(function (row) {
+      return row.include_row;
+    })
+    .map(function (row) {
+      return row.subscription;
+    });
+}
+
+function getPushSubscriptionDiagnosticsByUserId_(userId) {
+  const normalizedUserId = String(userId || "").trim().toUpperCase();
   if (!normalizedUserId) return [];
 
   const sheet = ensurePushSubscriptionsSheet();
   const table = readSheetTable(sheet);
+  const objects = rowsToObjects(table.headers, table.rows);
 
-  return rowsToObjects(table.headers, table.rows)
-    .filter((row) =>
-      String(row.user_id || "").trim() === normalizedUserId &&
-      String(row.status || "").trim().toUpperCase() === "ACTIVE" &&
-      (
-        (
-          (String(row.provider || "").trim().toUpperCase() || "FCM") === "FCM" &&
-          String(row.fcm_token || "").trim()
-        ) ||
-        (
-          String(row.provider || "").trim().toUpperCase() === "WEB_PUSH" &&
-          String(row.endpoint || "").trim() &&
-          String(row.p256dh || "").trim() &&
-          String(row.auth || "").trim()
-        )
-      )
-    )
-    .map((row) => ({
+  return objects.map(function (row, index) {
+    const rowUserId = String(row.user_id || "").trim();
+    const normalizedRowUserId = rowUserId.toUpperCase();
+    const provider = inferPushSubscriptionProvider_(
+      row.provider,
+      row.fcm_token,
+      row.endpoint,
+      row.p256dh,
+      row.auth
+    );
+    const status = String(row.status || "").trim().toUpperCase();
+    const fcmToken = String(row.fcm_token || "").trim();
+    const endpoint = String(row.endpoint || "").trim();
+    const p256dh = String(row.p256dh || "").trim();
+    const auth = String(row.auth || "").trim();
+    const userIdMatch = normalizedRowUserId === normalizedUserId;
+    const statusMatch = status === "ACTIVE";
+    const isFcm = provider === "FCM" && fcmToken.length > 0;
+    const isWebPush = provider === "WEB_PUSH" && endpoint.length > 0 && p256dh.length > 0 && auth.length > 0;
+    const includeRow = userIdMatch && statusMatch && (isFcm || isWebPush);
+    let includeReason = "";
+
+    if (includeRow) {
+      includeReason = provider === "WEB_PUSH" ? "include:ACTIVE_WEB_PUSH" : "include:ACTIVE_FCM";
+    } else if (!userIdMatch) {
+      includeReason = "skip:user_id_mismatch";
+    } else if (!statusMatch) {
+      includeReason = "skip:status_not_active";
+    } else if (provider === "FCM" && !fcmToken) {
+      includeReason = "skip:fcm_missing_token";
+    } else if (provider === "WEB_PUSH" && !endpoint) {
+      includeReason = "skip:web_push_missing_endpoint";
+    } else if (provider === "WEB_PUSH" && !p256dh) {
+      includeReason = "skip:web_push_missing_p256dh";
+    } else if (provider === "WEB_PUSH" && !auth) {
+      includeReason = "skip:web_push_missing_auth";
+    } else {
+      includeReason = "skip:unsupported_provider_or_incomplete_row";
+    }
+
+    const subscription = {
       subscription_id: String(row.subscription_id || "").trim(),
-      user_id: String(row.user_id || "").trim(),
-      endpoint: String(row.endpoint || "").trim(),
-      p256dh: String(row.p256dh || "").trim(),
-      auth: String(row.auth || "").trim(),
-      fcm_token: String(row.fcm_token || "").trim(),
-      provider: String(row.provider || "").trim().toUpperCase() || "FCM",
+      user_id: rowUserId,
+      endpoint: endpoint,
+      p256dh: p256dh,
+      auth: auth,
+      fcm_token: fcmToken,
+      provider: provider,
       user_agent: String(row.user_agent || "").trim(),
-      status: String(row.status || "").trim().toUpperCase(),
+      status: status,
       created_at: String(row.created_at || "").trim(),
       updated_at: String(row.updated_at || "").trim(),
-    }));
+    };
+
+    console.log("[push-subscriptions]", {
+      target_user_id: normalizedUserId,
+      row_number: index + 2,
+      row_user_id: rowUserId,
+      user_id_match: userIdMatch,
+      provider: provider,
+      status: status,
+      status_match: statusMatch,
+      has_fcm_token: !!fcmToken,
+      has_endpoint: !!endpoint,
+      has_p256dh: !!p256dh,
+      has_auth: !!auth,
+      include_reason: includeReason,
+    });
+
+    return {
+      row_number: index + 2,
+      user_id_match: userIdMatch,
+      status: status,
+      status_match: statusMatch,
+      provider: provider,
+      has_endpoint: !!endpoint,
+      has_p256dh: !!p256dh,
+      has_auth: !!auth,
+      include_reason: includeReason,
+      include_row: includeRow,
+      subscription: subscription,
+    };
+  });
 }
 
 function getNotifications(data) {
