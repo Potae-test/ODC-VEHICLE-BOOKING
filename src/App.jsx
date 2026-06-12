@@ -9,6 +9,7 @@ import {
 import NotificationBell from "./components/notifications/NotificationBell";
 import PageSkeleton from "./components/skeletons/PageSkeleton";
 import { FEATURES } from "./config/features";
+import { startSessionTimeout } from "./utils/sessionTimeout";
 import "./App.css";
 import LOGO_ODC from "./assets/LOGO_ODC.png";
 
@@ -379,6 +380,14 @@ export default function App() {
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    return startSessionTimeout();
+  }, [user]);
 
   function goPage(nextPage) {
     if (!isPageFeatureEnabled(nextPage)) return;
