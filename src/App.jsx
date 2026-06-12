@@ -586,7 +586,7 @@ export default function App() {
   return (
     <div className="shell-root flex min-h-screen flex-col overflow-x-clip bg-slate-100 text-slate-900">
       <header className="shell-header fixed inset-x-0 top-0 z-40 border-b border-sky-800/40 bg-gradient-to-r from-[#073b8e] via-[#0f4fb5] to-[#1455c8] text-white shadow-[0_10px_30px_rgba(7,59,142,0.28)] md:static">
-        <div className="mx-auto grid min-h-[76px] w-full max-w-none grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-3 py-3 sm:px-4 md:flex md:min-h-[120px] md:flex-nowrap md:items-center md:gap-4 md:px-8 md:py-5">
+        <div className="shell-header-grid mx-auto grid min-h-[76px] w-full max-w-none grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-3 px-3 py-3 sm:px-4 md:flex md:min-h-[120px] md:flex-nowrap md:items-center md:gap-4 md:px-8 md:py-5">
           <button
             type="button"
             className="shell-mobile-toggle !inline-flex !h-11 !w-11 !min-h-11 !shrink-0 !items-center !justify-center !rounded-2xl !border !border-white/25 !bg-white/10 !p-0 text-white shadow-none hover:!bg-white/20 md:!hidden"
@@ -602,11 +602,11 @@ export default function App() {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1455c8] shadow-sm md:h-[70px] md:w-[70px] md:rounded-[22px]">
                 <img src={LOGO_ODC} alt="ODC Logo" className="h-6 w-auto md:h-11 md:w-16" />
               </div>
-              <div className="min-w-0">
-                <h1 className="m-0 break-words text-[23px] font-bold leading-tight text-white sm:text-[25px] md:max-w-[16ch] md:text-[36px] lg:max-w-none">
+              <div className="shell-brand-copy min-w-0">
+                <h1 className="shell-brand-title m-0 break-words text-[23px] font-bold leading-tight text-white sm:text-[25px] md:max-w-[16ch] md:text-[36px] lg:max-w-none">
                   ระบบงานจองรถ
                 </h1>
-                <p className="mt-1 hidden text-[18px] leading-tight text-sky-100 md:block md:max-w-[34rem] md:text-[22px]">
+                <p className="shell-brand-subtitle mt-1 hidden text-[18px] leading-tight text-sky-100 md:block md:max-w-[34rem] md:text-[22px]">
                   ศูนย์รับบริจาคอวัยวะ สภากาชาดไทย
                 </p>
               </div>
@@ -617,18 +617,22 @@ export default function App() {
             <NotificationBell currentUser={user} onNavigate={navigateToPath} />
           </div>
 
-          <div className="col-span-3 flex min-w-0 flex-wrap items-center justify-end gap-2 md:col-auto md:ml-auto md:flex-nowrap md:gap-4">
+          <div
+            className={`shell-header-actions col-span-3 flex min-w-0 flex-wrap items-center justify-end gap-2 md:col-auto md:ml-auto md:flex-nowrap md:gap-4 ${
+              canInstallApp ? "" : "is-install-hidden"
+            }`}
+          >
             {canInstallApp && (
               <button
                 type="button"
-                className="shell-install-button !min-h-11 !w-full !rounded-2xl !border !border-white/35 !bg-white !px-4 !py-2 !text-[20px] !font-extrabold !text-[#1455c8] shadow-none hover:!bg-sky-50 min-[360px]:!w-auto md:!w-auto"
+                className="shell-install-button !min-h-11 !rounded-2xl !border !border-white/35 !bg-white !px-4 !py-2 !text-[20px] !font-extrabold !text-[#1455c8] shadow-none hover:!bg-sky-50 min-[360px]:!w-auto md:!w-auto"
                 onClick={handleInstallApp}
               >
                 ติดตั้งแอป
               </button>
             )}
 
-            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:flex-none md:gap-3">
+            <div className="shell-mobile-action-row flex min-w-0 flex-1 items-center justify-end gap-2 md:flex-none md:gap-3">
               <div ref={profileMenuRef} className="shell-profile-menu hidden md:block">
                 <button
                   type="button"

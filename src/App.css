@@ -8574,28 +8574,90 @@ label {
 }
 
 @media (max-width: 767px) {
-  .shell-header .mx-auto {
-    gap-y: 2px;
+  .shell-header-grid {
+    min-height: 86px !important;
+    grid-template-columns: 44px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "menu brand bell"
+      "actions actions actions";
+    align-items: center;
+    gap: 8px 10px;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
   }
 
-  .shell-header h1 {
-    max-width: 10ch;
-    font-size: 20px !important;
+  .shell-header-grid > :nth-child(1) {
+    grid-area: menu;
+  }
+
+  .shell-header-grid > :nth-child(2) {
+    grid-area: brand;
+    min-width: 0;
+  }
+
+  .shell-header-grid > :nth-child(3) {
+    grid-area: bell;
+    justify-self: end;
+  }
+
+  .shell-header .shell-header-actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .shell-header .shell-header-actions.is-install-hidden .shell-mobile-action-row {
+    flex: 1 1 100%;
+  }
+
+  .shell-header .shell-brand-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .shell-header .shell-brand-title {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 18px !important;
     line-height: 1.05;
+  }
+
+  .shell-header .shell-brand-subtitle {
+    display: block !important;
+    max-width: 100%;
+    margin-top: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px !important;
+    line-height: 1.05;
+    color: #dbeafe;
   }
 
   .shell-header .shell-install-button {
     width: auto !important;
+    max-width: 120px;
     min-width: 0;
-    min-height: 40px !important;
-    padding: 6px 10px !important;
+    min-height: 48px !important;
+    padding: 6px 12px !important;
     font-size: 16px !important;
-    flex: 0 1 auto;
+    line-height: 1;
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 
-  .shell-header .col-span-3 {
-    flex-wrap: nowrap;
-    gap: 8px;
+  .shell-header .shell-mobile-action-row {
+    width: auto;
+    flex: 1 1 auto;
+    justify-content: flex-end;
   }
 
   .shell-profile-menu {
@@ -8604,13 +8666,18 @@ label {
 
   .shell-mobile-profile-button {
     display: inline-flex;
-    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 420px;
+    min-height: 56px;
+    height: 56px;
+    flex: 1 1 auto;
   }
 
   .shell-profile-avatar {
-    width: 38px;
-    height: 38px;
-    font-size: 17px;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
   }
 
   .shell-mobile-profile-trigger-copy b {
@@ -8632,14 +8699,29 @@ label {
 }
 
 @media (max-width: 430px) {
-  .shell-header h1 {
-    max-width: 8ch;
-    font-size: 18px !important;
+  .shell-header .shell-brand-title {
+    font-size: 16px !important;
+  }
+
+  .shell-header .shell-brand-subtitle {
+    font-size: 11px !important;
+  }
+
+  .shell-header .shell-header-actions {
+    gap: 6px;
+  }
+
+  .shell-header .shell-install-button {
+    max-width: 112px;
+    min-height: 46px !important;
+    padding: 6px 10px !important;
+    font-size: 15px !important;
   }
 
   .shell-mobile-profile-button {
-    min-width: 160px;
-    max-width: 170px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     padding-right: 6px;
     gap: 6px;
   }
