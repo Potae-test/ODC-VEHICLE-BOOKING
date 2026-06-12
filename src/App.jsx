@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import Login from "./pages/Login";
 import {
   canAccessPage,
@@ -26,6 +26,7 @@ const DriverUnavailableLogs = lazy(() => import("./pages/DriverUnavailableLogs")
 const DriverQueue = lazy(() => import("./pages/DriverQueue"));
 const DriverQueueLogs = lazy(() => import("./pages/DriverQueueLogs"));
 const Admin = lazy(() => import("./pages/Admin"));
+const Profile = lazy(() => import("./pages/Profile"));
 
 function ShellIcon({ children, className = "" }) {
   return (
@@ -59,6 +60,14 @@ function CloseIcon(props) {
     <ShellIcon {...props}>
       <line x1="6" y1="6" x2="18" y2="18" />
       <line x1="18" y1="6" x2="6" y2="18" />
+    </ShellIcon>
+  );
+}
+
+function ChevronDownIcon(props) {
+  return (
+    <ShellIcon {...props}>
+      <polyline points="6 9 12 15 18 9" />
     </ShellIcon>
   );
 }
@@ -171,28 +180,20 @@ function ShieldIcon(props) {
   );
 }
 
-function BuildingIcon(props) {
-  return (
-    <ShellIcon {...props}>
-      <path d="M4 21h16" />
-      <path d="M6 21V7l6-3 6 3v14" />
-      <path d="M9 10h.01" />
-      <path d="M9 13h.01" />
-      <path d="M9 16h.01" />
-      <path d="M15 10h.01" />
-      <path d="M15 13h.01" />
-      <path d="M15 16h.01" />
-    </ShellIcon>
-  );
+function getUserAvatarInitial(name) {
+  const trimmedName = String(name || "").trim();
+  return trimmedName ? trimmedName.charAt(0).toUpperCase() : "U";
 }
 
-function UserIcon(props) {
-  return (
-    <ShellIcon {...props}>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20a7 7 0 0 1 14 0" />
-    </ShellIcon>
-  );
+function getUserRoleLabel(role) {
+  const normalizedRole = normalizeRole(role);
+
+  if (normalizedRole === "ADMIN") return "ผู้ดูแลระบบ";
+  if (normalizedRole === "STAFF") return "เจ้าหน้าที่";
+  if (normalizedRole === "DRIVER") return "พนักงานขับรถ";
+  if (normalizedRole === "USER") return "ผู้ใช้งานทั่วไป";
+
+  return String(role || "-").trim() || "-";
 }
 
 function ShellNavButton({ active, icon, children, ...props }) {
@@ -234,6 +235,7 @@ function isPageFeatureEnabled(page) {
 
 function getPathByPage(page) {
   if (page === "admin") return "/admin";
+  if (page === "profile") return "/profile";
   if (page === "staff") return "/staff";
   if (page === "driver-jobs") return "/driver-jobs";
   if (page === "driver-unavailable") return "/driver-unavailable";
@@ -250,6 +252,7 @@ function getPathByPage(page) {
 function getPageFromPath(pathname) {
   const path = String(pathname || "").replace(/\/+$/, "") || "/";
   if (path === "/admin" || path === "/dashboard") return "admin";
+  if (path === "/profile") return "profile";
   if (path === "/staff") return "staff";
   if (path === "/driver-jobs") return "driver-jobs";
   if (path === "/driver-unavailable") return "driver-unavailable";
@@ -268,8 +271,13 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [permissionConfig, setPermissionConfig] = useState(loadPermissionConfig);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileProfileSheetOpen, setIsMobileProfileSheetOpen] = useState(false);
+  const [profileInitialSection, setProfileInitialSection] = useState("profile");
+  const [profileSectionRequestKey, setProfileSectionRequestKey] = useState("profile:0");
   const [installPromptEvent, setInstallPromptEvent] = useState(null);
   const [canInstallApp, setCanInstallApp] = useState(false);
+  const profileMenuRef = useRef(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("odc_user");
@@ -341,6 +349,8 @@ export default function App() {
 
   useEffect(() => {
     setIsMobileNavOpen(false);
+    setIsProfileMenuOpen(false);
+    setIsMobileProfileSheetOpen(false);
   }, [page, user]);
 
   useEffect(() => {
@@ -389,6 +399,32 @@ export default function App() {
     return startSessionTimeout();
   }, [user]);
 
+  useEffect(() => {
+    if (!isProfileMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (!profileMenuRef.current?.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isProfileMenuOpen]);
+
   function goPage(nextPage) {
     if (!isPageFeatureEnabled(nextPage)) return;
     if (!canAccessPage(user.role, nextPage, permissionConfig)) {
@@ -410,11 +446,29 @@ export default function App() {
     window.history.replaceState({}, "", resolvedUrl.pathname);
   }
 
+  function openProfilePage(section = "profile") {
+    const nextSection = section === "password" ? "password" : "profile";
+
+    setProfileInitialSection(nextSection);
+    setProfileSectionRequestKey(`${nextSection}:${Date.now()}`);
+    setIsProfileMenuOpen(false);
+    setIsMobileProfileSheetOpen(false);
+    setPage("profile");
+    window.history.replaceState({}, "", "/profile");
+  }
+
+  function handleUserUpdate(nextUser) {
+    if (!nextUser) return;
+    setUser(nextUser);
+  }
+
   function logout() {
     localStorage.removeItem("odc_user");
     setUser(null);
     setPage(FEATURES.vehicleModule ? "cars" : "booking");
     setIsMobileNavOpen(false);
+    setIsProfileMenuOpen(false);
+    setIsMobileProfileSheetOpen(false);
   }
 
   async function handleInstallApp() {
@@ -458,6 +512,8 @@ export default function App() {
 
   const hasPageAccess = isPageFeatureEnabled(page) && canAccessPage(user.role, page, permissionConfig);
   const navIconClassName = "h-5 w-5";
+  const userAvatarInitial = getUserAvatarInitial(user?.name);
+  const userRoleLabel = getUserRoleLabel(user?.role);
   const sidebarItems = [
     {
       page: "cars",
@@ -544,9 +600,7 @@ export default function App() {
           <div className="min-w-0 md:flex-1">
             <div className="flex items-center gap-3 md:gap-4">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1455c8] shadow-sm md:h-[70px] md:w-[70px] md:rounded-[22px]">
-                  <img src={LOGO_ODC} alt="ODC Logo" className="h-6 w-auto md:h-11 md:w-16" />
-
-                 {/* <BuildingIcon className="h-6 w-6 md:h-9 md:w-9" /> */}
+                <img src={LOGO_ODC} alt="ODC Logo" className="h-6 w-auto md:h-11 md:w-16" />
               </div>
               <div className="min-w-0">
                 <h1 className="m-0 break-words text-[23px] font-bold leading-tight text-white sm:text-[25px] md:max-w-[16ch] md:text-[36px] lg:max-w-none">
@@ -574,27 +628,121 @@ export default function App() {
               </button>
             )}
 
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 min-[360px]:flex-nowrap md:flex-none md:gap-3">
-              <div className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#1455c8] shadow-sm min-[360px]:flex md:h-[52px] md:w-[52px]">
-                <UserIcon className="h-5 w-5 md:h-6 md:w-6" />
-              </div>
-              <div className="min-w-[120px] flex-1 text-right min-[360px]:min-w-0">
-                <b className="block truncate text-[20px] leading-tight text-white md:text-[24px]">{user.name}</b>
-                <span className="block truncate text-[14px] leading-tight text-sky-100 md:text-[16px]">
-                  {user.role}
-                </span>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:flex-none md:gap-3">
+              <div ref={profileMenuRef} className="shell-profile-menu hidden md:block">
+                <button
+                  type="button"
+                  className="shell-profile-trigger"
+                  aria-expanded={isProfileMenuOpen}
+                  onClick={() => setIsProfileMenuOpen((current) => !current)}
+                >
+                  <span className="shell-profile-avatar" aria-hidden="true">
+                    {userAvatarInitial}
+                  </span>
+                  <span className="shell-profile-copy">
+                    <b>{user.name || "-"}</b>
+                    <span>{userRoleLabel}</span>
+                  </span>
+                  <ChevronDownIcon
+                    className={isProfileMenuOpen ? "shell-profile-chevron is-open" : "shell-profile-chevron"}
+                  />
+                </button>
+
+                {isProfileMenuOpen && (
+                  <div className="shell-profile-dropdown">
+                    <div className="shell-profile-dropdown-summary">
+                      <span className="shell-profile-avatar shell-profile-avatar-small" aria-hidden="true">
+                        {userAvatarInitial}
+                      </span>
+                      <div className="shell-profile-dropdown-copy">
+                        <strong>{user.name || "-"}</strong>
+                        <span>{userRoleLabel}</span>
+                        <span>{user.user_id || "-"}</span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="shell-profile-dropdown-item"
+                      onClick={() => openProfilePage("profile")}
+                    >
+                      โปรไฟล์ของฉัน
+                    </button>
+                    <button
+                      type="button"
+                      className="shell-profile-dropdown-item"
+                      onClick={() => openProfilePage("password")}
+                    >
+                      เปลี่ยนรหัสผ่าน
+                    </button>
+                    <button
+                      type="button"
+                      className="shell-profile-dropdown-item is-danger"
+                      onClick={logout}
+                    >
+                      ออกจากระบบ
+                    </button>
+                  </div>
+                )}
               </div>
               <button
                 type="button"
-                className="shell-logout-button !min-h-11 !w-full !rounded-2xl !border !border-white/30 !bg-white !px-4 !py-2 !text-[20px] !font-bold !text-[#1455c8] shadow-none hover:!bg-sky-50 min-[360px]:!w-auto"
-                onClick={logout}
+                className="shell-mobile-profile-button md:hidden"
+                aria-label="เมนูโปรไฟล์"
+                aria-expanded={isMobileProfileSheetOpen}
+                onClick={() => setIsMobileProfileSheetOpen(true)}
               >
-                ออกจากระบบ
+                <span className="shell-profile-avatar" aria-hidden="true">
+                  {userAvatarInitial}
+                </span>
+                <span className="shell-profile-copy shell-mobile-profile-trigger-copy">
+                  <b>{user.name || "-"}</b>
+                  <span>{userRoleLabel}</span>
+                </span>
+                <ChevronDownIcon className="shell-profile-chevron" />
               </button>
             </div>
           </div>
         </div>
       </header>
+
+      <div
+        className={`shell-mobile-profile-backdrop fixed inset-0 z-[70] bg-slate-950/45 transition-opacity duration-200 md:hidden ${
+          isMobileProfileSheetOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setIsMobileProfileSheetOpen(false)}
+        aria-hidden="true"
+      />
+
+      <div
+        className={
+          isMobileProfileSheetOpen
+            ? "shell-mobile-profile-sheet is-open md:hidden"
+            : "shell-mobile-profile-sheet md:hidden"
+        }
+      >
+        <div className="shell-mobile-profile-handle" aria-hidden="true" />
+        <div className="shell-mobile-profile-head">
+          <span className="shell-profile-avatar" aria-hidden="true">
+            {userAvatarInitial}
+          </span>
+          <div className="shell-mobile-profile-copy">
+            <strong>{user.name || "-"}</strong>
+            <span>{userRoleLabel}</span>
+            <span>{user.user_id || "-"}</span>
+          </div>
+        </div>
+        <div className="shell-mobile-profile-actions">
+          <button type="button" className="shell-mobile-profile-action" onClick={() => openProfilePage("profile")}>
+            โปรไฟล์ของฉัน
+          </button>
+          <button type="button" className="shell-mobile-profile-action" onClick={() => openProfilePage("password")}>
+            เปลี่ยนรหัสผ่าน
+          </button>
+          <button type="button" className="shell-mobile-profile-action is-danger" onClick={logout}>
+            ออกจากระบบ
+          </button>
+        </div>
+      </div>
 
       <div className="h-[76px] shrink-0 md:hidden" />
 
@@ -648,6 +796,14 @@ export default function App() {
             {hasPageAccess && page === "driver-queue" && <DriverQueue />}
             {hasPageAccess && page === "driver-queue-logs" && <DriverQueueLogs />}
             {hasPageAccess && page === "admin" && <Admin />}
+            {hasPageAccess && page === "profile" && (
+              <Profile
+                key={`${user?.user_id || "profile"}:${profileSectionRequestKey}`}
+                currentUser={user}
+                onUserUpdate={handleUserUpdate}
+                initialSection={profileInitialSection}
+              />
+            )}
           </Suspense>
         </main>
       </div>
