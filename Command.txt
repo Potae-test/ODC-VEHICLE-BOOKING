@@ -90,8 +90,42 @@ firebase.initializeApp({
 });
 
 
-Public Key:
+Public Key:ยp
 BJNJG_0BFWzfHPqrNPI0qaHoGHKEFpW9OPZxAJ-t2q-XkI1ff6oDe18PaUcX4DYV84hMCuD1Zl2pFEW8v4L3_HE
 
 Private Key:
 rCX4D8SaYZpnBfuiJInqgB_G2QnLxqkhT5wOdu3hGzk
+
+------------
+Test push notication
+
+--version IOS
+fetch("https://odc-vehicle-api.kooysky.workers.dev/push/test", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    user_id: "U009",
+    title: ".....",
+    body: "......."
+  })
+})
+.then(r => r.json())
+.then(data => console.log(JSON.stringify(data, null, 2)));
+
+--version Android
+fetch("https://odc-vehicle-api.kooysky.workers.dev/push/test", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    user_id: "U003",
+    title: "ANDROID FINAL TEST",
+    body: "FCM final verification"
+  })
+})
+.then(r => r.json())
+.then(data => console.log(JSON.stringify(data, null, 2)))
+.catch(console.error);

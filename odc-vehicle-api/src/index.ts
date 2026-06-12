@@ -506,6 +506,45 @@ function normalizeWebPushPublicKey(env: Env) {
   return String(env.VAPID_PUBLIC_KEY || DEFAULT_WEB_PUSH_PUBLIC_KEY).trim();
 }
 
+function previewEnvKey(value: string, length = 12) {
+  return String(value || "").trim().slice(0, Math.max(0, length));
+}
+
+function isAppleWebPushEndpoint(endpoint: string) {
+  try {
+    return new URL(endpoint).hostname === "web.push.apple.com";
+  } catch {
+    return false;
+  }
+}
+
+function maskWebPushAuthorizationHeader(value: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+
+  const tokenMatch = normalized.match(/t=([^,\s]+)/);
+  const keyMatch = normalized.match(/k=([^,\s]+)/);
+  const tokenPreview = tokenMatch ? previewTarget(tokenMatch[1], { head: 12, tail: 8 }) : "";
+  const keyPreview = keyMatch ? previewTarget(keyMatch[1], { head: 12, tail: 8 }) : "";
+
+  return `vapid t=${tokenPreview || "[masked]"}, k=${keyPreview || "[masked]"}`;
+}
+
+function getMaskedWebPushHeaders(headers: Headers | Record<string, string>) {
+  const headerEntries =
+    headers instanceof Headers ? Array.from(headers.entries()) : Object.entries(headers || {});
+
+  return Object.fromEntries(
+    headerEntries.map(([name, value]) => {
+      const normalizedName = String(name || "").trim();
+      if (normalizedName.toLowerCase() === "authorization") {
+        return [normalizedName, maskWebPushAuthorizationHeader(String(value || ""))];
+      }
+      return [normalizedName, String(value || "")];
+    })
+  );
+}
+
 function parseWebPushPublicKey(env: Env) {
   const publicKey = normalizeWebPushPublicKey(env);
   const bytes = decodeBase64Url(publicKey);
@@ -751,6 +790,7 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
   const pushSendStartedAt = new Date().toISOString();
   const content = buildPushMessageContent(notification);
   const topic = buildPushTopic(notification);
+  const isAppleEndpoint = isAppleWebPushEndpoint(endpoint);
   const privateJWK = await getWebPushPrivateJwk(env);
   const subject = String(env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
   const { endpoint: targetEndpoint, headers, body } = await buildPushHTTPRequest({
@@ -782,9 +822,22 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
       options: {
         ttl: 30,
         urgency: "high",
-        topic,
+        ...(isAppleEndpoint ? {} : { topic }),
       },
     },
+  });
+  const maskedHeaders = getMaskedWebPushHeaders(headers);
+  console.log("[push] web push request headers", {
+    endpoint,
+    target_endpoint: targetEndpoint,
+    is_apple_web_push: isAppleEndpoint,
+    topic_header_sent: Object.prototype.hasOwnProperty.call(maskedHeaders, "Topic"),
+    headers: maskedHeaders,
+    notification_id: content.notification_id,
+    type: content.type,
+    booking_id: content.booking_id,
+    notification_created_at: notificationCreatedAt,
+    push_send_started_at: pushSendStartedAt,
   });
   const response = await fetch(targetEndpoint, {
     method: "POST",
@@ -805,6 +858,10 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
     error.payload = payloadText;
     console.warn("[push] web push send fail", {
       endpoint,
+      target_endpoint: targetEndpoint,
+      is_apple_web_push: isAppleEndpoint,
+      topic_header_sent: Object.prototype.hasOwnProperty.call(maskedHeaders, "Topic"),
+      request_headers: maskedHeaders,
       type: content.type,
       booking_id: content.booking_id,
       status: response.status,
@@ -818,6 +875,10 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
 
   console.log("[push] web push send ok", {
     endpoint,
+    target_endpoint: targetEndpoint,
+    is_apple_web_push: isAppleEndpoint,
+    topic_header_sent: Object.prototype.hasOwnProperty.call(maskedHeaders, "Topic"),
+    request_headers: maskedHeaders,
     type: content.type,
     booking_id: content.booking_id,
     notification_created_at: notificationCreatedAt,
@@ -1277,6 +1338,24 @@ async function handlePushTest(request: Request, env: Env) {
   });
 }
 
+function handleWebPushConfigDebug(env: Env) {
+  const envPublicKey = String(env.VAPID_PUBLIC_KEY || "").trim();
+  const normalizedPublicKey = normalizeWebPushPublicKey(env);
+  const envPrivateKey = String(env.VAPID_PRIVATE_KEY || "").trim();
+  const vapidSubject = String(env.VAPID_SUBJECT || "").trim();
+
+  return jsonResponse({
+    success: true,
+    data: {
+      env_has_public_key: Boolean(envPublicKey),
+      env_public_key_prefix: previewEnvKey(envPublicKey),
+      normalized_public_key_prefix: previewEnvKey(normalizedPublicKey),
+      env_has_private_key: Boolean(envPrivateKey),
+      vapid_subject: vapidSubject || null,
+    },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -1296,6 +1375,10 @@ export default {
         },
         message: "ODC Vehicle Booking API Running",
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/debug/webpush-config") {
+      return handleWebPushConfigDebug(env);
     }
 
     if (request.method === "GET") {
