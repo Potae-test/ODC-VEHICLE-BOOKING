@@ -93,6 +93,7 @@ type WorkerNotification = {
   notification_id?: string;
   target_user_id?: string;
   target_role?: string;
+  category?: string;
   title?: string;
   message?: string;
   url?: string;
@@ -599,6 +600,7 @@ function buildPushMessageContent(notification: WorkerNotification) {
   return {
     title: String(notification.title || "ODC Vehicle Booking").trim() || "ODC Vehicle Booking",
     body: String(notification.message || "").trim(),
+    category: String(notification.category || "").trim(),
     url: String(notification.url || "/").trim() || "/",
     type: String(notification.type || "").trim(),
     booking_id: String(notification.booking_id || "").trim(),
@@ -688,6 +690,7 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
             body: content.body,
           },
           data: {
+            category: content.category,
             url: content.url,
             type: content.type,
             booking_id: content.booking_id,
@@ -711,6 +714,7 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
               renotify: true,
               requireInteraction: false,
               data: {
+                category: content.category,
                 url: content.url,
                 type: content.type,
                 booking_id: content.booking_id,
@@ -812,6 +816,7 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
         renotify: true,
         requireInteraction: false,
         data: {
+          category: content.category,
           url: content.url,
           type: content.type,
           booking_id: content.booking_id,

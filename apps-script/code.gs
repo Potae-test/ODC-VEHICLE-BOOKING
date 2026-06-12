@@ -128,6 +128,7 @@ function doPost(e) {
     if (action === "savePushSubscription") return savePushSubscription(body.data);
     if (action === "disablePushSubscription") return disablePushSubscription(body.data);
     if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data || body);
+    if (action === "sendBookingReminderNotifications1Hour") return sendBookingReminderNotifications1Hour(body.data || body);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
   
@@ -530,6 +531,7 @@ function ensureNotificationsSheet() {
     "notification_id",
     "target_user_id",
     "target_role",
+    "category",
     "title",
     "message",
     "type",
@@ -621,6 +623,117 @@ function safeStringifyNotificationPayload_(payload) {
   }
 }
 
+function formatThaiNotificationDateTime_(value) {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value || "").trim();
+  }
+
+  const thaiMonthShortNames = [
+    "ม.ค.",
+    "ก.พ.",
+    "มี.ค.",
+    "เม.ย.",
+    "พ.ค.",
+    "มิ.ย.",
+    "ก.ค.",
+    "ส.ค.",
+    "ก.ย.",
+    "ต.ค.",
+    "พ.ย.",
+    "ธ.ค.",
+  ];
+  const day = Utilities.formatDate(date, "Asia/Bangkok", "d");
+  const monthIndex = Number(Utilities.formatDate(date, "Asia/Bangkok", "M")) - 1;
+  const month = thaiMonthShortNames[monthIndex] || "";
+  const christianYear = Number(Utilities.formatDate(date, "Asia/Bangkok", "yyyy")) || 0;
+  const buddhistYear = christianYear > 0 ? christianYear + 543 : "";
+  const time = Utilities.formatDate(date, "Asia/Bangkok", "HH:mm");
+
+  return `${day} ${month} ${buddhistYear} เวลา ${time} น.`;
+}
+
+function buildRequesterDestinationStartMessage_(booking, fallbackMessage) {
+  const requesterName = String(booking && booking.requester_name || "").trim();
+  const destination = String(booking && booking.destination || "").trim();
+  const startDatetime = formatThaiNotificationDateTime_(booking && booking.start_datetime || "");
+  const parts = [];
+
+  if (requesterName) parts.push(requesterName);
+  if (destination) parts.push(destination);
+  if (startDatetime) parts.push(startDatetime);
+
+  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+}
+
+function buildDestinationStartMessage_(booking, fallbackMessage) {
+  const destination = String(booking && booking.destination || "").trim();
+  const startDatetime = formatThaiNotificationDateTime_(booking && booking.start_datetime || "");
+  const parts = [];
+
+  if (destination) parts.push(`ปลายทาง: ${destination}`);
+  if (startDatetime) parts.push(`เวลาไป: ${startDatetime}`);
+
+  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+}
+
+function buildDriverUnavailableNotificationMessage_(payload, includeReason) {
+  const driverName = String(payload && payload.driver_name || "").trim();
+  const startDatetime = formatThaiNotificationDateTime_(payload && payload.start_datetime || "");
+  const endDatetime = formatThaiNotificationDateTime_(payload && payload.end_datetime || "");
+  const reason = String(payload && payload.reason || "").trim();
+  const parts = [];
+
+  if (driverName) {
+    parts.push(`คนขับ: ${driverName}`);
+  }
+
+  if (startDatetime || endDatetime) {
+    parts.push(`${startDatetime || "-"} - ${endDatetime || "-"}`);
+  }
+
+  if (includeReason) {
+    parts.push(`เหตุผล: ${reason || "-"}`);
+  }
+
+  return parts.join(" | ");
+}
+
+function inferNotificationCategory_(input) {
+  const explicitCategory = String(input && input.category || "").trim();
+  if (explicitCategory) return explicitCategory;
+
+  const type = String(input && input.type || "").trim().toUpperCase();
+  const title = String(input && input.title || "").trim();
+
+  if (
+    type.indexOf("CANCEL") >= 0 ||
+    title.indexOf("ยกเลิก") >= 0
+  ) {
+    return "Cancellation";
+  }
+
+  if (
+    type.indexOf("UNASSIGN") >= 0 ||
+    type.indexOf("APPROVAL") >= 0 ||
+    title.indexOf("อนุมัติ") >= 0 ||
+    title.indexOf("ดึงรายการจองกลับ") >= 0
+  ) {
+    return "Approval";
+  }
+
+  if (
+    type.indexOf("UNAVAILABLE") >= 0 ||
+    type.indexOf("DRIVER_") === 0
+  ) {
+    return "Driver";
+  }
+
+  return "Booking";
+}
+
 function buildNotificationPayloadFromBooking_(booking, overrides) {
   const source = booking || {};
   const next = {
@@ -648,6 +761,7 @@ function buildNotificationRecord_(data) {
     notification_id: "NTF-" + Utilities.getUuid(),
     target_user_id: String(data && data.target_user_id || "").trim(),
     target_role: normalizeRoleValue_(data && data.target_role || ""),
+    category: inferNotificationCategory_(data),
     title: String(data && data.title || "").trim(),
     message: String(data && data.message || "").trim(),
     type: String(data && data.type || "").trim(),
@@ -680,12 +794,31 @@ function appendNotificationRecord_(data) {
   const table = readSheetTable(sheet);
   const headers = table.headers;
   const duplicateWindowMs = 30 * 1000;
+  const isStableReminderType = String(record.type || "").trim().toUpperCase() === "BOOKING_REMINDER_1H";
 
   for (let index = table.rows.length - 1; index >= 0; index -= 1) {
     const existing = rowsToObjects(headers, [table.rows[index]])[0] || {};
     const createdAt = new Date(existing.created_at || 0).getTime();
 
-    if (!createdAt || Date.now() - createdAt > duplicateWindowMs) {
+    if (
+      isStableReminderType &&
+      String(existing.target_user_id || "").trim() === record.target_user_id &&
+      normalizeRoleValue_(existing.target_role || "") === record.target_role &&
+      String(existing.type || "").trim().toUpperCase() === "BOOKING_REMINDER_1H" &&
+      String(existing.booking_id || "").trim() === record.booking_id
+    ) {
+      return {
+        ...record,
+        notification_id: String(existing.notification_id || "").trim() || record.notification_id,
+        category: String(existing.category || "").trim() || record.category,
+        created_at: String(existing.created_at || "").trim() || record.created_at,
+        is_read: normalizeNotificationReadValue_(existing.is_read),
+        read_at: String(existing.read_at || "").trim(),
+        payload_json: String(existing.payload_json || "").trim() || record.payload_json,
+      };
+    }
+
+    if (!isStableReminderType && (!createdAt || Date.now() - createdAt > duplicateWindowMs)) {
       break;
     }
 
@@ -701,6 +834,7 @@ function appendNotificationRecord_(data) {
       return {
         ...record,
         notification_id: String(existing.notification_id || "").trim() || record.notification_id,
+        category: String(existing.category || "").trim() || record.category,
         created_at: String(existing.created_at || "").trim() || record.created_at,
         is_read: normalizeNotificationReadValue_(existing.is_read),
         read_at: String(existing.read_at || "").trim(),
@@ -779,6 +913,77 @@ function resolveRequesterNotificationUserId_(booking) {
   return "";
 }
 
+function createBookingAssignmentNotifications_(booking, options) {
+  const sourceBooking = booking || {};
+  const assignedUserId = String(options && options.assigned_user_id || sourceBooking.assigned_user_id || "").trim();
+  const assignedUserName = String(options && options.assigned_user_name || sourceBooking.assigned_user_name || sourceBooking.driver_name || "").trim();
+  const previousAssignedUserId = String(options && options.previous_assigned_user_id || "").trim();
+  const previousStatus = String(options && options.previous_status || sourceBooking.status || "").trim().toUpperCase();
+  const createdBy = String(options && options.created_by || "").trim();
+  const requesterNotificationUserId = String(
+    options && options.requester_user_id !== undefined
+      ? options.requester_user_id
+      : resolveRequesterNotificationUserId_(sourceBooking)
+  ).trim();
+  const assignmentPayload = buildNotificationPayloadFromBooking_(sourceBooking, {
+    driver_name: assignedUserName,
+    status: "APPROVED",
+  });
+  const isDriverChanged =
+    previousStatus === "APPROVED" &&
+    Boolean(previousAssignedUserId) &&
+    Boolean(assignedUserId) &&
+    previousAssignedUserId !== assignedUserId;
+
+  if (assignedUserId && assignedUserId !== previousAssignedUserId) {
+    createNotification({
+      target_user_id: assignedUserId,
+      target_role: "",
+      category: "Booking",
+      title: "คุณได้รับมอบหมายงาน",
+      message: buildNotificationMessageForBooking_(sourceBooking, "มีการมอบหมายงานใหม่"),
+      type: "BOOKING_ASSIGNED",
+      booking_id: sourceBooking.booking_id || "",
+      url: "/driver-jobs",
+      created_by: createdBy,
+      payload_json: assignmentPayload,
+    });
+  }
+
+  if (!requesterNotificationUserId) {
+    return;
+  }
+
+  if (isDriverChanged) {
+    createNotification({
+      target_user_id: requesterNotificationUserId,
+      target_role: "",
+      category: "Booking",
+      title: "รายการจองเปลี่ยนคนขับใหม่",
+      message: `คนขับ: ${assignedUserName || "-"}\nปลายทาง: ${String(sourceBooking.destination || "").trim() || "-"}`,
+      type: "BOOKING_DRIVER_CHANGED",
+      booking_id: sourceBooking.booking_id || "",
+      url: "/booking",
+      created_by: createdBy,
+      payload_json: assignmentPayload,
+    });
+    return;
+  }
+
+  createNotification({
+    target_user_id: requesterNotificationUserId,
+    target_role: "",
+    category: "Booking",
+    title: "รายการจองได้รับมอบหมายคนขับแล้ว",
+    message: `${assignedUserName || "คนขับ"} ได้รับมอบหมายแล้ว`,
+    type: "BOOKING_ASSIGNED_TO_REQUESTER",
+    booking_id: sourceBooking.booking_id || "",
+    url: "/booking",
+    created_by: createdBy,
+    payload_json: assignmentPayload,
+  });
+}
+
 function isNotificationVisibleToUser_(notification, userId, role) {
   const targetUserId = String(notification && notification.target_user_id || "").trim();
   const targetRole = normalizeRoleValue_(notification && notification.target_role || "");
@@ -801,6 +1006,7 @@ function getVisibleNotificationEntries_(userId, role) {
       ...notification,
       target_user_id: String(notification.target_user_id || "").trim(),
       target_role: normalizeRoleValue_(notification.target_role || ""),
+      category: String(notification.category || "").trim(),
       is_read: normalizeNotificationReadValue_(notification.is_read),
       created_at: String(notification.created_at || ""),
       read_at: String(notification.read_at || ""),
@@ -1887,11 +2093,12 @@ function createBooking(data) {
     logBookingAction("createBooking", bookingId, row);
 
     createRoleNotifications_(["STAFF", "ADMIN"], {
+      category: "Booking",
       title: "มีรายการจองใหม่",
-      message: buildNotificationMessageForBooking_({
-        booking_no: bookingNo,
+      message: buildRequesterDestinationStartMessage_({
         requester_name: data.requester_name || "",
         destination: data.destination || "",
+        start_datetime: data.start_datetime || "",
       }, "มีคำขอจองรถใหม่"),
       type: "BOOKING_CREATED",
       booking_id: bookingId,
@@ -1981,19 +2188,32 @@ function updateBooking(data) {
   const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
   const updatedBy = String(data.updated_by || data.created_by || "").trim();
   const updatedByRole = String(data.updated_by_role || "").trim().toUpperCase();
+  const updatedByUserId = String(data.updated_by_user_id || data.created_by_user_id || "").trim();
 
   try {
     const requesterUserId = resolveRequesterNotificationUserId_(updatedBooking);
+    const assignedDriverUserId = String(updatedBooking.assigned_user_id || "").trim();
+    const isOwnerEditingOwnBooking =
+      Boolean(requesterUserId) &&
+      Boolean(updatedByUserId) &&
+      requesterUserId === updatedByUserId;
     const shouldNotifyOwner =
       Boolean(requesterUserId) &&
-      (updatedByRole === "STAFF" || updatedByRole === "ADMIN");
+      !isOwnerEditingOwnBooking &&
+      (
+        (Boolean(updatedByUserId) && requesterUserId !== updatedByUserId) ||
+        updatedByRole === "STAFF" ||
+        updatedByRole === "ADMIN" ||
+        updatedByRole === "DRIVER"
+      );
 
     if (shouldNotifyOwner) {
       createNotification({
         target_user_id: requesterUserId,
         target_role: "",
-        title: "รายการจองมีการเปลี่ยนแปลง",
-        message: buildNotificationMessageForBooking_(updatedBooking, "รายการจองของคุณมีการเปลี่ยนแปลง"),
+        category: "Booking",
+        title: "รายการจองของคุณถูกแก้ไข",
+        message: buildDestinationStartMessage_(updatedBooking, "รายการจองของคุณมีการเปลี่ยนแปลง"),
         type: "BOOKING_UPDATED",
         booking_id: updatedBooking.booking_id || data.booking_id,
         url: "/booking",
@@ -2002,6 +2222,41 @@ function updateBooking(data) {
           status: statusCol !== undefined && statusCol !== -1 ? rowValues[statusCol] || "" : "",
         }),
       });
+    }
+
+    if (isOwnerEditingOwnBooking) {
+      const editMessage = buildRequesterDestinationStartMessage_(updatedBooking, "รายการจองถูกแก้ไขโดยผู้จอง");
+      createRoleNotifications_(["STAFF"], {
+        category: "Booking",
+        title: "รายการจองถูกแก้ไขโดยผู้จอง",
+        message: editMessage,
+        type: "BOOKING_UPDATED_BY_REQUESTER",
+        booking_id: updatedBooking.booking_id || data.booking_id,
+        url: "/booking",
+        created_by: updatedBy,
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          editor_user_id: updatedByUserId,
+          status: statusCol !== undefined && statusCol !== -1 ? rowValues[statusCol] || "" : "",
+        }),
+      });
+
+      if (assignedDriverUserId && assignedDriverUserId !== updatedByUserId) {
+        createNotification({
+          target_user_id: assignedDriverUserId,
+          target_role: "",
+          category: "Booking",
+          title: "รายการจองถูกแก้ไขโดยผู้จอง",
+          message: editMessage,
+          type: "BOOKING_UPDATED_BY_REQUESTER",
+          booking_id: updatedBooking.booking_id || data.booking_id,
+          url: "/driver-jobs",
+          created_by: updatedBy,
+          payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+            editor_user_id: updatedByUserId,
+            status: statusCol !== undefined && statusCol !== -1 ? rowValues[statusCol] || "" : "",
+          }),
+        });
+      }
     }
   } catch (notificationErr) {
     console.warn("updateBooking notification failed", notificationErr);
@@ -2057,7 +2312,10 @@ function approveBooking(data) {
     booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
     vehicle_id: data.vehicle_id || "",
     start_datetime: values[currentRow][startCol],
-    end_datetime: values[currentRow][endCol]
+    end_datetime: values[currentRow][endCol],
+    assigned_user_id: values[currentRow][assignedUserIdCol] || "",
+    assigned_user_name: values[currentRow][assignedUserNameCol] || "",
+    status: values[currentRow][statusCol] || "",
   };
 
   const assignedDriverUserId = String(data.assigned_user_id || data.driver_id || "").trim();
@@ -2142,47 +2400,15 @@ function approveBooking(data) {
     );
 
     const assignedNotificationUserId = String(rowValues[assignedUserIdCol] || "").trim();
-    const requesterNotificationUserId = resolveRequesterNotificationUserId_(rowsToObjects(headers, [rowValues])[0] || {});
     try {
       const assignedBooking = rowsToObjects(headers, [rowValues])[0] || {};
-      if (assignedNotificationUserId) {
-        createNotification({
-          target_user_id: assignedNotificationUserId,
-          target_role: "",
-          title: "คุณได้รับมอบหมายงาน",
-          message: buildNotificationMessageForBooking_({
-            booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
-            requester_name: rowValues[columnMap.requester_name] || "",
-            destination: rowValues[columnMap.destination] || "",
-          }, "มีการมอบหมายงานใหม่"),
-          type: "BOOKING_ASSIGNED",
-          booking_id: values[currentRow][bookingIdCol],
-          url: "/driver-jobs",
-          created_by: currentUserName || "",
-          payload_json: buildNotificationPayloadFromBooking_(assignedBooking, {
-            driver_name: rowValues[assignedUserNameCol] || "",
-            status: "APPROVED",
-          }),
-        });
-      }
-
-      if (requesterNotificationUserId) {
-        const requesterDriverName = String(rowValues[assignedUserNameCol] || "").trim();
-        createNotification({
-          target_user_id: requesterNotificationUserId,
-          target_role: "",
-          title: "รายการจองได้รับมอบหมายคนขับแล้ว",
-          message: `${requesterDriverName || "คนขับ"} ได้รับมอบหมายแล้ว`,
-          type: "BOOKING_ASSIGNED_TO_REQUESTER",
-          booking_id: values[currentRow][bookingIdCol],
-          url: "/booking",
-          created_by: currentUserName || "",
-          payload_json: buildNotificationPayloadFromBooking_(assignedBooking, {
-            driver_name: requesterDriverName,
-            status: "APPROVED",
-          }),
-        });
-      }
+      createBookingAssignmentNotifications_(assignedBooking, {
+        assigned_user_id: assignedNotificationUserId,
+        assigned_user_name: String(rowValues[assignedUserNameCol] || "").trim(),
+        previous_assigned_user_id: currentBooking.assigned_user_id || "",
+        previous_status: currentBooking.status || "",
+        created_by: currentUserName || "",
+      });
     } catch (notificationErr) {
       console.warn("approveBooking notification failed", notificationErr);
     }
@@ -2968,10 +3194,11 @@ function requestDriverCancelJob(data) {
     })
   );
 
-  createRoleNotifications_(["STAFF", "ADMIN"], {
-    title: "คนขับขอยกเลิกงาน",
-    message: buildNotificationMessageForBooking_(currentBooking, reason),
-    type: "DRIVER_CANCEL_REQUESTED",
+  createRoleNotifications_(["STAFF"], {
+    category: "Cancellation",
+    title: "มีคำขอยกเลิกงานคนขับรอพิจารณา",
+    message: `คนขับ: ${String(currentBooking.assigned_user_name || "").trim() || "-"} | ผู้จอง: ${String(currentBooking.requester_name || "").trim() || "-"} | ปลายทาง: ${String(currentBooking.destination || "").trim() || "-"}`,
+    type: "DRIVER_CANCEL_PENDING",
     booking_id: currentBooking.booking_id || data.booking_id,
     url: "/booking",
     created_by: requestedBy || "",
@@ -3080,16 +3307,40 @@ function reviewDriverCancelRequest(data) {
 
     const currentBooking = rowsToObjects(headers, [updatedValues])[0] || {};
     try {
+      const requesterUserId = resolveRequesterNotificationUserId_(currentBooking);
+      if (requesterUserId) {
+        createNotification({
+          target_user_id: requesterUserId,
+          target_role: "",
+          category: "Cancellation",
+          title: "รายการจองของคุณ คนขับได้ยกเลิกงานแล้ว",
+          message: `ปลายทาง: ${String(currentBooking.destination || "").trim() || "-"}`,
+          type: "BOOKING_DRIVER_CANCELLED",
+          booking_id: currentBooking.booking_id || data.booking_id,
+          url: "/booking",
+          created_by: reviewedBy || "",
+          payload_json: buildNotificationPayloadFromBooking_(currentBooking, {
+            review_reason: reviewReason || "",
+            status: "PENDING",
+          }),
+        });
+      }
+
       if (currentAssignedUserId) {
         createNotification({
           target_user_id: currentAssignedUserId,
           target_role: "",
-          title: "การยกเลิกได้รับอนุมัติ",
-          message: buildNotificationMessageForBooking_(currentBooking, currentRowValues[requestReasonCol] || ""),
+          category: "Cancellation",
+          title: "คำขอได้รับการอนุมัติแล้ว",
+          message: `ผู้จอง: ${String(currentBooking.requester_name || "").trim() || "-"} | ปลายทาง: ${String(currentBooking.destination || "").trim() || "-"}`,
           type: "DRIVER_CANCEL_APPROVED",
           booking_id: currentBooking.booking_id || data.booking_id,
           url: "/driver-jobs",
           created_by: reviewedBy || "",
+          payload_json: buildNotificationPayloadFromBooking_(currentBooking, {
+            review_reason: reviewReason || "",
+            status: "PENDING",
+          }),
         });
       }
     } catch (notificationErr) {
@@ -3514,6 +3765,81 @@ function clearBookingCancellationHistoryMonthly() {
     deleted: deletedCount
   });
 }
+
+function sendBookingReminderNotifications1Hour(data) {
+  const sheet = ensureBookingsSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const bookings = rowsToObjects(headers, table.rows);
+  const now = new Date();
+  const actor = String(data && (data.created_by || data.updated_by || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+  const initialCreatedCount = getCreatedNotifications_().length;
+
+  bookings.forEach((booking) => {
+    const status = String(booking.status || "").trim().toUpperCase();
+    if (status !== "APPROVED") return;
+
+    const bookingId = String(booking.booking_id || "").trim();
+    const destination = String(booking.destination || "").trim();
+    const startDatetime = booking.start_datetime ? new Date(booking.start_datetime) : null;
+    if (!bookingId || !destination || !startDatetime || Number.isNaN(startDatetime.getTime())) {
+      return;
+    }
+
+    const diffMs = startDatetime.getTime() - now.getTime();
+    if (diffMs <= 0 || diffMs > 60 * 60 * 1000) {
+      return;
+    }
+
+    const message = `ปลายทาง: ${destination} | เวลาไป: ${formatThaiNotificationDateTime_(booking.start_datetime || "") || "-"}`;
+    const payload = buildNotificationPayloadFromBooking_(booking, {
+      reminder_key: `${bookingId}|BOOKING_REMINDER_1H`,
+      status,
+    });
+    const requesterUserId = resolveRequesterNotificationUserId_(booking);
+    const assignedUserId = String(booking.assigned_user_id || "").trim();
+
+    if (requesterUserId) {
+      appendNotificationRecord_({
+        target_user_id: requesterUserId,
+        target_role: "",
+        category: "Booking",
+        title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
+        message,
+        type: "BOOKING_REMINDER_1H",
+        booking_id: bookingId,
+        url: "/booking",
+        created_by: actor,
+        payload_json: payload,
+      });
+    }
+
+    if (assignedUserId) {
+      appendNotificationRecord_({
+        target_user_id: assignedUserId,
+        target_role: "",
+        category: "Booking",
+        title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
+        message,
+        type: "BOOKING_REMINDER_1H",
+        booking_id: bookingId,
+        url: "/driver-jobs",
+        created_by: actor,
+        payload_json: payload,
+      });
+    }
+  });
+
+  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+
+  return jsonOutput({
+    success: true,
+    message: "Booking reminder notification run completed",
+    created_notifications: getCreatedNotifications_(),
+    created_count: createdCount,
+  });
+}
+
 function loginUser(data) {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
@@ -4065,6 +4391,34 @@ function createDriverUnavailable(data) {
     })
   );
 
+  try {
+    createRoleNotifications_(["STAFF"], {
+      category: "Driver",
+      title: "คนขับเพิ่มวันไม่รับงาน",
+      message: buildDriverUnavailableNotificationMessage_({
+        driver_name: driverName,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        reason,
+      }, true),
+      type: "DRIVER_UNAVAILABLE_CREATED",
+      booking_id: unavailableId,
+      url: "/driver-unavailable",
+      created_by: createdBy,
+      payload_json: {
+        unavailable_id: unavailableId,
+        driver_user_id: driverUserId,
+        driver_name: driverName,
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        reason,
+        status: "ACTIVE",
+      },
+    });
+  } catch (notificationErr) {
+    console.warn("createDriverUnavailable notification failed", notificationErr);
+  }
+
   return jsonOutput({
     success: true,
     message: "Create driver unavailable success",
@@ -4166,6 +4520,34 @@ function updateDriverUnavailable(data) {
     })
   );
 
+  try {
+    createRoleNotifications_(["STAFF"], {
+      category: "Driver",
+      title: "คนขับแก้ไขวันไม่รับงาน",
+      message: buildDriverUnavailableNotificationMessage_({
+        driver_name: nextDriverName,
+        start_datetime: nextStartDatetime,
+        end_datetime: nextEndDatetime,
+        reason: nextReason,
+      }, true),
+      type: "DRIVER_UNAVAILABLE_UPDATED",
+      booking_id: data.unavailable_id,
+      url: "/driver-unavailable",
+      created_by: updatedBy,
+      payload_json: {
+        unavailable_id: data.unavailable_id,
+        driver_user_id: nextDriverUserId,
+        driver_name: nextDriverName,
+        start_datetime: nextStartDatetime,
+        end_datetime: nextEndDatetime,
+        reason: nextReason,
+        status: nextStatus,
+      },
+    });
+  } catch (notificationErr) {
+    console.warn("updateDriverUnavailable notification failed", notificationErr);
+  }
+
   return jsonOutput({
     success: true,
     message: "Update driver unavailable success",
@@ -4214,6 +4596,33 @@ function cancelDriverUnavailable(data) {
       created_by: cancelledBy,
     })
   );
+
+  try {
+    createRoleNotifications_(["STAFF"], {
+      category: "Driver",
+      title: "คนขับยกเลิกวันไม่รับงาน",
+      message: buildDriverUnavailableNotificationMessage_({
+        driver_name: oldValue.driver_name || "",
+        start_datetime: oldValue.start_datetime || "",
+        end_datetime: oldValue.end_datetime || "",
+      }, false),
+      type: "DRIVER_UNAVAILABLE_CANCELLED",
+      booking_id: data.unavailable_id,
+      url: "/driver-unavailable",
+      created_by: cancelledBy,
+      payload_json: {
+        unavailable_id: data.unavailable_id,
+        driver_user_id: oldValue.driver_user_id || "",
+        driver_name: oldValue.driver_name || "",
+        start_datetime: oldValue.start_datetime || "",
+        end_datetime: oldValue.end_datetime || "",
+        reason: oldValue.reason || "",
+        status: "CANCELLED",
+      },
+    });
+  } catch (notificationErr) {
+    console.warn("cancelDriverUnavailable notification failed", notificationErr);
+  }
 
   return jsonOutput({
     success: true,
@@ -7014,44 +7423,13 @@ function confirmDriverQueueAssignment(data) {
   appendSheetRow(logSheet, logRow);
 
   try {
-    if (assignedDriverUserId) {
-      createNotification({
-        target_user_id: assignedDriverUserId,
-        target_role: "",
-        title: "คุณได้รับมอบหมายงาน",
-        message: buildNotificationMessageForBooking_(booking, "มีการมอบหมายงานใหม่"),
-        type: "BOOKING_ASSIGNED",
-        booking_id: bookingId,
-        url: "/driver-jobs",
-        created_by: createdBy || "",
-        payload_json: buildNotificationPayloadFromBooking_(booking, {
-          booking_id: bookingId,
-          booking_no: booking.booking_no || bookingNo,
-          driver_name: resolvedAssignedDriverName || assignedDriverName,
-          status: "APPROVED",
-        }),
-      });
-    }
-
-    const requesterNotificationUserId = resolveRequesterNotificationUserId_(booking);
-    if (requesterNotificationUserId) {
-      createNotification({
-        target_user_id: requesterNotificationUserId,
-        target_role: "",
-        title: "รายการจองได้รับมอบหมายคนขับแล้ว",
-        message: `${resolvedAssignedDriverName || assignedDriverName || "คนขับ"} ได้รับมอบหมายแล้ว`,
-        type: "BOOKING_ASSIGNED_TO_REQUESTER",
-        booking_id: bookingId,
-        url: "/booking",
-        created_by: createdBy || "",
-        payload_json: buildNotificationPayloadFromBooking_(booking, {
-          booking_id: bookingId,
-          booking_no: booking.booking_no || bookingNo,
-          driver_name: resolvedAssignedDriverName || assignedDriverName,
-          status: "APPROVED",
-        }),
-      });
-    }
+    createBookingAssignmentNotifications_(booking, {
+      assigned_user_id: assignedDriverUserId,
+      assigned_user_name: resolvedAssignedDriverName || assignedDriverName,
+      previous_assigned_user_id: String(booking.assigned_user_id || "").trim(),
+      previous_status: String(booking.status || "").trim(),
+      created_by: createdBy || "",
+    });
   } catch (notificationErr) {
     console.warn("confirmDriverQueueAssignment notification failed", notificationErr);
   }
@@ -7240,12 +7618,32 @@ function unassignBookingDriver(data) {
       createNotification({
         target_user_id: oldDriverUserId,
         target_role: "",
+        category: "Approval",
         title: "มีการดึงงานกลับ",
         message: buildNotificationMessageForBooking_(updatedBooking, reason),
         type: "BOOKING_UNASSIGNED",
         booking_id: bookingId,
         url: "/driver-jobs",
         created_by: updatedBy,
+      });
+    }
+
+    const requesterUserId = resolveRequesterNotificationUserId_(updatedBooking);
+    if (requesterUserId) {
+      createNotification({
+        target_user_id: requesterUserId,
+        target_role: "",
+        category: "Approval",
+        title: "ดึงรายการจองกลับ รออนุมัติใหม่",
+        message: `ปลายทาง: ${String(updatedBooking.destination || "").trim() || "-"}`,
+        type: "BOOKING_UNASSIGNED_TO_REQUESTER",
+        booking_id: bookingId,
+        url: "/booking",
+        created_by: updatedBy,
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          reason,
+          status: "PENDING",
+        }),
       });
     }
   } catch (notificationErr) {

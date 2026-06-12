@@ -370,10 +370,11 @@ export async function listenForegroundMessages(onPayload) {
 
   return onMessage(messaging, (payload) => {
     const title = payload?.notification?.title || "แจ้งเตือน";
-    const body = payload?.notification?.body || "";
+    const body = payload?.notification?.body || payload?.data?.body || "";
     const url = payload?.fcmOptions?.link || payload?.data?.url || "/";
     const payloadData = {
       url,
+      category: payload?.data?.category || "",
       payload,
     };
 

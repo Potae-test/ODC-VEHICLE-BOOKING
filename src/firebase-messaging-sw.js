@@ -52,6 +52,7 @@ function extractPushFields(payload) {
     payload?.data?.url ||
     payload?.url ||
     "/";
+  const category = payload?.data?.category || payload?.category || "";
   const type = payload?.data?.type || payload?.type || "";
   const bookingId = payload?.data?.booking_id || payload?.booking_id || "";
   const notificationId = payload?.data?.notification_id || payload?.notification_id || "";
@@ -61,6 +62,7 @@ function extractPushFields(payload) {
     title,
     body,
     url,
+    category,
     type,
     booking_id: bookingId,
     notification_id: notificationId,
@@ -116,6 +118,7 @@ function showNotificationFromPayload(payload) {
 
   const notificationData = {
     url: fields.url,
+    category: fields.category,
     type: fields.type,
     booking_id: fields.booking_id,
     notification_id: fields.notification_id,

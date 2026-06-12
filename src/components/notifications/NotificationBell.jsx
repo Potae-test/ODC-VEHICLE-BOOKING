@@ -20,6 +20,7 @@ import {
   requestFcmToken,
   requestNotificationPermission,
 } from "../../utils/pushNotifications";
+import { formatThaiNotificationDateTime } from "../../utils/date";
 
 const NOTIFICATION_POLL_INTERVAL_MS = 60000;
 const NOTIFICATIONS_PER_PAGE = 3;
@@ -28,22 +29,27 @@ const PUSH_TOKEN_USER_ID_STORAGE_KEY = "odc_fcm_token_user_id";
 const PUSH_PROVIDER_STORAGE_KEY = "odc_push_provider";
 const PUSH_LAST_SYNC_STORAGE_KEY = "odc_fcm_token_last_sync_at";
 const PUSH_SYNC_THROTTLE_MS = 5 * 60 * 1000;
-function formatNotificationDateTime(value) {
-  try {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
+const NOTIFICATION_CATEGORY_META = {
+  Booking: {
+    label: "Booking",
+    className: "booking",
+  },
+  Driver: {
+    label: "Driver",
+    className: "driver",
+  },
+  Approval: {
+    label: "Approval",
+    className: "approval",
+  },
+  Cancellation: {
+    label: "Cancellation",
+    className: "cancellation",
+  },
+};
 
-    return new Intl.DateTimeFormat("th-TH", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  } catch {
-    return "";
-  }
+function formatNotificationDateTime(value) {
+  return formatThaiNotificationDateTime(value);
 }
 
 function getUnreadBadgeLabel(count) {
@@ -51,38 +57,33 @@ function getUnreadBadgeLabel(count) {
   return String(count);
 }
 
-function parseNotificationPayload(value) {
-  try {
-    if (!value) return null;
-    return typeof value === "string" ? JSON.parse(value) : value;
-  } catch {
-    return null;
-  }
-}
-
-function getDriverStartedPayload(notification) {
-  const payload = parseNotificationPayload(notification?.payload_json);
-  if (!payload || String(notification?.type || "").trim() !== "DRIVER_STARTED_JOB") {
-    return null;
+function getNotificationCategory(notification) {
+  const explicitCategory = String(notification?.category || "").trim();
+  if (NOTIFICATION_CATEGORY_META[explicitCategory]) {
+    return explicitCategory;
   }
 
-  return {
-    driver_name: String(payload.driver_name || "").trim() || "-",
-    destination: String(payload.destination || "").trim() || "-",
-    start_datetime: formatNotificationDateTime(payload.start_datetime) || "-",
-  };
-}
+  const type = String(notification?.type || "").trim().toUpperCase();
+  const title = String(notification?.title || "").trim();
 
-function getRequesterAssignedPayload(notification) {
-  const payload = parseNotificationPayload(notification?.payload_json);
-  if (!payload || String(notification?.type || "").trim() !== "BOOKING_ASSIGNED_TO_REQUESTER") {
-    return null;
+  if (type.includes("CANCEL") || title.includes("ยกเลิก")) {
+    return "Cancellation";
   }
 
-  return {
-    driver_name: String(payload.driver_name || "").trim() || "-",
-    destination: String(payload.destination || "").trim() || "-",
-  };
+  if (
+    type.includes("UNASSIGN") ||
+    type.includes("APPROVAL") ||
+    title.includes("อนุมัติ") ||
+    title.includes("ดึงรายการจองกลับ")
+  ) {
+    return "Approval";
+  }
+
+  if (type.includes("UNAVAILABLE") || type.startsWith("DRIVER_")) {
+    return "Driver";
+  }
+
+  return "Booking";
 }
 
 function getPushStatusLabel(status) {
@@ -715,8 +716,10 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   {pagedNotifications.map((notification) => {
                   const notificationId = String(notification.notification_id || "").trim();
                   const isUnread = !notification.is_read;
-                  const driverStartedPayload = getDriverStartedPayload(notification);
-                  const requesterAssignedPayload = getRequesterAssignedPayload(notification);
+                  const category = getNotificationCategory(notification);
+                  const categoryMeta = NOTIFICATION_CATEGORY_META[category] || NOTIFICATION_CATEGORY_META.Booking;
+                  const driverStartedPayload = null;
+                  const requesterAssignedPayload = null;
 
                   return (
                     <button
@@ -727,7 +730,12 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                       disabled={activeNotificationId === notificationId}
                     >
                       <div className="notification-item-head">
-                        <strong>{notification.title || "-"}</strong>
+                        <div className="notification-item-title-group">
+                          <span className={`notification-category-badge notification-category-${categoryMeta.className}`}>
+                            [{categoryMeta.label}]
+                          </span>
+                          <strong>{notification.title || "-"}</strong>
+                        </div>
                         {isUnread && <span className="notification-item-dot" aria-hidden="true" />}
                       </div>
                       <div className="notification-item-time">{formatNotificationDateTime(notification.created_at)}</div>
