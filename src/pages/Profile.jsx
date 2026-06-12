@@ -88,7 +88,7 @@ export default function Profile({
     }
 
     if (supportsEditableEmail && !profileForm.email) {
-      showError("กรุณากรอกอีเมล");
+      showError("กรุณากรอกอชื่อผู้ใช้งานเพื่อใช้เข้าสู่ระบบ");
       return;
     }
 
