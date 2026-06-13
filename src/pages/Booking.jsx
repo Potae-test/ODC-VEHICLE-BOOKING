@@ -1652,6 +1652,84 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
   );
 });
 
+function BookingMobileSkeleton({ cards = 5 }) {
+  return (
+    <div className="booking-mobile-skeleton-list booking-mobile-only" aria-hidden="true">
+      {Array.from({ length: cards }).map((_, index) => (
+        <div key={index} className="booking-mobile-skeleton-card">
+          <div className="booking-mobile-skeleton-summary">
+            <span
+              className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+              style={{ width: 28, height: 14, borderRadius: 999 }}
+            />
+            <span
+              className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+              style={{ width: "38%", height: 16, borderRadius: 999 }}
+            />
+            <span
+              className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+              style={{ width: "32%", height: 16, borderRadius: 999 }}
+            />
+            <span className="booking-mobile-skeleton-pill skeleton skeleton-pulse" />
+          </div>
+
+          <div className="booking-mobile-card-expanded">
+            <div className="booking-mobile-card-body">
+              <div className="booking-mobile-card-info-row">
+                <span className="booking-mobile-card-info-icon skeleton skeleton-pulse" />
+                <div className="booking-mobile-card-info-copy">
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: 72, height: 12, borderRadius: 999, marginBottom: 6 }}
+                  />
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: "78%", height: 15, borderRadius: 999 }}
+                  />
+                </div>
+              </div>
+
+              <div className="booking-mobile-card-info-row">
+                <span className="booking-mobile-card-info-icon skeleton skeleton-pulse" />
+                <div className="booking-mobile-card-info-copy">
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: 76, height: 12, borderRadius: 999, marginBottom: 6 }}
+                  />
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: "72%", height: 15, borderRadius: 999 }}
+                  />
+                </div>
+              </div>
+
+              <div className="booking-mobile-card-info-row">
+                <span className="booking-mobile-card-info-icon skeleton skeleton-pulse" />
+                <div className="booking-mobile-card-info-copy">
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: 58, height: 12, borderRadius: 999, marginBottom: 6 }}
+                  />
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: "62%", height: 15, borderRadius: 999 }}
+                  />
+                  <span
+                    className="booking-mobile-skeleton-line skeleton skeleton-pulse"
+                    style={{ width: "48%", height: 13, borderRadius: 999, marginTop: 4 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="booking-mobile-skeleton-button skeleton skeleton-pulse" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Booking() {
   const [bookings, setBookings] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -3127,7 +3205,12 @@ export default function Booking() {
             </div>
           </div>
           {visibleLoading ? (
-            <TableSkeleton rows={5} columns={10} />
+            <>
+              <div className="booking-desktop-only hidden md:block">
+                <TableSkeleton rows={5} columns={10} />
+              </div>
+              <BookingMobileSkeleton cards={5} />
+            </>
           ) : (
             <>
 

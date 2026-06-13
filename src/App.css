@@ -4925,6 +4925,49 @@ label {
   box-shadow: 0 4px 12px rgba(15, 47, 92, 0.05);
 }
 
+.booking-mobile-skeleton-list {
+  display: none;
+  margin-top: 24px;
+  gap: 12px;
+}
+
+.booking-mobile-skeleton-card {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #dbe6f3;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  box-shadow: 0 4px 12px rgba(15, 47, 92, 0.05);
+}
+
+.booking-mobile-skeleton-summary {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+}
+
+.booking-mobile-skeleton-line {
+  display: block;
+  min-width: 0;
+}
+
+.booking-mobile-skeleton-pill {
+  display: inline-flex;
+  width: 74px;
+  height: 26px;
+  border-radius: 999px;
+  justify-self: end;
+}
+
+.booking-mobile-skeleton-button {
+  width: 100%;
+  min-height: 38px;
+  border-radius: 14px;
+}
+
 .booking-mobile-card-summary {
   width: 100%;
   min-height: 56px;
@@ -7301,6 +7344,10 @@ label {
 
   .booking-mobile-list {
     gap: 12px;
+  }
+
+  .booking-mobile-skeleton-list {
+    display: grid;
   }
 
   .booking-mobile-card .status {
