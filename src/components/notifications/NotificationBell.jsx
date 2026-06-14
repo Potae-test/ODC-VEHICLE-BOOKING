@@ -746,7 +746,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                     <button
                       type="button"
                       key={notificationId || `${notification.title}-${notification.created_at}`}
-                      className={`notification-item${isUnread ? " is-unread" : ""}`}
+                      className={`notification-item notification-mobile-card${isUnread ? " is-unread" : ""}`}
                       onClick={() => handleItemClick(notification)}
                       disabled={activeNotificationId === notificationId}
                     >

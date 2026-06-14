@@ -483,13 +483,14 @@ button:hover {
   display: block;
   width: 100%;
   height: auto;
-  min-height: 0;
+  min-height: unset;
   text-align: left;
-  padding: 16px 18px;
+  padding: 16px 18px 18px;
   border-radius: 0;
   border-bottom: 1px solid #e7eef7;
   background: transparent;
   color: #10233f;
+  overflow: visible;
 }
 
 .notification-item:last-child,
@@ -577,9 +578,11 @@ button:hover {
   display: block;
   margin-top: 8px;
   font-size: 20px;
-  min-height: 0;
+  min-height: unset;
+  height: auto;
   line-height: 1.35;
   color: #1f395f;
+  overflow: visible;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: normal;
@@ -6048,12 +6051,20 @@ label {
 
   .notification-item,
   .notification-item-skeleton {
-    min-height: 0;
-    padding: 14px 14px 16px;
+    height: auto;
+    min-height: unset;
+    padding: 14px 14px 18px;
     border: 1px solid #dbe6f3;
     border-bottom-width: 1px;
     border-radius: 16px;
     background: #ffffff;
+    overflow: visible;
+  }
+
+  .notification-mobile-card {
+    height: auto;
+    min-height: unset;
+    overflow: visible;
   }
 
   .notification-item:hover {
@@ -6099,7 +6110,11 @@ label {
   .notification-item-message {
     margin-top: 12px;
     font-size: 21px;
+    display: block;
+    height: auto;
+    min-height: unset;
     line-height: 1.35;
+    overflow: visible;
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
