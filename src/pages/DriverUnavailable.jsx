@@ -41,6 +41,13 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function getStatusLabel(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "ACTIVE") return "กำลังทำงาน";
+  if (normalized === "CANCELLED") return "ยกเลิก";
+  return normalized || "-";
+}
+
 function normalizeType(type) {
   const raw = String(type || "").trim();
   if (!raw) return "ลา";
@@ -160,7 +167,7 @@ function DriverUnavailableCompactCard({
             <span className={`status ${typeClassName}`}>{typeLabel}</span>
           </div>
           <div className="driver-unavailable-compact-meta">
-            <span className={`status ${statusClassName}`}>{status}</span>
+            <span className={`status ${statusClassName}`}>{getStatusLabel(record.status)}</span>
             <span title={rangeLabel}>{rangeLabel}</span>
           </div>
         </div>
@@ -178,7 +185,7 @@ function DriverUnavailableCompactCard({
             </div>
             <div>
               <span>สถานะ</span>
-              <b>{status}</b>
+              <b>{getStatusLabel(record.status)}</b>
             </div>
             <div>
               <span>เหตุผล</span>
@@ -377,7 +384,7 @@ export default function DriverUnavailable() {
       เหตุผล: record.reason || "-",
       เวลาเริ่ม: record.start_datetime ? formatThaiDateTime(record.start_datetime) : "-",
       เวลาสิ้นสุด: record.end_datetime ? formatThaiDateTime(record.end_datetime) : "-",
-      สถานะ: normalizeStatus(record.status) || "-",
+      สถานะ: getStatusLabel(record.status),
       ผู้สร้าง: record.created_by || "-",
       สร้างเมื่อ: record.created_at ? formatThaiDateTime(record.created_at) : "-",
       ผู้แก้ไข: record.updated_by || "-",
@@ -475,7 +482,7 @@ export default function DriverUnavailable() {
     let datetimeRoot = null;
 
     const result = await Swal.fire({
-      title: record ? "แก้ไขวันไม่รับงาน" : "เพิ่มวันไม่รับงาน",
+      title: record ? "แก้ไขวันไม่รับงาน" : "เพิ่มข้อมูลการปฏิบัติงาน",
       html: buildFormHtml(record, {
         canSelectDriver: canManageAllDrivers,
         drivers,
@@ -578,10 +585,10 @@ export default function DriverUnavailable() {
       } else {
         const created = await createDriverUnavailable(result.value);
         setItems((current) => [created || result.value, ...current]);
-        await showSuccess("เพิ่มวันไม่รับงานสำเร็จ");
+        await showSuccess("เพิ่มข้อมูลการปฏิบัติงานสำเร็จ");
       }
     } catch (err) {
-      showError(err.message || (record ? "แก้ไขวันไม่รับงานไม่สำเร็จ" : "เพิ่มวันไม่รับงานไม่สำเร็จ"));
+      showError(err.message || (record ? "แก้ไขวันไม่รับงานไม่สำเร็จ" : "เพิ่มข้อมูลการปฏิบัติงานไม่สำเร็จ"));
     }
   }
 
@@ -630,7 +637,7 @@ export default function DriverUnavailable() {
             </button>
             {canCreate && (
               <button type="button" className="success-button" onClick={() => openForm()}>
-                เพิ่มวันไม่รับงาน
+                เพิ่มข้อมูลการปฏิบัติงาน
               </button>
             )}
           </div>
@@ -667,8 +674,8 @@ export default function DriverUnavailable() {
 
                 <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
                   <option value="">ทุกสถานะ</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="CANCELLED">CANCELLED</option>
+                  <option value="ACTIVE">กำลังทำงาน</option>
+                  <option value="CANCELLED">ยกเลิก</option>
                 </select>
               </div>
 
@@ -730,7 +737,7 @@ export default function DriverUnavailable() {
                         <td>{formatThaiDateTime(record.end_datetime)}</td>
                         <td>
                           <span className={`status ${getStatusClassName(record.status)}`}>
-                            {normalizeStatus(record.status)}
+                            {getStatusLabel(record.status)}
                           </span>
                         </td>
                         <td className="action-buttons">
@@ -780,7 +787,7 @@ export default function DriverUnavailable() {
                     className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => openForm()}
                   >
-                    <span>+ เพิ่มวันไม่รับงาน</span>
+                    <span>+ เพิ่มข้อมูลการปฏิบัติงาน</span>
                   </button>
                 )}
               </>
@@ -838,8 +845,8 @@ export default function DriverUnavailable() {
 
                     <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
                       <option value="">ทุกสถานะ</option>
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="CANCELLED">CANCELLED</option>
+                      <option value="ACTIVE">กำลังทำงาน</option>
+                      <option value="CANCELLED">ยกเลิก</option>
                     </select>
 
                     <div className="driver-unavailable-compact-actions">

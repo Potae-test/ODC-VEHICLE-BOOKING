@@ -480,7 +480,9 @@ button:hover {
 
 .notification-item,
 .notification-item-skeleton {
+  display: block;
   width: 100%;
+  height: auto;
   min-height: 0;
   text-align: left;
   padding: 16px 18px;
@@ -509,22 +511,26 @@ button:hover {
 
 .notification-item-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
   gap: 10px;
   font-size: 22px;
 }
 
 .notification-item-title-group {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .notification-item-title-group strong {
+  flex: 1 1 180px;
   min-width: 0;
   line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .notification-category-badge {
@@ -560,18 +566,35 @@ button:hover {
 }
 
 .notification-item-time {
-  margin-top: 4px;
+  display: block;
+  margin-top: 8px;
   font-size: 16px;
+  line-height: 1.3;
   color: #5f7391;
 }
 
 .notification-item-message {
+  display: block;
   margin-top: 8px;
   font-size: 20px;
-  line-height: 1.4;
+  min-height: 0;
+  line-height: 1.35;
   color: #1f395f;
+  overflow-wrap: anywhere;
   word-break: break-word;
-  white-space: pre-line;
+  white-space: normal;
+}
+
+.notification-item-message-stacked {
+  display: block;
+}
+
+.notification-item-message-stacked span {
+  display: inline;
+}
+
+.notification-item-message-stacked span:not(:last-child)::after {
+  content: " | ";
 }
 
 .notification-detail-list {
@@ -594,6 +617,8 @@ button:hover {
 .notification-item-dot {
   width: 10px;
   height: 10px;
+  margin-left: auto;
+  margin-top: 6px;
   border-radius: 50%;
   background: #1455c8;
   flex-shrink: 0;
@@ -670,6 +695,11 @@ button:hover {
   max-width: 100%;
   text-align: center;
   white-space: normal;
+}
+
+.notification-text-button-full,
+.notification-text-button-half {
+  width: 100%;
 }
 
 .notification-text-button.notification-text-button-danger {
@@ -6007,7 +6037,101 @@ label {
 
   .notification-panel-footer {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .notification-list {
+    gap: 10px;
+    padding: 10px 10px 14px;
+  }
+
+  .notification-item,
+  .notification-item-skeleton {
+    min-height: 0;
+    padding: 14px 14px 16px;
+    border: 1px solid #dbe6f3;
+    border-bottom-width: 1px;
+    border-radius: 16px;
+    background: #ffffff;
+  }
+
+  .notification-item:hover {
+    background: #eef5ff;
+  }
+
+  .notification-item.is-unread {
+    background: #eaf3ff;
+  }
+
+  .notification-item-head {
+    gap: 8px;
+  }
+
+  .notification-item-title-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    width: 100%;
+    gap: 6px 8px;
+    align-items: start;
+  }
+
+  .notification-item-title-group strong {
+    flex: none;
+    font-size: 23px;
+    line-height: 1.18;
+  }
+
+  .notification-category-badge {
+    font-size: 12px;
+  }
+
+  .notification-item-dot {
+    margin-top: 8px;
+  }
+
+  .notification-item-time {
+    margin-top: 10px;
+    font-size: 19px;
+    line-height: 1.25;
+  }
+
+  .notification-item-message {
+    margin-top: 12px;
+    font-size: 21px;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .notification-item-message-stacked {
+    display: grid;
+    gap: 6px;
+  }
+
+  .notification-item-message-stacked span {
+    display: block;
+  }
+
+  .notification-item-message-stacked span:not(:last-child)::after {
+    content: "";
+  }
+
+  .notification-panel-footer .notification-text-button-full {
+    grid-column: 1 / -1;
+  }
+
+  .notification-panel-footer .notification-text-button-half {
+    width: 100%;
+  }
+
+  .notification-panel-footer .notification-text-button:nth-of-type(3) {
+    grid-column: 1;
+  }
+
+  .notification-panel-footer .notification-text-button:nth-of-type(4) {
+    grid-column: 2;
   }
 
   .install-app-button {

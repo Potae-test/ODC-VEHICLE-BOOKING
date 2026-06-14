@@ -98,6 +98,22 @@ function getStatusMeta(status) {
   };
 }
 
+function isPendingDriverCancel(booking) {
+  return normalizeStatus(booking?.driver_cancel_request_status) === "PENDING";
+}
+
+function getBookingDisplayStatusMeta(booking) {
+  if (isPendingDriverCancel(booking)) {
+    return {
+      label: "รออนุมัติยกเลิก",
+      className: "amber",
+      help: "คนขับส่งคำขอยกเลิกงานและรอเจ้าหน้าที่พิจารณา",
+    };
+  }
+
+  return getStatusMeta(booking?.status);
+}
+
 function sortLatestFirst(items) {
   return [...items].sort((a, b) => {
     const dateA = new Date(
@@ -369,7 +385,7 @@ function UndoIcon({ className }) {
 function getBookingDetailFields({ booking, vehicleMap }) {
   const statusLabel = isCompletedBooking(booking)
     ? STATUS_META.COMPLETED.label
-    : getStatusMeta(booking.status).label;
+    : getBookingDisplayStatusMeta(booking).label;
 
   return [
     {
@@ -1120,7 +1136,7 @@ function getBookingActionState({
   onRejectDriverCancel,
 }) {
   const status = normalizeStatus(booking.status);
-  const statusMeta = getStatusMeta(status);
+  const statusMeta = getBookingDisplayStatusMeta(booking);
   const driverCancelRequestStatus = getDriverCancelRequestStatus(booking);
   const hasPendingDriverCancelRequest = driverCancelRequestStatus === "PENDING";
   const hasRejectedDriverCancelRequest = driverCancelRequestStatus === "REJECTED";
@@ -1461,11 +1477,6 @@ const BookingTableRow = memo(function BookingTableRow({
         <span className={`status ${statusMeta.className}`} title={statusMeta.help}>
           {statusMeta.label}
         </span>
-        {hasPendingDriverCancelRequest && (
-          <div style={{ marginTop: 6 }}>
-            <span className="status amber">รออนุมัติยกเลิก</span>
-          </div>
-        )}
         {hasRejectedDriverCancelRequest && (
           <div style={{ marginTop: 6 }}>
             <span className="status red">ไม่อนุมัติการยกเลิก</span>
@@ -1627,7 +1638,6 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
 
           {(hasPendingDriverCancelRequest || hasRejectedDriverCancelRequest) && (
             <div className="booking-mobile-card-meta">
-              {hasPendingDriverCancelRequest && <span className="status amber">รออนุมัติยกเลิก</span>}
               {hasRejectedDriverCancelRequest && <span className="status red">ไม่อนุมัติการยกเลิก</span>}
             </div>
           )}
@@ -2038,7 +2048,7 @@ export default function Booking() {
 
   const handleExportBookingExcel = useCallback(() => {
     const rows = filteredBookings.map((booking, index) => {
-      const statusMeta = getStatusMeta(booking.status);
+      const statusMeta = getBookingDisplayStatusMeta(booking);
       const baseRow = {
         ลำดับ: index + 1,
         ผู้จอง: booking.requester_name || "-",
@@ -2811,31 +2821,86 @@ export default function Booking() {
 
     const requestReason = String(booking.driver_cancel_request_reason || "").trim();
     const requestLabel = String(booking.booking_no || booking.booking_id || "-").trim();
+    const driverLabel = getBookingDriverLabel(booking);
+    const rejectModalHtml = `
+      <div class="swal-form" style="text-align:left;">
+        <div style="margin-bottom:12px;">
+          <div style="font-size:19px; font-weight:700; color:#0f172a;">ตรวจสอบเหตุผลก่อนยืนยัน</div>
+        </div>
+        <div style="display:grid; gap:8px; margin-bottom:14px; padding:12px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; line-height:1.6;">
+          <div><b>ผู้จอง:</b> ${escapeHtml(booking.requester_name || "-")}</div>
+          <div><b>คนขับ:</b> ${escapeHtml(driverLabel || "-")}</div>
+          <div><b>ปลายทาง:</b> ${escapeHtml(booking.destination || "-")}</div>
+          <div><b>วันเวลาไป:</b> ${escapeHtml(formatBookingDateTimeDisplay(booking.start_datetime))}</div>
+          <div><b>เหตุผลจากคนขับ:</b> "${escapeHtml(requestReason || "-")}"</div>
+        </div>
+        <label>เหตุผลที่ไม่อนุมัติ</label>
+        <textarea id="driver_cancel_review_reason" class="swal2-textarea" rows="4" placeholder="ระบุเหตุผลให้ชัดเจน" style="min-height:104px; margin-top:8px;"></textarea>
+      </div>
+    `;
 
     const result = await Swal.fire({
-      title: decision === "APPROVE" ? "อนุมัติยกเลิกงานคนขับ" : "ไม่อนุมัติการยกเลิก",
-      html: `
-        <div class="swal-form">
-          <div style="text-align:left; line-height:1.7">
-            <div><b>รายการ:</b> ${escapeHtml(requestLabel)}</div>
-            <div><b>เหตุผลจากคนขับ:</b> ${escapeHtml(requestReason || "-")}</div>
-          </div>
-          ${
-            decision === "REJECT"
-              ? `
-            <label>เหตุผลที่ไม่อนุมัติ</label>
-            <textarea id="driver_cancel_review_reason" class="swal2-textarea" rows="5" placeholder="ระบุเหตุผลให้ชัดเจน"></textarea>
-          `
-              : ""
-          }
-        </div>
-      `,
-      width: 760,
+      title: decision === "APPROVE" ? "อนุมัติยกเลิกงานคนขับ" : "ไม่อนุมัติการยกเลิกงาน",
+      html: decision === "REJECT"
+        ? rejectModalHtml
+        : `
+            <div class="swal-form">
+              <div style="text-align:left; line-height:1.7">
+                <div><b>รายการ:</b> ${escapeHtml(requestLabel)}</div>
+                <div><b>เหตุผลจากคนขับ:</b> ${escapeHtml(requestReason || "-")}</div>
+              </div>
+            </div>
+          `,
+      width: decision === "REJECT" ? "min(96vw, 640px)" : 760,
       showCancelButton: true,
-      confirmButtonText: decision === "APPROVE" ? "อนุมัติ" : "ไม่อนุมัติ",
+      confirmButtonText: decision === "APPROVE" ? "อนุมัติ" : "ยืนยันไม่อนุมัติ",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: decision === "APPROVE" ? "#1455c8" : "#dc2626",
-      cancelButtonColor: "#64748b",
+      cancelButtonColor: "#ffffff",
+      customClass: decision === "REJECT" ? {
+        popup: "booking-driver-cancel-reject-modal",
+        htmlContainer: "booking-driver-cancel-reject-html",
+        actions: "booking-driver-cancel-reject-actions",
+        confirmButton: "booking-driver-cancel-reject-confirm",
+        cancelButton: "booking-driver-cancel-reject-cancel",
+      } : undefined,
+      didOpen: () => {
+        if (decision !== "REJECT") return;
+
+        const popup = Swal.getPopup();
+        const confirmButton = Swal.getConfirmButton();
+        const cancelButton = Swal.getCancelButton();
+        const actions = Swal.getActions();
+        const textarea = document.getElementById("driver_cancel_review_reason");
+
+        if (popup) {
+          popup.style.padding = "1rem";
+        }
+        if (actions) {
+          actions.style.marginTop = "0.5rem";
+          actions.style.gap = "0.5rem";
+          actions.style.flexWrap = "nowrap";
+        }
+        if (textarea) {
+          textarea.style.margin = "8px 0 0";
+        }
+        if (confirmButton) {
+          confirmButton.style.minHeight = "44px";
+          confirmButton.style.padding = "0.7rem 1rem";
+          confirmButton.style.fontWeight = "700";
+          confirmButton.style.whiteSpace = "nowrap";
+        }
+        if (cancelButton) {
+          cancelButton.style.minHeight = "44px";
+          cancelButton.style.padding = "0.7rem 1rem";
+          cancelButton.style.fontWeight = "700";
+          cancelButton.style.whiteSpace = "nowrap";
+          cancelButton.style.color = "#475569";
+          cancelButton.style.border = "1px solid #cbd5e1";
+          cancelButton.style.background = "#ffffff";
+          cancelButton.style.boxShadow = "none";
+        }
+      },
       preConfirm: () => {
         if (decision !== "REJECT") return true;
         const reviewReason = document.getElementById("driver_cancel_review_reason").value.trim();

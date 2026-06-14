@@ -93,6 +93,26 @@ function getPushStatusLabel(status) {
   return "ยังไม่ได้เปิด";
 }
 
+function parseDriverUnavailableMessage(notification) {
+  const category = getNotificationCategory(notification);
+  const message = String(notification?.message || "").trim();
+  if (category !== "Driver" || !message.includes("|")) {
+    return null;
+  }
+
+  const parts = message.split("|").map((part) => part.trim());
+  if (parts.length !== 4 || parts.some((part) => !part)) {
+    return null;
+  }
+
+  return {
+    driverName: parts[0],
+    startDateTime: parts[1],
+    endDateTime: parts[2],
+    unavailableType: parts[3],
+  };
+}
+
 function readLocalStorageValue(key) {
   try {
     return localStorage.getItem(key);
@@ -720,6 +740,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   const categoryMeta = NOTIFICATION_CATEGORY_META[category] || NOTIFICATION_CATEGORY_META.Booking;
                   const driverStartedPayload = null;
                   const requesterAssignedPayload = null;
+                  const driverUnavailableMessage = parseDriverUnavailableMessage(notification);
 
                   return (
                     <button
@@ -735,12 +756,21 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                             [{categoryMeta.label}]
                           </span>
                           <strong>{notification.title || "-"}</strong>
+                          {isUnread && <span className="notification-item-dot" aria-hidden="true" />}
                         </div>
-                        {isUnread && <span className="notification-item-dot" aria-hidden="true" />}
                       </div>
                       <div className="notification-item-time">{formatNotificationDateTime(notification.created_at)}</div>
-                      {!driverStartedPayload && !requesterAssignedPayload && (
+                      {!driverStartedPayload && !requesterAssignedPayload && !driverUnavailableMessage && (
                         <div className="notification-item-message">{notification.message || "-"}</div>
+                      )}
+                      {driverUnavailableMessage && (
+                        <div className="notification-item-message notification-item-message-stacked">
+                          <span>{driverUnavailableMessage.driverName}</span>
+                          <span>
+                            {driverUnavailableMessage.startDateTime}{" -> "}{driverUnavailableMessage.endDateTime}
+                          </span>
+                          <span>{driverUnavailableMessage.unavailableType}</span>
+                        </div>
                       )}
                       {driverStartedPayload && (
                         <div className="notification-detail-list">
@@ -804,12 +834,12 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           </div>
 
           <div className="notification-panel-footer">
-            <button type="button" className="notification-text-button" onClick={handleMarkAll} disabled={!unreadCount || markingAll}>
+            <button type="button" className="notification-text-button notification-text-button-full" onClick={handleMarkAll} disabled={!unreadCount || markingAll}>
               อ่านทั้งหมด
             </button>
             <button
               type="button"
-              className="notification-text-button"
+              className="notification-text-button notification-text-button-full"
               onClick={handleEnablePush}
               disabled={!userId || pushStatus === "enabled" || pushStatus === "unsupported" || pushStatus === "blocked"}
             >
@@ -817,7 +847,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
             </button>
             <button
               type="button"
-              className="notification-text-button"
+              className="notification-text-button notification-text-button-half"
               onClick={handleDebugPush}
               disabled={debugPushLoading}
             >
@@ -825,7 +855,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
             </button>
             <button
               type="button"
-              className="notification-text-button notification-text-button-danger"
+              className="notification-text-button notification-text-button-danger notification-text-button-half"
               onClick={handleRecoverPush}
               disabled={!userId}
             >
@@ -833,7 +863,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
             </button>
             <button
               type="button"
-              className="notification-text-button"
+              className="notification-text-button notification-text-button-full"
               onClick={() => setIsExpanded((currentValue) => !currentValue)}
               disabled={items.length === 0}
             >

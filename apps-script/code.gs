@@ -696,20 +696,13 @@ function buildDriverUnavailableNotificationMessage_(payload, includeReason) {
   const driverName = String(payload && payload.driver_name || "").trim();
   const startDatetime = formatThaiNotificationDateTime_(payload && payload.start_datetime || "");
   const endDatetime = formatThaiNotificationDateTime_(payload && payload.end_datetime || "");
-  const reason = String(payload && payload.reason || "").trim();
+  const unavailableType = String(payload && payload.type || "").trim();
   const parts = [];
 
-  if (driverName) {
-    parts.push(`คนขับ: ${driverName}`);
-  }
-
-  if (startDatetime || endDatetime) {
-    parts.push(`${startDatetime || "-"} - ${endDatetime || "-"}`);
-  }
-
-  if (includeReason) {
-    parts.push(`เหตุผล: ${reason || "-"}`);
-  }
+  if (driverName) parts.push(driverName);
+  if (startDatetime) parts.push(startDatetime);
+  if (endDatetime) parts.push(endDatetime);
+  if (unavailableType) parts.push(unavailableType);
 
   return parts.join(" | ");
 }
@@ -4401,13 +4394,13 @@ function createDriverUnavailable(data) {
   try {
     createRoleNotifications_(["STAFF"], {
       category: "Driver",
-      title: "คนขับเพิ่มวันไม่รับงาน",
+      title: "คนขับแจ้งวันไม่ปฏิบัติงาน",
       message: buildDriverUnavailableNotificationMessage_({
         driver_name: driverName,
         start_datetime: startDatetime,
         end_datetime: endDatetime,
-        reason,
-      }, true),
+        type,
+      }, false),
       type: "DRIVER_UNAVAILABLE_CREATED",
       booking_id: unavailableId,
       url: "/driver-unavailable",
@@ -4418,6 +4411,7 @@ function createDriverUnavailable(data) {
         driver_name: driverName,
         start_datetime: startDatetime,
         end_datetime: endDatetime,
+        type,
         reason,
         status: "ACTIVE",
       },
@@ -4530,13 +4524,13 @@ function updateDriverUnavailable(data) {
   try {
     createRoleNotifications_(["STAFF"], {
       category: "Driver",
-      title: "คนขับแก้ไขวันไม่รับงาน",
+      title: "คนขับแก้ไขวันไม่ปฏิบัติงาน",
       message: buildDriverUnavailableNotificationMessage_({
         driver_name: nextDriverName,
         start_datetime: nextStartDatetime,
         end_datetime: nextEndDatetime,
-        reason: nextReason,
-      }, true),
+        type: nextType,
+      }, false),
       type: "DRIVER_UNAVAILABLE_UPDATED",
       booking_id: data.unavailable_id,
       url: "/driver-unavailable",
@@ -4547,6 +4541,7 @@ function updateDriverUnavailable(data) {
         driver_name: nextDriverName,
         start_datetime: nextStartDatetime,
         end_datetime: nextEndDatetime,
+        type: nextType,
         reason: nextReason,
         status: nextStatus,
       },
@@ -4607,11 +4602,12 @@ function cancelDriverUnavailable(data) {
   try {
     createRoleNotifications_(["STAFF"], {
       category: "Driver",
-      title: "คนขับยกเลิกวันไม่รับงาน",
+      title: "คนขับยกเลิกวันไม่ปฏิบัติงาน",
       message: buildDriverUnavailableNotificationMessage_({
         driver_name: oldValue.driver_name || "",
         start_datetime: oldValue.start_datetime || "",
         end_datetime: oldValue.end_datetime || "",
+        type: oldValue.type || "",
       }, false),
       type: "DRIVER_UNAVAILABLE_CANCELLED",
       booking_id: data.unavailable_id,
@@ -4623,6 +4619,7 @@ function cancelDriverUnavailable(data) {
         driver_name: oldValue.driver_name || "",
         start_datetime: oldValue.start_datetime || "",
         end_datetime: oldValue.end_datetime || "",
+        type: oldValue.type || "",
         reason: oldValue.reason || "",
         status: "CANCELLED",
       },
