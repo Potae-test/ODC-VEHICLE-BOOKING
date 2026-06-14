@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { resetUserPassword, updateUser } from "../api";
 import { showError, showSuccess } from "../utils/alert";
+import { persistStoredSessionUser } from "../utils/sessionTimeout";
 
 function readStoredUser() {
   try {
@@ -110,7 +111,7 @@ export default function Profile({
         ...(updatedUser || {}),
       });
 
-      localStorage.setItem("odc_user", JSON.stringify(nextStoredUser));
+      persistStoredSessionUser(nextStoredUser);
       setProfileForm(getProfileFormState(nextStoredUser));
       onUserUpdate?.(nextStoredUser);
       await showSuccess("บันทึกข้อมูลโปรไฟล์สำเร็จ");

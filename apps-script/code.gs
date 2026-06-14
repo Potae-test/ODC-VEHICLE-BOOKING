@@ -679,6 +679,19 @@ function buildDestinationStartMessage_(booking, fallbackMessage) {
   return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
 }
 
+function buildDriverDestinationStartMessage_(booking, driverName, fallbackMessage) {
+  const resolvedDriverName = String(driverName || booking && (booking.assigned_user_name || booking.driver_name) || "").trim();
+  const destination = String(booking && booking.destination || "").trim();
+  const startDatetime = formatThaiNotificationDateTime_(booking && booking.start_datetime || "");
+  const parts = [];
+
+  if (resolvedDriverName) parts.push(resolvedDriverName);
+  if (destination) parts.push(destination);
+  if (startDatetime) parts.push(startDatetime);
+
+  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+}
+
 function buildDriverUnavailableNotificationMessage_(payload, includeReason) {
   const driverName = String(payload && payload.driver_name || "").trim();
   const startDatetime = formatThaiNotificationDateTime_(payload && payload.start_datetime || "");
@@ -854,16 +867,7 @@ function appendNotificationRecord_(data) {
 }
 
 function buildNotificationMessageForBooking_(booking, fallbackMessage) {
-  const bookingNo = String(booking && booking.booking_no || "").trim();
-  const requesterName = String(booking && booking.requester_name || "").trim();
-  const destination = String(booking && booking.destination || "").trim();
-  const parts = [];
-
-  if (bookingNo) parts.push(bookingNo);
-  if (requesterName) parts.push(requesterName);
-  if (destination) parts.push(destination);
-
-  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+  return buildRequesterDestinationStartMessage_(booking, fallbackMessage);
 }
 
 function createRoleNotifications_(roles, payload) {
@@ -960,7 +964,7 @@ function createBookingAssignmentNotifications_(booking, options) {
       target_role: "",
       category: "Booking",
       title: "รายการจองเปลี่ยนคนขับใหม่",
-      message: `คนขับ: ${assignedUserName || "-"}\nปลายทาง: ${String(sourceBooking.destination || "").trim() || "-"}`,
+      message: buildRequesterDestinationStartMessage_(sourceBooking, "รายการจองมีการเปลี่ยนแปลง"),
       type: "BOOKING_DRIVER_CHANGED",
       booking_id: sourceBooking.booking_id || "",
       url: "/booking",
@@ -975,7 +979,7 @@ function createBookingAssignmentNotifications_(booking, options) {
     target_role: "",
     category: "Booking",
     title: "รายการจองได้รับมอบหมายคนขับแล้ว",
-    message: `${assignedUserName || "คนขับ"} ได้รับมอบหมายแล้ว`,
+    message: buildRequesterDestinationStartMessage_(sourceBooking, "รายการจองได้รับมอบหมายคนขับแล้ว"),
     type: "BOOKING_ASSIGNED_TO_REQUESTER",
     booking_id: sourceBooking.booking_id || "",
     url: "/booking",
@@ -2715,13 +2719,16 @@ function startTrip(data) {
   ).trim();
   try {
     if (requesterUserId) {
-      const startDatetimeLabel = String(bookingForNotification.start_datetime || "").trim();
-      const destinationLabel = String(bookingForNotification.destination || "").trim();
       createNotification({
         target_user_id: requesterUserId,
         target_role: "",
-        title: "คนขับรับงานแล้ว",
-        message: `คนขับ ${driverName || "-"} รับงานของคุณแล้ว ปลายทาง ${destinationLabel || "-"} เวลาไป ${startDatetimeLabel || "-"}`,
+        category: "Driver",
+        title: "คนขับรับงานของคุณแล้ว",
+        message: buildDriverDestinationStartMessage_(
+          bookingForNotification,
+          driverName,
+          "คนขับรับงานของคุณแล้ว"
+        ),
         type: "DRIVER_STARTED_JOB",
         booking_id: bookingForNotification.booking_id || data.booking_id || "",
         url: "/booking",
@@ -6598,10 +6605,7 @@ function confirmDriverQueueAssignment(data) {
         target_user_id: assignedDriverUserId,
         target_role: "",
         title: "คุณได้รับมอบหมายงาน",
-        message: buildNotificationMessageForBooking_({
-          booking_id: bookingId,
-          booking_no: bookingNo,
-        }, "มีการมอบหมายงานใหม่"),
+        message: buildRequesterDestinationStartMessage_(booking, "มีการมอบหมายงานใหม่"),
         type: "BOOKING_ASSIGNED",
         booking_id: bookingId,
         url: "/driver-jobs",

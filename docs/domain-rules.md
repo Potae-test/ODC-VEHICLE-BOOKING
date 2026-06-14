@@ -27,7 +27,9 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 
 ## Availability Rules
 - Overlap rule: `booking.start < unavailable.end && booking.end > unavailable.start`.
-- Preserve Thai unavailable types exactly as stored by the system. Do not normalize or rewrite Thai labels unless a deliberate migration is included.
+- `DriverUnavailable` supports three canonical types only: `ลา`, `หยุด`, and `OUT_PROVINCE`.
+- UI labels must display these canonical types as `ลา / หยุด`, `ติดภารกิจ (ชั่วคราว)`, and `ปฏิบัติงานต่างจังหวัด`.
+- Keep legacy unavailable-type compatibility when reading older rows: `holiday` -> `ลา`, `unable to complete a task.` -> `หยุด`, and Thai display labels should still resolve to the matching canonical type.
 
 ## Google Sheets Rules
 - Important sheets: `Users`, `Bookings`, `Vehicles`, `DriverUnavailable`, `DriverUnavailableLogs`, `DriverQueue`, `DriverQueueLogs`, `DriverQueueState`, `DriverJobLogs`, `BookingCancellationHistory`.
@@ -52,6 +54,12 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - `USER` may view all bookings and calendar entries, but may edit or cancel only their own booking.
 - `DRIVER` can access only their own records.
 - `ADMIN` and `STAFF` have full access.
+
+## Session Rules
+- Frontend login persistence uses both `odc_user` and `odc_session_expires_at`.
+- Default session lifetime is 30 minutes unless a frontend config explicitly overrides it.
+- App startup must reject persisted login when the expiry is missing or already expired, and logout/timeout cleanup must remove both keys together.
+- User activity may extend the current session expiry, but must not change booking, permission, or page business rules.
 
 ## UI Rules
 - Use a clean government-style layout with large readable fonts.

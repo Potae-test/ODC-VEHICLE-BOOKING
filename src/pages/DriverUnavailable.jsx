@@ -46,7 +46,11 @@ function normalizeType(type) {
   if (!raw) return "ลา";
   if (raw.toLowerCase() === "holiday") return "ลา";
   if (raw.toLowerCase() === "unable to complete a task.") return "หยุด";
-  if (raw.toUpperCase() === "OTHER") return "OTHER";
+  if (raw === "ลา / หยุด") return "ลา";
+  if (raw === "ติดภารกิจ (ชั่วคราว)") return "หยุด";
+  if (raw.toUpperCase() === "OUT_PROVINCE" || raw === "ปฏิบัติงานต่างจังหวัด" || raw.toUpperCase() === "OTHER") {
+    return "OUT_PROVINCE";
+  }
   return raw;
 }
 
@@ -54,14 +58,16 @@ function getTypeLabel(type) {
   const normalized = normalizeType(type);
   if (normalized === "ลา") return "ลา / หยุด";
   if (normalized === "หยุด") return "ติดภารกิจ (ชั่วคราว)";
-  if (normalized === "OTHER") return "อื่นๆ";
+  if (normalized === "OUT_PROVINCE") return "ปฏิบัติงานต่างจังหวัด";
+  return normalized || "-";
 }
 
 function getTypeClassName(type) {
   const normalized = normalizeType(type);
   if (normalized === "ลา") return "amber";
   if (normalized === "หยุด") return "green";
-  return "purple";
+  if (normalized === "OUT_PROVINCE") return "blue";
+  return "gray";
 }
 
 function getStatusClassName(status) {
@@ -268,7 +274,7 @@ function buildFormHtml(record, options = {}) {
       <select id="unavailable_type" class="swal2-select driver-unavailable-select">
         <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา / หยุด</option>
         <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>ติดภารกิจ (ชั่วคราว)</option>
-        <option value="OTHER" ${type === "OTHER" ? "selected" : ""}>อื่นๆ</option>
+        <option value="OUT_PROVINCE" ${type === "OUT_PROVINCE" ? "selected" : ""}>ปฏิบัติงานต่างจังหวัด</option>
       </select>
 
       <label>เหตุผล</label>
@@ -654,9 +660,9 @@ export default function DriverUnavailable() {
 
                 <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
                   <option value="">ทุกประเภท</option>
-                  <option value="ลา">ลา</option>
-                  <option value="หยุด">หยุด</option>
-                  <option value="OTHER">อื่นๆ</option>
+                  <option value="ลา">ลา / หยุด</option>
+                  <option value="หยุด">ติดภารกิจ (ชั่วคราว)</option>
+                  <option value="OUT_PROVINCE">ปฏิบัติงานต่างจังหวัด</option>
                 </select>
 
                 <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>
@@ -825,9 +831,9 @@ export default function DriverUnavailable() {
 
                     <select value={filters.type} onChange={(e) => setFilter("type", e.target.value)}>
                       <option value="">ทุกประเภท</option>
-                      <option value="ลา">ลา</option>
-                      <option value="หยุด">หยุด</option>
-                      <option value="OTHER">อื่นๆ</option>
+                      <option value="ลา">ลา / หยุด</option>
+                      <option value="หยุด">ติดภารกิจ (ชั่วคราว)</option>
+                      <option value="OUT_PROVINCE">ปฏิบัติงานต่างจังหวัด</option>
                     </select>
 
                     <select value={filters.status} onChange={(e) => setFilter("status", e.target.value)}>

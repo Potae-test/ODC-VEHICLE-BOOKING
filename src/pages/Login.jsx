@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { login } from "../api";
 import LOGO_ODC from "../assets/LOGO_ODC.png";
+import { persistStoredSessionUser } from "../utils/sessionTimeout";
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState("");
@@ -19,7 +20,7 @@ export default function Login({ onLogin }) {
       setLoading(true);
 
       const user = await login(email, password);
-      localStorage.setItem("odc_user", JSON.stringify(user));
+      persistStoredSessionUser(user);
       onLogin(user);
     } catch (err) {
       alert(err.message || "เข้าสู่ระบบไม่สำเร็จ");

@@ -9,7 +9,7 @@ import {
 import NotificationBell from "./components/notifications/NotificationBell";
 import PageSkeleton from "./components/skeletons/PageSkeleton";
 import { FEATURES } from "./config/features";
-import { startSessionTimeout } from "./utils/sessionTimeout";
+import { clearStoredSession, readStoredSessionUser, startSessionTimeout } from "./utils/sessionTimeout";
 import "./App.css";
 import LOGO_ODC from "./assets/LOGO_ODC.png";
 
@@ -280,10 +280,9 @@ export default function App() {
   const profileMenuRef = useRef(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem("odc_user");
+    const savedUser = readStoredSessionUser();
 
-    if (saved) {
-      const savedUser = JSON.parse(saved);
+    if (savedUser) {
       setUser(savedUser);
       const pathPage = getPageFromPath(window.location.pathname);
       const defaultPage = getDefaultPageByRole(savedUser.role);
@@ -300,7 +299,11 @@ export default function App() {
 
       setPage(finalPage);
       window.history.replaceState({}, "", getPathByPage(finalPage));
+      return;
     }
+
+    clearStoredSession();
+    setUser(null);
   }, [permissionConfig]);
 
   useEffect(() => {
@@ -463,7 +466,7 @@ export default function App() {
   }
 
   function logout() {
-    localStorage.removeItem("odc_user");
+    clearStoredSession();
     setUser(null);
     setPage(FEATURES.vehicleModule ? "cars" : "booking");
     setIsMobileNavOpen(false);

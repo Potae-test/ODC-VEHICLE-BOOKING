@@ -120,7 +120,21 @@ function normalizeStatus(status) {
 function normalizeUnavailableType(type) {
   const raw = String(type || "").trim();
   if (!raw) return "ลา / หยุด";
-  if (raw.toUpperCase() === "OTHER") return "OTHER";
+  if (raw.toLowerCase() === "holiday" || raw === "ลา" || raw === "ลา / หยุด") return "ลา / หยุด";
+  if (
+    raw.toLowerCase() === "unable to complete a task." ||
+    raw === "หยุด" ||
+    raw === "ติดภารกิจ (ชั่วคราว)"
+  ) {
+    return "ติดภารกิจ (ชั่วคราว)";
+  }
+  if (
+    raw.toUpperCase() === "OUT_PROVINCE" ||
+    raw === "ปฏิบัติงานต่างจังหวัด" ||
+    raw.toUpperCase() === "OTHER"
+  ) {
+    return "ปฏิบัติงานต่างจังหวัด";
+  }
   return raw;
 }
 
@@ -168,33 +182,12 @@ function getBookingCalendarStatusMeta(status) {
 
 function getUnavailableCalendarStatusMeta(type) {
   const normalized = normalizeUnavailableType(type);
-
-  if (normalized === "ลา / หยุด") {
-    return {
-      label: "ลา / หยุด",
-      className: "red",
-      backgroundColor: "#fee2e2",
-      borderColor: "#fca5a5",
-      color: "#991b1b",
-    };
-  }
-
-  if (normalized === "ติดภารกิจ (ชั่วคราว)") {
-    return {
-      label: "ติดภารกิจ (ชั่วคราว)",
-      className: "amber",
-      backgroundColor: "#fef3c7",
-      borderColor: "#fcd34d",
-      color: "#92400e",
-    };
-  }
-
   return {
-    label: "อื่นๆ",
-    className: "purple",
-    backgroundColor: "#ede9fe",
-    borderColor: "#c4b5fd",
-    color: "#6d28d9",
+    label: normalized || "ลา / หยุด",
+    className: "red",
+    backgroundColor: "#fee2e2",
+    borderColor: "#fca5a5",
+    color: "#991b1b",
   };
 }
 
@@ -456,10 +449,7 @@ function getMobileEventShortLabel(event) {
   const kind = String(resource.kind || "").trim().toLowerCase();
 
   if (kind === "unavailable") {
-    const type = normalizeUnavailableType(resource.type);
-    if (type === "ลา / หยุด") return "ลา / หยุด";
-    if (type === "ติดภารกิจ (ชั่วคราว)") return "ติดภารกิจ";
-    return type || "ไม่รับงาน";
+    return normalizeUnavailableType(resource.type) || "ไม่รับงาน";
   }
 
   const destination = String(resource.destination || "").trim();
@@ -472,7 +462,7 @@ function getMobileEventShortLabel(event) {
 function getMobileEventStatusClassName(event) {
   const resource = event?.resource || {};
   if (String(resource.kind || "").trim().toLowerCase() === "unavailable") {
-    return getUnavailableCalendarStatusMeta(resource.type).className || "red";
+    return "red";
   }
   return getBookingCalendarStatusMeta(resource.status).className || "blue";
 }
@@ -984,7 +974,7 @@ export default function CalendarPage() {
     () =>
       driverUnavailableRecords.map((record) => ({
         id: record.unavailable_id,
-        title: `${record.type || "ลา / หยุด"}: ${record.driver_name || "-"}`,
+        title: `${normalizeUnavailableType(record.type)}: ${record.driver_name || "-"}`,
         start: parseDate(record.start_datetime),
         end: parseDate(record.end_datetime),
         allDay: true,
@@ -1079,10 +1069,22 @@ export default function CalendarPage() {
           kind: resource.kind || "booking",
           status: resource.status || "",
         },
-        classNames: [
+        backgroundColor:
           resource.kind === "unavailable"
-            ? "fc-unavailable-event"
-            : `fc-booking-${String(resource.status || "").toLowerCase()}`,
+            ? "#fee2e2"
+            : undefined,
+        borderColor:
+          resource.kind === "unavailable"
+            ? "#fca5a5"
+            : undefined,
+        textColor:
+          resource.kind === "unavailable"
+            ? "#991b1b"
+            : undefined,
+        classNames: [
+          ...(resource.kind === "unavailable"
+            ? ["fc-unavailable-event", "red"]
+            : [`fc-booking-${String(resource.status || "").toLowerCase()}`]),
         ],
       };
     });
@@ -1353,7 +1355,7 @@ export default function CalendarPage() {
       let compactLabel = arg.event.title || "";
 
       if (kind === "unavailable") {
-        compactLabel = normalizeUnavailableType(resource.type) === "ลา / หยุด" ? "ลา" : "ติดภารกิจ";
+        compactLabel = normalizeUnavailableType(resource.type) || arg.event.title || "";
       } else {
         const statusMeta = getBookingCalendarStatusMeta(resource.status);
         const statusLabel = String(statusMeta.label || "").trim();
@@ -1421,7 +1423,7 @@ export default function CalendarPage() {
                   กำลังใช้งาน
                 </span>
                 <span className="status red border border-red-200 text-[16px] font-bold sm:text-[20px]">
-                  พขร. ติดภารกิจอื่นๆ
+                  พขร. ไม่รับงาน
                 </span>
               </div>
             </div>
