@@ -89,6 +89,44 @@ const postRouteActions: Record<string, string> = {
   "/api/push-subscriptions/disable": "disablePushSubscription",
 };
 
+const protectedPostActions = new Set([
+  "createBooking",
+  "updateBooking",
+  "approveBooking",
+  "assignCentralVehicle",
+  "backdate_complete_booking",
+  "cancelBooking",
+  "deleteBookingCancellationHistory",
+  "createUser",
+  "updateUser",
+  "resetUserPassword",
+  "disableUser",
+  "deleteUser",
+  "createDriver",
+  "updateDriver",
+  "updateDriverStatus",
+  "deleteDriver",
+  "createVehicle",
+  "updateVehicle",
+  "deleteVehicle",
+  "startTrip",
+  "completeTrip",
+  "driverCancelJob",
+  "requestDriverCancelJob",
+  "withdrawDriverCancelRequest",
+  "reviewDriverCancelRequest",
+  "createDriverUnavailable",
+  "updateDriverUnavailable",
+  "cancelDriverUnavailable",
+  "updateDriverQueue",
+  "updateDriverQueueMaster",
+  "deleteDriverQueueLog",
+  "resetDriverQueueState",
+  "resetDriverQueuePointer",
+  "setCurrentDriverQueuePointer",
+  "confirmDriverQueueAssignment",
+]);
+
 type Env = {
   FIREBASE_PROJECT_ID?: string;
   FIREBASE_CLIENT_EMAIL?: string;
@@ -215,6 +253,12 @@ async function forwardSheetPost(action: string, data: unknown): Promise<SheetRes
 
 async function readRequestBody(request: Request) {
   return (await request.json().catch(() => ({}))) as Record<string, unknown>;
+}
+
+function getBearerToken(request: Request): string {
+  const header = request.headers.get("Authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
 }
 
 function base64UrlEncode(input: ArrayBuffer | Uint8Array | string) {
@@ -1493,6 +1537,7 @@ export default {
       }
 
       const body = await readRequestBody(request);
+      const token = getBearerToken(request);
 
       if (url.pathname === "/api/thai_holidays") {
         const requestedAction = String(body?.action || "thai_holidays").trim();
@@ -1502,7 +1547,21 @@ export default {
 
       const action = postRouteActions[url.pathname];
       if (action) {
-        const response = await forwardSheetPost(action, body);
+        const rawPayload =
+          body &&
+          typeof body === "object" &&
+          "action" in body &&
+          "data" in body
+            ? body.data
+            : body;
+        const responsePayload =
+          protectedPostActions.has(action) && rawPayload && typeof rawPayload === "object"
+            ? {
+                ...(rawPayload as Record<string, unknown>),
+                session_token: token,
+              }
+            : rawPayload;
+        const response = await forwardSheetPost(action, responsePayload);
         ctx.waitUntil(
           maybeDeliverCreatedNotifications(env, response).catch((error) => {
             console.warn("[push] async delivery failed", {

@@ -81,138 +81,354 @@ function doPost(e) {
     const action = body.action;
 
     if (action === "createVehicle") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "vehicles_create");
       if (denied) return denied;
       return createVehicle(body.data);
     }
     if (action === "createNotification") return createNotification(body.data);
     if (action === "createBooking") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_create");
       if (denied) return denied;
       return createBooking(body.data);
     }
     if (action === "updateBooking") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_edit");
       if (denied) return denied;
       return updateBooking(body.data);
     }
     if (action === "approveBooking") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_approve");
       if (denied) return denied;
       return approveBooking(body.data);
     }
     if (action === "assignCentralVehicle") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_assign_central_vehicle");
       if (denied) return denied;
       return assignCentralVehicle(body.data);
     }
     if (action === "startTrip") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_jobs_start");
       if (denied) return denied;
       return startTrip(body.data);
     }
     if (action === "completeTrip") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_jobs_complete");
       if (denied) return denied;
       return completeTrip(body.data);
     }
     if (action === "backdate_complete_booking") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_backdate_complete");
       if (denied) return denied;
       return backdateCompleteBooking(body.data);
     }
     if (action === "driverCancelJob") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_jobs_complete");
       if (denied) return denied;
       return driverCancelJob(body.data);
     }
     if (action === "requestDriverCancelJob") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_jobs_complete");
       if (denied) return denied;
       return requestDriverCancelJob(body.data);
     }
     if (action === "withdrawDriverCancelRequest") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_jobs_complete");
       if (denied) return denied;
       return withdrawDriverCancelRequest(body.data);
     }
     if (action === "reviewDriverCancelRequest") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_approve");
       if (denied) return denied;
       return reviewDriverCancelRequest(body.data);
     }
     if (action === "cancelBooking") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "bookings_cancel");
       if (denied) return denied;
       return cancelBooking(body.data);
     }
     if (action === "loginUser") return loginUser(body.data);
     if (action === "createDriver") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "drivers_create");
       if (denied) return denied;
       return createDriver(body.data);
     }
     if (action === "updateDriverStatus") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "drivers_edit");
       if (denied) return denied;
       return updateDriverStatus(body.data);
     }
     if (action === "createUser") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "users_create");
       if (denied) return denied;
       return createUser(body.data);
     }
     if (action === "updateUser") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "users_edit");
       if (denied) return denied;
       return updateUser(body.data);
     }
     if (action === "resetUserPassword") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "users_edit");
       if (denied) return denied;
       return resetUserPassword(body.data);
     }
     if (action === "updateVehicle") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "vehicles_edit");
       if (denied) return denied;
       return updateVehicle(body.data);
     }
     if (action === "deleteVehicle") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "vehicles_delete");
       if (denied) return denied;
       return deleteVehicle(body.data);
     }
     if (action === "disableUser") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "users_delete");
       if (denied) return denied;
       return disableUser(body.data);
     }
     if (action === "deleteUser") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "users_delete");
       if (denied) return denied;
       return deleteUser(body.data);
     }
     if (action === "updateDriver") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "drivers_edit");
       if (denied) return denied;
       return updateDriver(body.data);
     }
     if (action === "deleteDriver") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "drivers_delete");
       if (denied) return denied;
       return deleteDriver(body.data);
     }
     if (action === "createDriverUnavailable") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_unavailable_create");
       if (denied) return denied;
       return createDriverUnavailable(body.data);
     }
     if (action === "updateDriverUnavailable") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_unavailable_edit");
       if (denied) return denied;
       return updateDriverUnavailable(body.data);
     }
     if (action === "cancelDriverUnavailable") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_unavailable_cancel");
       if (denied) return denied;
       return cancelDriverUnavailable(body.data);
@@ -225,37 +441,93 @@ function doPost(e) {
       });
     }
     if (action === "updateDriverQueue") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_manage");
       if (denied) return denied;
       return updateDriverQueue(body.data);
     }
     if (action === "updateDriverQueueMaster") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_manage");
       if (denied) return denied;
       return updateDriverQueueMaster(body.data);
     }
     if (action === "deleteDriverQueueLog") {
+      var trusted = applyTrustedSession_(body.data || body);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data || body, "driver_queue_reset");
       if (denied) return denied;
       return deleteDriverQueueLog(body.data || body);
     }
     if (action === "resetDriverQueueState") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_reset");
       if (denied) return denied;
       return resetDriverQueueState(body.data);
     }
     if (action === "resetDriverQueuePointer") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_reset");
       if (denied) return denied;
       return resetDriverQueuePointer(body.data);
     }
     if (action === "setCurrentDriverQueuePointer") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_manage");
       if (denied) return denied;
       return setCurrentDriverQueuePointer(body.data);
     }
     if (action === "recommendDriverForBooking") return recommendDriverForBooking(body.data);
     if (action === "confirmDriverQueueAssignment") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data, "driver_queue_manage");
       if (denied) return denied;
       return confirmDriverQueueAssignment(body.data);
@@ -268,6 +540,14 @@ function doPost(e) {
     if (action === "sendBookingReminderNotifications1Hour") return sendBookingReminderNotifications1Hour(body.data || body);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") {
+      var trusted = applyTrustedSession_(body.data || body);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
       var denied = requireActionPermission_(body.data || body, "bookings_delete");
       if (denied) return denied;
       return deleteBookingCancellationHistory(body.data || body);
@@ -467,12 +747,84 @@ function getUserRoleFromUsersSheet_(userId) {
 }
 
 function getTrustedCurrentUserId_(data) {
+  const trustedUserId = String(data && data.trusted_user_id || "").trim();
+  if (trustedUserId) return trustedUserId;
+
   return String(data && (
     data.current_user_id ||
     data.currentUserId ||
     data.user_id ||
     ""
   )).trim();
+}
+
+function getActiveSessionByToken_(token) {
+  const normalizedToken = String(token || "").trim();
+  if (!normalizedToken) return null;
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sessions");
+  if (!sheet) return null;
+
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const tokenCol = headers.indexOf("session_token");
+  const userIdCol = headers.indexOf("user_id");
+  const roleCol = headers.indexOf("role");
+  const statusCol = headers.indexOf("status");
+  const expiresAtCol = headers.indexOf("expires_at");
+  const lastSeenAtCol = headers.indexOf("last_seen_at");
+
+  if (tokenCol === -1 || userIdCol === -1 || roleCol === -1 || statusCol === -1 || expiresAtCol === -1) {
+    return null;
+  }
+
+  const now = Date.now();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const tokenMatches = String(row[tokenCol] || "").trim() === normalizedToken;
+    if (!tokenMatches) continue;
+
+    const status = String(row[statusCol] || "").trim().toUpperCase();
+    if (status !== "ACTIVE") return null;
+
+    const expiresAt = new Date(row[expiresAtCol]).getTime();
+    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt < now) return null;
+
+    if (lastSeenAtCol !== -1) {
+      sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(new Date().toISOString());
+    }
+
+    return {
+      user_id: String(row[userIdCol] || "").trim(),
+      role: normalizeRole_(row[roleCol]),
+      row_number: i + 2
+    };
+  }
+
+  return null;
+}
+
+function applyTrustedSession_(data) {
+  const payload = data || {};
+  const session = getActiveSessionByToken_(payload.session_token);
+
+  if (!session || !session.user_id || !session.role) {
+    return {
+      ok: false,
+      data: payload
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...payload,
+      trusted_user_id: session.user_id,
+      trusted_role: session.role
+    }
+  };
 }
 
 var DEFAULT_ROLE_ACTION_PERMISSIONS_ = {
@@ -546,7 +898,8 @@ var DEFAULT_ROLE_ACTION_PERMISSIONS_ = {
 
 function hasPayloadPermission_(data, permissionId) {
   const currentUserId = getTrustedCurrentUserId_(data);
-  const realRole = getUserRoleFromUsersSheet_(currentUserId);
+  const trustedRole = normalizeRole_(data && data.trusted_role || "");
+  const realRole = trustedRole || getUserRoleFromUsersSheet_(currentUserId);
 
   if (!currentUserId || !realRole) {
     return false;
