@@ -1259,6 +1259,54 @@ function getUnavailableTypeLabel(type) {
   return normalized;
 }
 
+function getDriverUnavailableReasonLabel(record) {
+  if (!record || typeof record !== "object") {
+    return "ไม่พร้อมรับงาน";
+  }
+
+  const rawType = String(
+    record.type ||
+    record.unavailable_type ||
+    ""
+  ).trim();
+  const normalizedType = rawType.toUpperCase();
+  const reason = String(
+    record.reason ||
+    record.destination ||
+    record.note ||
+    ""
+  ).trim();
+
+  if (
+    normalizedType === "OUT_PROVINCE" ||
+    rawType === "ปฏิบัติงานต่างจังหวัด"
+  ) {
+    return reason ? `ปฏิบัติงานต่างจังหวัด - ${reason}` : "ปฏิบัติงานต่างจังหวัด";
+  }
+
+  if (
+    normalizedType === "LEAVE" ||
+    rawType === "ลา"
+  ) {
+    return reason ? `ลา / หยุด - ${reason}` : "ลา / หยุด";
+  }
+
+  if (
+    normalizedType === "BUSY" ||
+    normalizedType === "TEMPORARY_BUSY" ||
+    rawType === "หยุด"
+  ) {
+    return reason ? `ติดภารกิจ (ชั่วคราว) - ${reason}` : "ติดภารกิจ (ชั่วคราว)";
+  }
+
+  const typeLabel = getUnavailableTypeLabel(rawType);
+  if (typeLabel && typeLabel !== "อื่นๆ") {
+    return reason ? `${typeLabel} - ${reason}` : typeLabel;
+  }
+
+  return reason || "ไม่พร้อมรับงาน";
+}
+
 function getUnavailableTypeClassName(type) {
   const normalized = normalizeUnavailableType(type);
   if (normalized === "ลา") return "red";
@@ -1361,7 +1409,7 @@ function buildDriverOptionsHtml(availableDrivers, recommendedDriverId) {
     .join("");
 }
 
-function buildSkippedDriversHtml(skippedDrivers, resolveDriverName) {
+function buildSkippedDriversHtml(skippedDrivers, resolveDriverName, resolveSkippedDriverReason) {
   if (skippedDrivers.length === 0) return "";
 
   const skippedCards = skippedDrivers
@@ -1370,11 +1418,12 @@ function buildSkippedDriversHtml(skippedDrivers, resolveDriverName) {
         item.driver_user_id || item.user_id || item.driver_id,
         item.driver_name || ""
       );
+      const reason = resolveSkippedDriverReason(item);
 
       return `
         <div class="booking-skipped-card">
           <div class="booking-skipped-name">${escapeHtml(name || "-")}</div>
-          <div class="booking-skipped-reason">เหตุผล: ${escapeHtml(item.reason || "-")}</div>
+          <div class="booking-skipped-reason">เหตุผล: ${escapeHtml(reason || "-")}</div>
         </div>
       `;
     })
@@ -2391,6 +2440,30 @@ export default function Booking() {
     return map;
   }, [driverUnavailableGroups]);
 
+  const resolveSkippedDriverReason = useCallback((driverLike) => {
+    const driverId = String(
+      driverLike?.driver_user_id ||
+      driverLike?.user_id ||
+      driverLike?.driver_id ||
+      ""
+    ).trim();
+    const driverName = String(
+      driverLike?.driver_name ||
+      driverLike?.name ||
+      ""
+    ).trim();
+
+    const matchedUnavailableRecord =
+      (driverId ? unavailableByDriverId.get(driverId) : null) ||
+      (driverName ? (driverUnavailableGroups.byDriverName.get(driverName) || [])[0] : null);
+
+    if (matchedUnavailableRecord) {
+      return getDriverUnavailableReasonLabel(matchedUnavailableRecord);
+    }
+
+    return String(driverLike?.reason || "").trim() || "ไม่พร้อมรับงาน";
+  }, [driverUnavailableGroups, unavailableByDriverId]);
+
   const sortedBookings = useMemo(() => sortLatestFirst(bookings), [bookings]);
 
   const filteredBookings = useMemo(() => {
@@ -2588,7 +2661,7 @@ export default function Booking() {
           const reason = assignmentConflict
             ? "มีงานที่มอบหมายแล้ว"
             : unavailableConflict
-              ? "ไม่พร้อม / ติดภารกิจ"
+              ? getDriverUnavailableReasonLabel(unavailableConflict)
               : "";
 
           return {
@@ -2601,7 +2674,13 @@ export default function Booking() {
         });
     const skippedDriverSummary = skippedDrivers.length > 0
       ? `ข้าม: ${skippedDrivers
-          .map((item) => `${item.driver_name || "-"} (${item.reason || "-"})`)
+          .map((item) => {
+            const name = resolveDriverName(
+              item.driver_user_id || item.user_id || item.driver_id,
+              item.driver_name || "-"
+            );
+            return `${name || "-"} (${resolveSkippedDriverReason(item) || "-"})`;
+          })
           .join(", ")}`
       : "";
     const queueNoteLines = [
@@ -2630,7 +2709,11 @@ export default function Booking() {
       ? buildVehicleOptionsHtml(vehicles, currentBooking, bookingGroups)
       : "";
     const driverOptionsHtml = buildDriverOptionsHtml(driverOptions, recommendedDriverId);
-    const skippedDriversHtml = buildSkippedDriversHtml(skippedDrivers, resolveDriverName);
+    const skippedDriversHtml = buildSkippedDriversHtml(
+      skippedDrivers,
+      resolveDriverName,
+      resolveSkippedDriverReason
+    );
 
       const result = await Swal.fire({
       title: "ดำเนินการมอบหมายงาน",
@@ -2791,7 +2874,7 @@ export default function Booking() {
     } finally {
       setProcessingAction(null);
     }
-  }, [activeAssignmentsByDriverId, activeDrivers, bookingById, bookingGroups, confirmDriverQueueAssignment, currentUser?.email, currentUser?.name, driverById, mergeBooking, processingAction, recommendDriverForBooking, resolveDriverName, unavailableByDriverId, vehicleMap, vehicles]);
+  }, [activeAssignmentsByDriverId, activeDrivers, bookingById, bookingGroups, confirmDriverQueueAssignment, currentUser?.email, currentUser?.name, driverById, driverUnavailableGroups, mergeBooking, processingAction, recommendDriverForBooking, resolveDriverName, resolveSkippedDriverReason, unavailableByDriverId, vehicleMap, vehicles]);
 
   const handleEditBooking = useCallback(async (booking) => {
     if (processingAction) return;

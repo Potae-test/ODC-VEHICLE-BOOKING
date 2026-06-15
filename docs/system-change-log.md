@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-16
+- Updated `src/pages/DriverQueueLogs.jsx` so the `ประวัติคิวคนขับ` page now explains what each queue log row means, uses clearer Thai labels for recommended/actual driver and queue positions, renders assignment modes as readable badges, shows skipped drivers as compact chips, paginates desktop and mobile views at 5 rows per page with `แสดง X - Y จาก Z รายการ` plus `แรก / ก่อนหน้า / ถัดไป / ท้าย` controls, and presents mobile rows as expandable cards without changing queue logic, booking logic, API calls, or stored fields.
+
 ## 2026-06-15
 - Updated `apps-script/code.gs`, `src/pages/Booking.jsx`, and `docs/domain-rules.md` so backdated completion, `ใช้รถ สนง.กลาง`, and booking cancellation now re-read the latest booking row before acting, reject already-closed `COMPLETED`/`CANCELLED` bookings with the message `รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล` before any row update/activity log/notification work, hide those actions for closed rows in Booking, and refresh the Booking list from `fresh: true` after successful or rejected stale actions to prevent duplicate close logs from stale pages.
 - Updated `odc-vehicle-api/src/index.ts` so the Worker now uses an explicit CORS allowlist for `https://main.odc-vehicle-booking.pages.dev`, `http://localhost:5173`, `http://127.0.0.1:5173`, `http://localhost:8787`, and `http://127.0.0.1:8787`, keeps `POST /api/login` as an explicit public pass-through to Apps Script without any session-token requirement, and preserves all existing response shapes plus the current password-hash migration behavior handled in `apps-script/code.gs`.
