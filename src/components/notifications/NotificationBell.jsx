@@ -847,22 +847,24 @@ export default function NotificationBell({ currentUser, onNavigate }) {
             >
               {pushStatus === "loading" ? "เปิดแจ้งเตือนบนเครื่องนี้" : getPushStatusLabel(pushStatus)}
             </button>
-            <button
-              type="button"
-              className="notification-text-button notification-text-button-half"
-              onClick={handleDebugPush}
-              disabled={debugPushLoading}
-            >
-              {debugPushLoading ? "Checking..." : "Debug Push"}
-            </button>
-            <button
-              type="button"
-              className="notification-text-button notification-text-button-danger notification-text-button-half"
-              onClick={handleRecoverPush}
-              disabled={!userId}
-            >
-              Recover Push
-            </button>
+            <div className="notification-panel-footer-inline-actions">
+              <button
+                type="button"
+                className="notification-text-button notification-text-button-half"
+                onClick={handleDebugPush}
+                disabled={debugPushLoading}
+              >
+                {debugPushLoading ? "Checking..." : "Debug Push"}
+              </button>
+              <button
+                type="button"
+                className="notification-text-button notification-text-button-danger notification-text-button-half"
+                onClick={handleRecoverPush}
+                disabled={!userId}
+              >
+                Recover Push
+              </button>
+            </div>
             <button
               type="button"
               className="notification-text-button notification-text-button-full"
