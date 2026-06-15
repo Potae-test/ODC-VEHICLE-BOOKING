@@ -224,12 +224,10 @@ function jsonOutput(obj) {
 }
 
 function bytesToHex_(bytes) {
-  return bytes
-    .map(function (byte) {
-      const value = byte < 0 ? byte + 256 : byte;
-      return ("0" + value.toString(16)).slice(-2);
-    })
-    .join("");
+  return bytes.map(function (byte) {
+    const value = byte < 0 ? byte + 256 : byte;
+    return ("0" + value.toString(16)).slice(-2);
+  }).join("");
 }
 
 function makePasswordSalt_() {
@@ -255,14 +253,9 @@ function isHashedPassword_(value) {
   return String(value || "").indexOf("HASH$SHA256$") === 0;
 }
 
-function verifyPassword_(inputPassword, storedPassword) {
-  const stored = String(storedPassword || "").trim();
-
-  if (!stored) return false;
-
-  if (!isHashedPassword_(stored)) {
-    return stored === String(inputPassword || "").trim();
-  }
+function verifyPasswordHash_(inputPassword, storedHash) {
+  const stored = String(storedHash || "").trim();
+  if (!isHashedPassword_(stored)) return false;
 
   const parts = stored.split("$");
   if (parts.length !== 4) return false;
@@ -4426,30 +4419,34 @@ function loginUser(data) {
 
   const emailCol = headers.indexOf("email");
   const passwordCol = headers.indexOf("password");
+  const passwordHashCol = headers.indexOf("password_hash");
   const statusCol = headers.indexOf("status");
-
-  if (emailCol === -1 || passwordCol === -1 || statusCol === -1) {
-    return jsonOutput({
-      success: false,
-      message: "Users sheet columns are invalid"
-    });
-  }
-
+  const updatedAtCol = headers.indexOf("updated_at");
   const inputEmail = String(data && data.email || "").trim();
   const inputPassword = String(data && data.password || "").trim();
-
   let matchedUser = null;
   let matchedRowIndex = -1;
+  let matchedUsingPlaintext = false;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const emailMatches = String(row[emailCol] || "").trim() === inputEmail;
     const active = String(row[statusCol] || "").trim().toUpperCase() === "ACTIVE";
-    const passwordMatches = verifyPassword_(inputPassword, row[passwordCol]);
 
-    if (emailMatches && active && passwordMatches) {
+    if (!emailMatches || !active) continue;
+
+    const storedHash = passwordHashCol !== -1 ? row[passwordHashCol] : "";
+    if (verifyPasswordHash_(inputPassword, storedHash)) {
       matchedUser = row.slice();
       matchedRowIndex = i;
+      break;
+    }
+
+    const storedPassword = passwordCol !== -1 ? String(row[passwordCol] || "").trim() : "";
+    if (storedPassword && storedPassword !== "HASHED" && storedPassword === inputPassword) {
+      matchedUser = row.slice();
+      matchedRowIndex = i;
+      matchedUsingPlaintext = true;
       break;
     }
   }
@@ -4461,13 +4458,22 @@ function loginUser(data) {
     });
   }
 
-  const currentStoredPassword = String(matchedUser[passwordCol] || "").trim();
+  if (matchedUsingPlaintext && passwordCol !== -1 && passwordHashCol !== -1) {
+    const migratedHash = hashPassword_(inputPassword);
+    const rowNumber = matchedRowIndex + 2;
 
-  if (!isHashedPassword_(currentStoredPassword)) {
-    const hashedPassword = hashPassword_(inputPassword);
-    sheet.getRange(matchedRowIndex + 2, passwordCol + 1).setValue(hashedPassword);
+    sheet.getRange(rowNumber, passwordCol + 1).setValue("HASHED");
+    sheet.getRange(rowNumber, passwordHashCol + 1).setValue(migratedHash);
+    if (updatedAtCol !== -1) {
+      sheet.getRange(rowNumber, updatedAtCol + 1).setValue(new Date());
+    }
     invalidateSheetCache_(sheet);
-    matchedUser[passwordCol] = hashedPassword;
+
+    matchedUser[passwordCol] = "HASHED";
+    matchedUser[passwordHashCol] = migratedHash;
+    if (updatedAtCol !== -1) {
+      matchedUser[updatedAtCol] = new Date();
+    }
   }
 
   let obj = {};
@@ -4477,6 +4483,7 @@ function loginUser(data) {
   });
 
   delete obj.password;
+  delete obj.password_hash;
   delete obj.driver_id;
   delete obj.driver_name;
 
@@ -6112,14 +6119,17 @@ function getUsers() {
 function createUser(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
   const { headers } = readSheetTable(sheet);
+  const passwordHashCol = ensureColumn(sheet, headers, "password_hash");
   const now = new Date();
   const userId = "U" + Utilities.formatString("%03d", sheet.getLastRow());
+  const hashedPassword = hashPassword_(data.password || "1234");
 
   const row = headers.map((header) => {
     if (header === "user_id") return userId;
     if (header === "name") return data.name || "";
     if (header === "email") return data.email || "";
-    if (header === "password") return hashPassword_(data.password || "1234");
+    if (header === "password") return "HASHED";
+    if (header === "password_hash") return hashedPassword;
     if (header === "department") return data.department || "";
     if (header === "phone") return data.phone || "";
     if (header === "role") return data.role || "USER";
@@ -6128,6 +6138,10 @@ function createUser(data) {
     if (header === "updated_at") return now;
     return "";
   });
+
+  if (passwordHashCol >= row.length) {
+    row[passwordHashCol] = hashedPassword;
+  }
 
   appendSheetRow(sheet, row);
 
@@ -6175,14 +6189,17 @@ function resetUserPassword(data) {
   const { headers, rows } = readSheetTable(sheet);
 
   const userIdCol = headers.indexOf("user_id");
-  const passwordCol = headers.indexOf("password");
+  const passwordCol = ensureColumn(sheet, headers, "password");
+  const passwordHashCol = ensureColumn(sheet, headers, "password_hash");
   const updatedAtCol = headers.indexOf("updated_at");
+  const hashedPassword = hashPassword_(data.password || "1234");
 
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
       const row = i + 2;
 
-      sheet.getRange(row, passwordCol + 1).setValue(hashPassword_(data.password || "1234"));
+      sheet.getRange(row, passwordCol + 1).setValue("HASHED");
+      sheet.getRange(row, passwordHashCol + 1).setValue(hashedPassword);
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
 
       return jsonOutput({ success: true, message: "Reset password success" });

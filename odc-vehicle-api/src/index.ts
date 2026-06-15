@@ -1,10 +1,26 @@
 import { buildPushHTTPRequest } from "@pushforge/builder";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+const ALLOWED_ORIGINS = new Set([
+  "https://main.odc-vehicle-booking.pages.dev",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:8787",
+  "http://127.0.0.1:8787",
+]);
+
+function getCorsHeaders(request: Request) {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.has(origin)
+    ? origin
+    : "https://main.odc-vehicle-booking.pages.dev";
+
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session-Token",
+    Vary: "Origin",
+  };
+}
 
 const SHEET_API_URL =
   "https://script.google.com/macros/s/AKfycbwqsGXCt7Ac0p92IFYFWndE8PY_-u1rmo8J7f7mMihYMKkVAub8jAOlbpLMCy0hah3A/exec";
@@ -148,10 +164,10 @@ let firebaseAccessTokenCache: {
   cacheKey: string;
 } | null = null;
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(payload: unknown, request: Request, status = 200) {
   return Response.json(payload, {
     status,
-    headers: corsHeaders,
+    headers: getCorsHeaders(request),
   });
 }
 
@@ -1375,6 +1391,7 @@ async function handlePushTest(request: Request, env: Env) {
         success: false,
         message: "user_id, title, and body are required",
       },
+      request,
       400
     );
   }
@@ -1393,40 +1410,46 @@ async function handlePushTest(request: Request, env: Env) {
     { logPrefix: "[push-test]" }
   );
 
-  return jsonResponse({
-    success: true,
-    message: "Push test completed",
-    data: {
-      user_id: userId,
-      fcm_count: delivery.fcm_count,
-      web_push_count: delivery.web_push_count,
-      total_subscription_count: delivery.total_subscription_count,
-      token_count: delivery.token_count,
-      user_agents: delivery.user_agents,
-      success_count: delivery.success_count,
-      failure_count: delivery.failure_count,
-      error_codes: delivery.error_codes,
-      results: delivery.results,
+  return jsonResponse(
+    {
+      success: true,
+      message: "Push test completed",
+      data: {
+        user_id: userId,
+        fcm_count: delivery.fcm_count,
+        web_push_count: delivery.web_push_count,
+        total_subscription_count: delivery.total_subscription_count,
+        token_count: delivery.token_count,
+        user_agents: delivery.user_agents,
+        success_count: delivery.success_count,
+        failure_count: delivery.failure_count,
+        error_codes: delivery.error_codes,
+        results: delivery.results,
+      },
     },
-  });
+    request
+  );
 }
 
-function handleWebPushConfigDebug(env: Env) {
+function handleWebPushConfigDebug(request: Request, env: Env) {
   const envPublicKey = String(env.VAPID_PUBLIC_KEY || "").trim();
   const normalizedPublicKey = normalizeWebPushPublicKey(env);
   const envPrivateKey = String(env.VAPID_PRIVATE_KEY || "").trim();
   const vapidSubject = String(env.VAPID_SUBJECT || "").trim();
 
-  return jsonResponse({
-    success: true,
-    data: {
-      env_has_public_key: Boolean(envPublicKey),
-      env_public_key_prefix: previewEnvKey(envPublicKey),
-      normalized_public_key_prefix: previewEnvKey(normalizedPublicKey),
-      env_has_private_key: Boolean(envPrivateKey),
-      vapid_subject: vapidSubject || null,
+  return jsonResponse(
+    {
+      success: true,
+      data: {
+        env_has_public_key: Boolean(envPublicKey),
+        env_public_key_prefix: previewEnvKey(envPublicKey),
+        normalized_public_key_prefix: previewEnvKey(normalizedPublicKey),
+        env_has_private_key: Boolean(envPrivateKey),
+        vapid_subject: vapidSubject || null,
+      },
     },
-  });
+    request
+  );
 }
 
 export default {
@@ -1436,28 +1459,31 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: corsHeaders,
+        headers: getCorsHeaders(request),
       });
     }
 
     if (url.pathname === "/api/health") {
-      return jsonResponse({
-        success: true,
-        data: {
-          time: new Date().toISOString(),
+      return jsonResponse(
+        {
+          success: true,
+          data: {
+            time: new Date().toISOString(),
+          },
+          message: "ODC Vehicle Booking API Running",
         },
-        message: "ODC Vehicle Booking API Running",
-      });
+        request
+      );
     }
 
     if (request.method === "GET" && url.pathname === "/debug/webpush-config") {
-      return handleWebPushConfigDebug(env);
+      return handleWebPushConfigDebug(request, env);
     }
 
     if (request.method === "GET") {
       const action = getRouteActions[url.pathname];
       if (action) {
-        return jsonResponse(await forwardSheetGet(action, url.searchParams));
+        return jsonResponse(await forwardSheetGet(action, url.searchParams), request);
       }
     }
 
@@ -1471,7 +1497,7 @@ export default {
       if (url.pathname === "/api/thai_holidays") {
         const requestedAction = String(body?.action || "thai_holidays").trim();
         const action = requestedAction === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
-        return jsonResponse(await forwardSheetPost(action, body?.data || body || {}));
+        return jsonResponse(await forwardSheetPost(action, body?.data || body || {}), request);
       }
 
       const action = postRouteActions[url.pathname];
@@ -1485,7 +1511,7 @@ export default {
             });
           })
         );
-        return jsonResponse(response);
+        return jsonResponse(response, request);
       }
     }
 
@@ -1496,6 +1522,7 @@ export default {
         message: "API Not Found",
         path: url.pathname,
       },
+      request,
       404
     );
   },
