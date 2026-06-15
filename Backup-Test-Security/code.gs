@@ -223,57 +223,6 @@ function jsonOutput(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function bytesToHex_(bytes) {
-  return bytes
-    .map(function (byte) {
-      const value = byte < 0 ? byte + 256 : byte;
-      return ("0" + value.toString(16)).slice(-2);
-    })
-    .join("");
-}
-
-function makePasswordSalt_() {
-  return Utilities.getUuid().replace(/-/g, "");
-}
-
-function sha256Hex_(value) {
-  const digest = Utilities.computeDigest(
-    Utilities.DigestAlgorithm.SHA_256,
-    String(value || ""),
-    Utilities.Charset.UTF_8
-  );
-  return bytesToHex_(digest);
-}
-
-function hashPassword_(password, salt) {
-  const resolvedSalt = salt || makePasswordSalt_();
-  const hash = sha256Hex_(resolvedSalt + ":" + String(password || ""));
-  return "HASH$SHA256$" + resolvedSalt + "$" + hash;
-}
-
-function isHashedPassword_(value) {
-  return String(value || "").indexOf("HASH$SHA256$") === 0;
-}
-
-function verifyPassword_(inputPassword, storedPassword) {
-  const stored = String(storedPassword || "").trim();
-
-  if (!stored) return false;
-
-  if (!isHashedPassword_(stored)) {
-    return stored === String(inputPassword || "").trim();
-  }
-
-  const parts = stored.split("$");
-  if (parts.length !== 4) return false;
-
-  const salt = parts[2];
-  const expectedHash = parts[3];
-  const actualHash = sha256Hex_(salt + ":" + String(inputPassword || ""));
-
-  return actualHash === expectedHash;
-}
-
 function getSheetByName_(sheetName) {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
 }
@@ -4428,55 +4377,27 @@ function loginUser(data) {
   const passwordCol = headers.indexOf("password");
   const statusCol = headers.indexOf("status");
 
-  if (emailCol === -1 || passwordCol === -1 || statusCol === -1) {
-    return jsonOutput({
-      success: false,
-      message: "Users sheet columns are invalid"
-    });
-  }
+  const user = rows.find(row => {
+    return (
+      String(row[emailCol]).trim() === String(data.email).trim() &&
+      String(row[passwordCol]).trim() === String(data.password).trim() &&
+      String(row[statusCol]).trim().toUpperCase() === "ACTIVE"
+    );
+  });
 
-  const inputEmail = String(data && data.email || "").trim();
-  const inputPassword = String(data && data.password || "").trim();
-
-  let matchedUser = null;
-  let matchedRowIndex = -1;
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const emailMatches = String(row[emailCol] || "").trim() === inputEmail;
-    const active = String(row[statusCol] || "").trim().toUpperCase() === "ACTIVE";
-    const passwordMatches = verifyPassword_(inputPassword, row[passwordCol]);
-
-    if (emailMatches && active && passwordMatches) {
-      matchedUser = row.slice();
-      matchedRowIndex = i;
-      break;
-    }
-  }
-
-  if (!matchedUser) {
+  if (!user) {
     return jsonOutput({
       success: false,
       message: "Email หรือ Password ไม่ถูกต้อง"
     });
   }
 
-  const currentStoredPassword = String(matchedUser[passwordCol] || "").trim();
-
-  if (!isHashedPassword_(currentStoredPassword)) {
-    const hashedPassword = hashPassword_(inputPassword);
-    sheet.getRange(matchedRowIndex + 2, passwordCol + 1).setValue(hashedPassword);
-    invalidateSheetCache_(sheet);
-    matchedUser[passwordCol] = hashedPassword;
-  }
-
   let obj = {};
 
   headers.forEach((header, index) => {
-    obj[header] = matchedUser[index];
+    obj[header] = user[index];
   });
 
-  delete obj.password;
   delete obj.driver_id;
   delete obj.driver_name;
 
@@ -6119,7 +6040,7 @@ function createUser(data) {
     if (header === "user_id") return userId;
     if (header === "name") return data.name || "";
     if (header === "email") return data.email || "";
-    if (header === "password") return hashPassword_(data.password || "1234");
+    if (header === "password") return data.password || "1234";
     if (header === "department") return data.department || "";
     if (header === "phone") return data.phone || "";
     if (header === "role") return data.role || "USER";
@@ -6182,7 +6103,7 @@ function resetUserPassword(data) {
     if (rows[i][userIdCol] === data.user_id) {
       const row = i + 2;
 
-      sheet.getRange(row, passwordCol + 1).setValue(hashPassword_(data.password || "1234"));
+      sheet.getRange(row, passwordCol + 1).setValue(data.password || "1234");
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
 
       return jsonOutput({ success: true, message: "Reset password success" });
