@@ -1390,7 +1390,7 @@ function clearOldSessions() {
     });
   }
 
-  const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const cutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
   const rowsToDelete = [];
 
   for (let i = 0; i < rows.length; i++) {
