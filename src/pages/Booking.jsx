@@ -1440,7 +1440,7 @@ function buildSkippedDriversHtml(skippedDrivers, resolveDriverName, resolveSkipp
 function getQueueAssignModeLabel(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
   if (normalized === "MANUAL_OVERRIDE") return "เลือกคนขับเอง";
-  return "ระบบแนะนำ";
+  return "ระบบจัดการให้";
 }
 
 function isEditableBookingStatus(status) {
@@ -2721,7 +2721,7 @@ export default function Booking() {
         <div class="swal-form booking-approve-form">
           <div class="booking-queue-recommendation-card">
             <div class="booking-queue-row">
-              <span>คนขับที่ระบบแนะนำ:</span>
+              <span>คนขับที่ระบบจัดการให้:</span>
               <b>${escapeHtml(queueRecommendedDisplayName)}</b>
             </div>
 
@@ -2759,7 +2759,7 @@ export default function Booking() {
             id="manual_override_reason"
             class="swal2-textarea booking-approve-textarea"
             rows="3"
-            placeholder="ระบุเมื่อเลือกคนขับไม่ตรงกับที่ระบบแนะนำ"
+            placeholder="ระบุเมื่อเลือกคนขับไม่ตรงกับที่ระบบจัดการให้"
           ></textarea>
 
           ${skippedDriversHtml}

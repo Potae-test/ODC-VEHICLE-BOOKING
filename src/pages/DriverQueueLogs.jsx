@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { deleteDriverQueueLog, getDriverQueueLogs } from "../api";
+import { createRoot } from "react-dom/client";
+import Swal from "sweetalert2";
+import { deleteDriverQueueLog, getBookings, getDriverQueueLogs } from "../api";
 import MobilePageHeader from "../layouts/MobilePageHeader";
 import MobilePageSection from "../layouts/MobilePageSection";
 import useIsMobile from "../hooks/useIsMobile";
@@ -18,7 +20,7 @@ function sortLatestFirst(items) {
 
 function getAssignModeLabel(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
-  if (normalized === "AUTO_RECOMMENDED") return "ระบบแนะนำ";
+  if (normalized === "AUTO_RECOMMENDED") return "ระบบจัดการให้";
   if (normalized === "MANUAL_OVERRIDE") return "เลือกเอง";
   if (normalized === "SKIPPED_UNAVAILABLE") return "ข้ามเพราะไม่ว่าง";
   if (normalized === "SKIPPED_BUSY") return "ข้ามเพราะติดภารกิจ";
@@ -29,7 +31,7 @@ function getAssignModeBadge(mode) {
   const normalized = String(mode || "").trim().toUpperCase();
   if (normalized === "AUTO_RECOMMENDED") {
     return {
-      label: "ระบบแนะนำ",
+      label: "ระบบจัดการให้",
       className: "bg-blue-100 text-blue-700 border-blue-200",
     };
   }
@@ -116,9 +118,52 @@ function formatMobileShortDateTime(value) {
   ).padStart(2, "0")}`;
 }
 
+function formatBookingDetailValue(value) {
+  return value ? formatThaiDateTime(value) : "-";
+}
+
+function getBookingDetailGroups(booking) {
+  return [
+    {
+      title: "ข้อมูลผู้จอง",
+      rows: [
+        { label: "เลขที่จอง", value: booking.booking_no || booking.booking_id || "-" },
+        { label: "ผู้จอง", value: booking.requester_name || "-" },
+        { label: "หน่วยงาน", value: booking.department || "-" },
+        { label: "เบอร์โทร", value: booking.phone || "-" },
+      ],
+    },
+    {
+      title: "ข้อมูลการเดินทาง",
+      rows: [
+        { label: "เวลาไป", value: formatBookingDetailValue(booking.start_datetime) },
+        { label: "เวลากลับ", value: formatBookingDetailValue(booking.end_datetime) },
+        { label: "ปลายทาง", value: booking.destination || "-" },
+        { label: "รายละเอียด", value: booking.purpose || "-" },
+      ],
+    },
+    {
+      title: "การมอบหมายงาน",
+      rows: [
+        { label: "คนขับ", value: booking.assigned_user_name || booking.driver_name || "-" },
+        { label: "สถานะ", value: booking.status || "-" },
+        { label: "หมายเหตุ", value: booking.staff_note || "-" },
+      ],
+    },
+    {
+      title: "ข้อมูลระบบ",
+      rows: [
+        { label: "booking_id", value: booking.booking_id || "-" },
+        { label: "สร้างเมื่อ", value: formatBookingDetailValue(booking.created_at) },
+        { label: "อัปเดตเมื่อ", value: formatBookingDetailValue(booking.updated_at) },
+      ],
+    },
+  ];
+}
+
 const ASSIGN_MODE_OPTIONS = [
   { value: "", label: "ทั้งหมด" },
-  { value: "AUTO_RECOMMENDED", label: "ระบบแนะนำ" },
+  { value: "AUTO_RECOMMENDED", label: "ระบบจัดการให้" },
   { value: "MANUAL_OVERRIDE", label: "เลือกเอง" },
   { value: "SKIPPED_UNAVAILABLE", label: "ข้ามเพราะไม่ว่าง" },
   { value: "SKIPPED_BUSY", label: "ข้ามเพราะติดภารกิจ" },
@@ -142,6 +187,25 @@ function ChevronDownIcon({ className = "" }) {
   );
 }
 
+function EyeIcon({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="M2.25 12s3.75-7.5 9.75-7.5S21.75 12 21.75 12 18 19.5 12 19.5 2.25 12 2.25 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function FilterField({
   label,
   value,
@@ -150,11 +214,11 @@ function FilterField({
   type = "text",
   as = "input",
   options = [],
-  labelClassName = "text-[13px] font-semibold text-slate-600",
-  inputClassName = "h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[15px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100",
+  labelClassName = "text-[20px] font-semibold text-slate-600",
+  inputClassName = "h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[20px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100",
 }) {
   return (
-    <label className="grid gap-1">
+    <label className="grid gap-1.5">
       <span className={labelClassName}>{label}</span>
       {as === "select" ? (
         <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClassName}>
@@ -179,51 +243,42 @@ function FilterField({
 
 function Pagination({ page, totalPages, totalItems, onChangePage }) {
   const pageNumbers = getPageWindow(page, totalPages);
+  const startItem = totalItems === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1;
+  const endItem = Math.min(page * ROWS_PER_PAGE, totalItems);
 
   return (
-    <div className="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4">
-      <div className="text-[14px] text-slate-600">
-        แสดง {totalItems === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1} - {Math.min(page * ROWS_PER_PAGE, totalItems)} จาก {totalItems} รายการ
+    <div className="booking-pagination-wrapper mt-4">
+      <div className="booking-pagination-info">
+        แสดง {startItem} - {endItem} จาก {totalItems} รายการ
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onChangePage(1)}
-          disabled={page <= 1}
-          className="inline-flex h-10 min-w-[62px] items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-default disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-        >
+      <div className="pagination booking-pagination">
+        <button type="button" onClick={() => onChangePage(1)} disabled={page <= 1} style={{ fontSize: 16 }}>
           แรก
         </button>
         <button
           type="button"
           onClick={() => onChangePage(Math.max(1, page - 1))}
           disabled={page <= 1}
-          className="inline-flex h-10 min-w-[78px] items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-default disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+          style={{ fontSize: 16 }}
         >
           ก่อนหน้า
         </button>
-        {pageNumbers.map((pageNumber) => {
-          const isActive = pageNumber === page;
-          return (
-            <button
-              key={pageNumber}
-              type="button"
-              onClick={() => onChangePage(pageNumber)}
-              className={`inline-flex h-10 min-w-[44px] items-center justify-center rounded-xl border px-3 text-[14px] font-semibold transition ${
-                isActive
-                  ? "border-blue-700 bg-blue-700 text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:border-blue-300 hover:text-blue-700"
-              }`}
-            >
-              {pageNumber}
-            </button>
-          );
-        })}
+        {pageNumbers.map((pageNumber) => (
+          <button
+            key={pageNumber}
+            type="button"
+            onClick={() => onChangePage(pageNumber)}
+            className={pageNumber === page ? "active-page" : ""}
+            style={{ fontSize: 16 }}
+          >
+            {pageNumber}
+          </button>
+        ))}
         <button
           type="button"
           onClick={() => onChangePage(Math.min(totalPages, page + 1))}
           disabled={page >= totalPages}
-          className="inline-flex h-10 min-w-[62px] items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-default disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+          style={{ fontSize: 16 }}
         >
           ถัดไป
         </button>
@@ -231,7 +286,7 @@ function Pagination({ page, totalPages, totalItems, onChangePage }) {
           type="button"
           onClick={() => onChangePage(totalPages)}
           disabled={page >= totalPages}
-          className="inline-flex h-10 min-w-[54px] items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 transition hover:border-blue-300 hover:text-blue-700 disabled:cursor-default disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+          style={{ fontSize: 16 }}
         >
           ท้าย
         </button>
@@ -243,18 +298,44 @@ function Pagination({ page, totalPages, totalItems, onChangePage }) {
 function QueueExplanationCard() {
   return (
     <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-      <h3 className="text-[20px] font-bold text-slate-900">ประวัติคิวคนขับ</h3>
-      <p className="mt-1 text-[15px] leading-6 text-slate-700">
-        แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบแนะนำใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด
+      <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+        ประวัติคิวคนขับ
+      </h3>
+      <p className="mt-1 leading-8 text-slate-700" style={{ fontSize: 20 }}>
+        แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด
       </p>
       <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4">
-        <div className="text-[15px] font-bold text-slate-900">คำอธิบาย:</div>
-        <ul className="mt-2 grid gap-2 text-[14px] leading-6 text-slate-600">
-          <li>- “คนขับที่ระบบแนะนำ” คือคนขับที่ระบบเลือกตามคิว</li>
+        <div className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+          คำอธิบาย:
+        </div>
+        <ul className="mt-2 grid gap-2 leading-8 text-slate-600" style={{ fontSize: 20 }}>
+          <li>- “คนขับที่ระบบจัดการให้” คือคนขับที่ระบบเลือกตามคิว</li>
           <li>- “คนขับที่เลือกจริง” คือคนขับที่ถูกมอบหมายจริง</li>
           <li>- “คิวก่อนหน้า/คิวถัดไป” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</li>
           <li>- “ข้ามเพราะไม่ว่าง/ติดภารกิจ” คือคนขับที่ถูกข้ามพร้อมเหตุผล</li>
         </ul>
+      </div>
+    </div>
+  );
+}
+
+function BookingDetailModalContent({ booking }) {
+  const groups = getBookingDetailGroups(booking);
+
+  return (
+    <div className="booking-detail-modal">
+      <div className="booking-detail-group-list">
+        {groups.map((group) => (
+          <section key={group.title} className="booking-detail-group">
+            <h3 className="booking-detail-group-title">{group.title}</h3>
+            {group.rows.map((row) => (
+              <div key={`${group.title}-${row.label}`} className="booking-detail-row">
+                <span className="booking-detail-label">{row.label}</span>
+                <span className="booking-detail-value">{row.value || "-"}</span>
+              </div>
+            ))}
+          </section>
+        ))}
       </div>
     </div>
   );
@@ -270,6 +351,8 @@ export default function DriverQueueLogs() {
   const [page, setPage] = useState(1);
   const [deletingId, setDeletingId] = useState("");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [detailLoadingKey, setDetailLoadingKey] = useState("");
+  const [cachedBookings, setCachedBookings] = useState([]);
   const [filters, setFilters] = useState({
     keyword: "",
     assignMode: "",
@@ -425,6 +508,65 @@ export default function DriverQueueLogs() {
     }
   }
 
+  async function findBookingForLog(log) {
+    const bookingId = String(log.booking_id || "").trim();
+    const bookingNo = String(log.booking_no || "").trim();
+
+    const matchBooking = (items) =>
+      (Array.isArray(items) ? items : []).find((item) => {
+        const itemBookingId = String(item.booking_id || "").trim();
+        const itemBookingNo = String(item.booking_no || "").trim();
+        return (bookingId && itemBookingId === bookingId) || (bookingNo && itemBookingNo === bookingNo);
+      }) || null;
+
+    const cachedMatch = matchBooking(cachedBookings);
+    if (cachedMatch) {
+      return cachedMatch;
+    }
+
+    const latestBookings = await getBookings({ fresh: true });
+    const normalizedBookings = Array.isArray(latestBookings) ? latestBookings : [];
+    setCachedBookings(normalizedBookings);
+    return matchBooking(normalizedBookings);
+  }
+
+  async function handleViewBookingDetail(log) {
+    const detailKey = String(log.booking_id || log.booking_no || log.log_id || "").trim();
+    if (!detailKey || detailLoadingKey) return;
+
+    try {
+      setDetailLoadingKey(detailKey);
+      const booking = await findBookingForLog(log);
+
+      if (!booking) {
+        showError("ไม่พบรายละเอียดรายการจอง");
+        return;
+      }
+
+      const container = document.createElement("div");
+      const root = createRoot(container);
+      root.render(<BookingDetailModalContent booking={booking} />);
+
+      await Swal.fire({
+        title: booking.booking_no || "รายละเอียดรายการจอง",
+        html: container,
+        width: 760,
+        confirmButtonText: "ปิด",
+        confirmButtonColor: "#1455c8",
+        customClass: {
+          popup: "booking-detail-popup",
+        },
+        willClose: () => {
+          root.unmount();
+        },
+      });
+    } catch (err) {
+      showError(err.message || "เปิดรายละเอียดรายการจองไม่สำเร็จ");
+    } finally {
+      setDetailLoadingKey("");
+    }
+  }
+
   const activeFilterCount = [filters.keyword, filters.assignMode, filters.createdBy].filter(Boolean).length;
 
   if (isMobile) {
@@ -432,11 +574,12 @@ export default function DriverQueueLogs() {
       <div className="driver-queue-logs-mobile mt-[57px] flex w-full flex-col gap-3 pb-6">
         <MobilePageHeader
           title="ประวัติคิวคนขับ"
-          subtitle="แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบแนะนำใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด"
+          subtitle="แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด"
           actions={
             <button
               type="button"
               className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+              style={{ fontSize: 16 }}
               disabled={refreshing || loading}
               onClick={() => loadData({ refreshOnly: true })}
             >
@@ -446,14 +589,18 @@ export default function DriverQueueLogs() {
         />
 
         {loading ? (
-          <div className="driver-queue-logs-mobile-state-card">กำลังโหลดข้อมูล...</div>
+          <div className="driver-queue-logs-mobile-state-card" style={{ fontSize: 20 }}>
+            กำลังโหลดข้อมูล...
+          </div>
         ) : error ? (
-          <div className="driver-queue-logs-mobile-state-card text-red-700">{error}</div>
+          <div className="driver-queue-logs-mobile-state-card text-red-700" style={{ fontSize: 20 }}>
+            {error}
+          </div>
         ) : (
           <>
             <MobilePageSection title="คำอธิบาย" subtitle="ช่วยให้เข้าใจความหมายของแต่ละข้อมูลในตาราง">
-              <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-[14px] leading-6 text-slate-600">
-                <div>- “คนขับที่ระบบแนะนำ” คือคนขับที่ระบบเลือกตามคิว</div>
+              <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 leading-8 text-slate-600" style={{ fontSize: 20 }}>
+                <div>- “คนขับที่ระบบจัดการให้” คือคนขับที่ระบบเลือกตามคิว</div>
                 <div>- “คนขับที่เลือกจริง” คือคนขับที่ถูกมอบหมายจริง</div>
                 <div>- “คิวก่อนหน้า/คิวถัดไป” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</div>
                 <div>- “ข้ามเพราะไม่ว่าง/ติดภารกิจ” คือคนขับที่ถูกข้ามพร้อมเหตุผล</div>
@@ -469,6 +616,7 @@ export default function DriverQueueLogs() {
                   onClick={() => setIsMobileFilterOpen((current) => !current)}
                   aria-expanded={isMobileFilterOpen}
                   className="mobile-filter-button inline-flex items-center gap-1.5 border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                  style={{ fontSize: 16 }}
                 >
                   <span>{isMobileFilterOpen ? "ซ่อนตัวกรอง" : "ตัวกรอง"}</span>
                 </button>
@@ -482,8 +630,8 @@ export default function DriverQueueLogs() {
                       value={filters.keyword}
                       onChange={(value) => setFilter("keyword", value)}
                       placeholder="เลขที่จอง คนขับ เหตุผล ผู้บันทึก"
-                      labelClassName="text-[15px] font-semibold text-slate-600"
-                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      labelClassName="text-[20px] font-semibold text-slate-600"
+                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[20px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                     <FilterField
                       label="วิธีเลือก"
@@ -491,26 +639,27 @@ export default function DriverQueueLogs() {
                       onChange={(value) => setFilter("assignMode", value)}
                       as="select"
                       options={ASSIGN_MODE_OPTIONS}
-                      labelClassName="text-[15px] font-semibold text-slate-600"
-                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      labelClassName="text-[20px] font-semibold text-slate-600"
+                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[20px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                     <FilterField
                       label="ผู้บันทึก"
                       value={filters.createdBy}
                       onChange={(value) => setFilter("createdBy", value)}
                       placeholder="ค้นหาผู้บันทึก"
-                      labelClassName="text-[15px] font-semibold text-slate-600"
-                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      labelClassName="text-[20px] font-semibold text-slate-600"
+                      inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[20px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
 
                     <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="text-[13px] font-semibold text-slate-500">
+                      <span className="font-semibold text-slate-500" style={{ fontSize: 20 }}>
                         ใช้งาน {activeFilterCount || 0} ตัวกรอง
                       </span>
                       <button
                         type="button"
                         onClick={clearFilters}
                         className="mobile-action-button border border-blue-600 bg-blue-600 shadow-sm transition hover:bg-blue-700"
+                        style={{ fontSize: 16 }}
                       >
                         ล้างตัวกรอง
                       </button>
@@ -523,98 +672,110 @@ export default function DriverQueueLogs() {
             <MobilePageSection
               title="รายการบันทึกคิว"
               subtitle={`แสดง ${filteredLogs.length === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1} - ${Math.min(page * ROWS_PER_PAGE, filteredLogs.length)} จาก ${filteredLogs.length} รายการ`}
-              actions={
-                <span className="inline-flex shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                  หน้า {page} / {totalPages}
-                </span>
-              }
             >
               {filteredLogs.length === 0 ? (
-                <div className="mobile-empty-state">ไม่พบประวัติ</div>
+                <div className="mobile-empty-state" style={{ fontSize: 20 }}>
+                  ไม่พบประวัติ
+                </div>
               ) : (
                 <div className="grid gap-[10px]">
                   {pageItems.map((log, index) => {
                     const rowKey = String(log.log_id || `${page}-${index}`);
                     const isExpanded = expandedRowId === rowKey;
                     const isDeleting = deletingId === String(log.log_id || "");
+                    const isDetailLoading = detailLoadingKey === String(
+                      log.booking_id || log.booking_no || log.log_id || ""
+                    ).trim();
                     const badge = getAssignModeBadge(log.assign_mode);
                     const skippedDrivers = parseSkippedDrivers(log.skipped_drivers_json);
-                    const rowNumber = (page - 1) * ROWS_PER_PAGE + index + 1;
 
                     return (
                       <article
                         key={rowKey}
                         className={`mobile-data-card booking-mobile-card driver-queue-logs-mobile-card${isExpanded ? " is-expanded" : ""}`}
                       >
-                        <button
-                          type="button"
-                          className="driver-queue-logs-mobile-card-summary"
-                          aria-expanded={isExpanded}
-                          onClick={() => setExpandedRowId((current) => (current === rowKey ? "" : rowKey))}
-                        >
-                          <div className="booking-mobile-card-summary-index">#{rowNumber}</div>
-                          <div
-                            className="driver-queue-logs-mobile-card-date"
-                            title={formatThaiDateTime(log.created_at)}
-                          >
-                            {formatMobileShortDateTime(log.created_at)}
+                        <div className="driver-queue-logs-mobile-card-summary px-4 pb-3 pt-4">
+                          <div className="grid gap-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="text-slate-600" style={{ fontSize: 20 }}>
+                                วันที่บันทึก
+                              </div>
+                              <div className="font-semibold text-slate-900" style={{ fontSize: 20 }}>
+                                {formatMobileShortDateTime(log.created_at)}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-1">
+                              <span className="text-slate-600" style={{ fontSize: 20 }}>
+                                เลขที่จอง
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleViewBookingDetail(log)}
+                                disabled={isDetailLoading}
+                                className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-2 font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-default disabled:opacity-70"
+                                style={{ fontSize: 18, minHeight: 0 }}
+                              >
+                                <EyeIcon className="h-4 w-4" />
+                                <span>{isDetailLoading ? "กำลังเปิด..." : log.booking_no || log.booking_id || "-"}</span>
+                              </button>
+                            </div>
+
+                            <div className="grid gap-1">
+                              <span className="text-slate-600" style={{ fontSize: 20 }}>
+                                คนขับที่เลือกจริง
+                              </span>
+                              <b className="text-slate-900" style={{ fontSize: 20 }}>
+                                {log.assigned_driver_name || "-"}
+                              </b>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-slate-600" style={{ fontSize: 20 }}>
+                                วิธีเลือก
+                              </span>
+                              <span
+                                className={`inline-flex w-fit rounded-full border px-2.5 py-1 font-semibold ${badge.className}`}
+                                style={{ fontSize: 16 }}
+                              >
+                                {badge.label}
+                              </span>
+                            </div>
                           </div>
-                          <div
-                            className="driver-queue-logs-mobile-card-user"
-                            title={log.booking_no || log.booking_id || "-"}
+
+                          <button
+                            type="button"
+                            aria-expanded={isExpanded}
+                            onClick={() => setExpandedRowId((current) => (current === rowKey ? "" : rowKey))}
+                            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 shadow-sm transition hover:bg-slate-50"
+                            style={{ fontSize: 16, minHeight: 0 }}
                           >
-                            {log.booking_no || log.booking_id || "-"}
-                          </div>
-                          <div className="booking-mobile-card-summary-side">
-                            <span className={`driver-queue-logs-mobile-card-summary-badge ${badge.className}`}>
-                              {badge.label}
-                            </span>
+                            <span>{isExpanded ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}</span>
                             <ChevronDownIcon
                               className={`booking-mobile-card-expand-icon driver-queue-logs-mobile-card-expand-icon${isExpanded ? " is-expanded" : ""}`}
                             />
-                          </div>
-                        </button>
-
-                        <div className="px-4 pb-3 text-[14px] text-slate-700">
-                          <div className="font-semibold text-slate-900">{log.assigned_driver_name || "-"}</div>
-                          <div className="mt-1">{getAssignModeLabel(log.assign_mode)}</div>
+                          </button>
                         </div>
 
                         {isExpanded ? (
                           <div className="booking-mobile-card-expanded driver-queue-log-expanded-detail" id={rowKey}>
-                            <div className="driver-queue-log-detail-item">
-                              <span>วันที่บันทึก</span>
-                              <b>{formatThaiDateTime(log.created_at)}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item">
-                              <span>เลขที่จอง</span>
-                              <b>{log.booking_no || log.booking_id || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item">
-                              <span>คนขับที่ระบบแนะนำ</span>
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
+                              <span>คนขับที่ระบบจัดการให้</span>
                               <b>{log.recommended_driver_name || "-"}</b>
                             </div>
-                            <div className="driver-queue-log-detail-item">
-                              <span>คนขับที่เลือกจริง</span>
-                              <b>{log.assigned_driver_name || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item">
-                              <span>วิธีเลือก</span>
-                              <b>{getAssignModeLabel(log.assign_mode)}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item">
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
                               <span>เหตุผลการเลือก</span>
                               <b>{log.reason || "-"}</b>
                             </div>
-                            <div className="driver-queue-log-detail-item">
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
                               <span>คิวก่อนหน้า</span>
                               <b>{log.queue_before || log.queue_before_index || "-"}</b>
                             </div>
-                            <div className="driver-queue-log-detail-item">
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
                               <span>คิวถัดไป</span>
                               <b>{log.queue_after || log.queue_after_index || "-"}</b>
                             </div>
-                            <div className="driver-queue-log-detail-item">
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
                               <span>ข้ามเพราะไม่ว่าง/ติดภารกิจ</span>
                               <div className="flex flex-wrap gap-2">
                                 {skippedDrivers.length === 0 ? (
@@ -623,7 +784,8 @@ export default function DriverQueueLogs() {
                                   skippedDrivers.map((item) => (
                                     <span
                                       key={`${rowKey}-${item.id}`}
-                                      className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[12px] font-semibold leading-5 text-slate-700"
+                                      className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-semibold leading-6 text-slate-700"
+                                      style={{ fontSize: 16 }}
                                       title={`${item.name}: ${item.reason}`}
                                     >
                                       {item.name}: {item.reason}
@@ -632,7 +794,7 @@ export default function DriverQueueLogs() {
                                 )}
                               </div>
                             </div>
-                            <div className="driver-queue-log-detail-item">
+                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
                               <span>ผู้บันทึก</span>
                               <b>{log.created_by || "-"}</b>
                             </div>
@@ -643,6 +805,7 @@ export default function DriverQueueLogs() {
                                 onClick={() => handleDeleteLog(log)}
                                 disabled={isDeleting}
                                 className="driver-queue-log-delete-button"
+                                style={{ fontSize: 16 }}
                               >
                                 {isDeleting ? "กำลังลบ..." : "ลบรายการ"}
                               </button>
@@ -655,10 +818,15 @@ export default function DriverQueueLogs() {
                 </div>
               )}
 
-              <Pagination page={page} totalPages={totalPages} totalItems={filteredLogs.length} onChangePage={(nextPage) => {
-                setPage(nextPage);
-                setExpandedRowId("");
-              }} />
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={filteredLogs.length}
+                onChangePage={(nextPage) => {
+                  setPage(nextPage);
+                  setExpandedRowId("");
+                }}
+              />
             </MobilePageSection>
           </>
         )}
@@ -667,14 +835,19 @@ export default function DriverQueueLogs() {
   }
 
   return (
-    <div>
+    <div style={{ fontSize: 20 }}>
       <div className="page-header">
         <div>
           <h2>ประวัติคิวคนขับ</h2>
-          <p>แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบแนะนำใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด</p>
+          <p>แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด</p>
         </div>
 
-        <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
+        <button
+          type="button"
+          disabled={refreshing || loading}
+          onClick={() => loadData({ refreshOnly: true })}
+          style={{ fontSize: 16 }}
+        >
           {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
         </button>
       </div>
@@ -689,12 +862,17 @@ export default function DriverQueueLogs() {
           <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="text-[20px] font-bold text-slate-900">ตัวกรองข้อมูล</h3>
-                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+                  ตัวกรองข้อมูล
+                </h3>
+                <p className="mt-1 leading-8 text-slate-500" style={{ fontSize: 20 }}>
                   ค้นหาตามเลขที่จอง คนขับ เหตุผล หรือผู้บันทึก
                 </p>
               </div>
-              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-slate-600 shadow-sm">
+              <div
+                className="inline-flex items-center rounded-full bg-white px-3 py-1 font-semibold text-slate-600 shadow-sm"
+                style={{ fontSize: 20 }}
+              >
                 ใช้งาน {activeFilterCount || 0} ตัวกรอง
               </div>
             </div>
@@ -725,7 +903,8 @@ export default function DriverQueueLogs() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-[14px] font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+                style={{ fontSize: 16 }}
               >
                 ล้างตัวกรอง
               </button>
@@ -735,13 +914,12 @@ export default function DriverQueueLogs() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="text-[20px] font-bold text-slate-900">รายการบันทึกคิว</h3>
-                <p className="mt-1 text-[14px] leading-6 text-slate-500">
-                  ดูว่าแต่ละรายการจอง ระบบแนะนำใคร เลือกจริงเป็นใคร และมีการข้ามคิวคนใดบ้าง
+                <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+                  รายการบันทึกคิว
+                </h3>
+                <p className="mt-1 leading-8 text-slate-500" style={{ fontSize: 20 }}>
+                  ดูว่าแต่ละรายการจอง ระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวคนใดบ้าง
                 </p>
-              </div>
-              <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[13px] font-semibold text-slate-700">
-                แสดง {filteredLogs.length === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1} - {Math.min(page * ROWS_PER_PAGE, filteredLogs.length)} จาก {filteredLogs.length} รายการ
               </div>
             </div>
 
@@ -749,63 +927,93 @@ export default function DriverQueueLogs() {
               <table className="min-w-[1250px]">
                 <thead>
                   <tr>
-                    <th className="whitespace-nowrap">วันที่บันทึก</th>
-                    <th className="whitespace-nowrap">เลขที่จอง</th>
-                    <th className="whitespace-nowrap">คนขับที่ระบบแนะนำ</th>
-                    <th className="whitespace-nowrap">คนขับที่เลือกจริง</th>
-                    <th className="whitespace-nowrap">วิธีเลือก</th>
-                    <th className="whitespace-nowrap">เหตุผลการเลือก</th>
-                    <th className="whitespace-nowrap">คิวก่อนหน้า</th>
-                    <th className="whitespace-nowrap">คิวถัดไป</th>
-                    <th className="whitespace-nowrap">ข้ามเพราะไม่ว่าง/ติดภารกิจ</th>
-                    <th className="whitespace-nowrap">ผู้บันทึก</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>วันที่บันทึก</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>เลขที่จอง</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คนขับที่ระบบจัดการให้</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คนขับที่เลือกจริง</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>วิธีเลือก</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>เหตุผลการเลือก</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวก่อนหน้า</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวถัดไป</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>ข้ามเพราะไม่ว่าง/ติดภารกิจ</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>ผู้บันทึก</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.length === 0 ? (
                     <tr>
-                      <td colSpan="10">ไม่พบประวัติ</td>
+                      <td colSpan="10" style={{ fontSize: 20 }}>ไม่พบประวัติ</td>
                     </tr>
                   ) : (
                     pageItems.map((log, index) => {
                       const badge = getAssignModeBadge(log.assign_mode);
                       const skippedDrivers = parseSkippedDrivers(log.skipped_drivers_json);
                       const rowKey = String(log.log_id || `${page}-${index}`);
+                      const isDetailLoading = detailLoadingKey === String(
+                        log.booking_id || log.booking_no || log.log_id || ""
+                      ).trim();
 
                       return (
                         <tr key={rowKey}>
-                          <td className="whitespace-nowrap align-top">{formatThaiDateTime(log.created_at)}</td>
-                          <td className="whitespace-nowrap align-top">{log.booking_no || log.booking_id || "-"}</td>
-                          <td className="align-top">
-                            <div className="min-w-[160px] font-semibold text-slate-900">{log.recommended_driver_name || "-"}</div>
+                          <td className="whitespace-nowrap align-top" style={{ fontSize: 20 }}>
+                            {formatThaiDateTime(log.created_at)}
+                          </td>
+                          <td className="whitespace-nowrap align-top" style={{ fontSize: 20 }}>
+                            <button
+                              type="button"
+                              onClick={() => handleViewBookingDetail(log)}
+                              disabled={isDetailLoading}
+                              className="inline-flex min-h-0 w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-2 font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-default disabled:opacity-70"
+                              style={{ fontSize: 18 }}
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                              <span>{isDetailLoading ? "กำลังเปิด..." : log.booking_no || log.booking_id || "-"}</span>
+                            </button>
                           </td>
                           <td className="align-top">
-                            <div className="min-w-[160px] font-semibold text-slate-900">{log.assigned_driver_name || "-"}</div>
+                            <div className="min-w-[160px] font-semibold text-slate-900" style={{ fontSize: 20 }}>
+                              {log.recommended_driver_name || "-"}
+                            </div>
+                          </td>
+                          <td className="align-top">
+                            <div className="min-w-[160px] font-semibold text-slate-900" style={{ fontSize: 20 }}>
+                              {log.assigned_driver_name || "-"}
+                            </div>
                           </td>
                           <td className="align-top">
                             <div className="flex min-w-[135px] flex-col gap-2">
-                              <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[12px] font-semibold ${badge.className}`}>
+                              <span
+                                className={`inline-flex w-fit rounded-full border px-2.5 py-1 font-semibold ${badge.className}`}
+                                style={{ fontSize: 16 }}
+                              >
                                 {badge.label}
                               </span>
-                              <span className="text-[13px] leading-5 text-slate-600">{getAssignModeLabel(log.assign_mode)}</span>
+                              <span className="leading-7 text-slate-600" style={{ fontSize: 20 }}>
+                                {getAssignModeLabel(log.assign_mode)}
+                              </span>
                             </div>
                           </td>
                           <td className="align-top">
-                            <div className="min-w-[180px] whitespace-normal break-words text-[14px] leading-6 text-slate-700">
+                            <div className="min-w-[180px] whitespace-normal break-words leading-8 text-slate-700" style={{ fontSize: 20 }}>
                               {log.reason || "-"}
                             </div>
                           </td>
-                          <td className="whitespace-nowrap align-top text-center">{log.queue_before || log.queue_before_index || "-"}</td>
-                          <td className="whitespace-nowrap align-top text-center">{log.queue_after || log.queue_after_index || "-"}</td>
+                          <td className="whitespace-nowrap align-top text-center" style={{ fontSize: 20 }}>
+                            {log.queue_before || log.queue_before_index || "-"}
+                          </td>
+                          <td className="whitespace-nowrap align-top text-center" style={{ fontSize: 20 }}>
+                            {log.queue_after || log.queue_after_index || "-"}
+                          </td>
                           <td className="align-top">
                             <div className="flex min-w-[260px] flex-wrap gap-2">
                               {skippedDrivers.length === 0 ? (
-                                <span className="text-[14px] text-slate-500">-</span>
+                                <span className="text-slate-500" style={{ fontSize: 20 }}>-</span>
                               ) : (
                                 skippedDrivers.map((item) => (
                                   <span
                                     key={`${rowKey}-${item.id}`}
-                                    className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[12px] font-semibold leading-5 text-slate-700"
+                                    className="inline-flex max-w-full rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 font-semibold leading-6 text-slate-700"
+                                    style={{ fontSize: 16 }}
                                     title={`${item.name}: ${item.reason}`}
                                   >
                                     {item.name}: {item.reason}
@@ -815,7 +1023,7 @@ export default function DriverQueueLogs() {
                             </div>
                           </td>
                           <td className="align-top">
-                            <div className="min-w-[120px] whitespace-normal break-words text-[14px] leading-6 text-slate-700">
+                            <div className="min-w-[120px] whitespace-normal break-words leading-8 text-slate-700" style={{ fontSize: 20 }}>
                               {log.created_by || "-"}
                             </div>
                           </td>

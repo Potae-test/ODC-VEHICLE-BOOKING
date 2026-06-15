@@ -9091,3 +9091,80 @@ label {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+@media (max-width: 768px) {
+  .driver-unavailable-log-card {
+    padding: 14px;
+    border-radius: 18px;
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .driver-unavailable-log-driver {
+    font-size: 15px !important;
+    line-height: 1.3;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .driver-unavailable-log-card .min-w-0 > div:last-child {
+    margin-top: 2px !important;
+    font-size: 11px !important;
+    line-height: 1.25;
+  }
+
+  .driver-unavailable-log-badge {
+    padding: 4px 8px !important;
+    font-size: 10px !important;
+    line-height: 1.2;
+  }
+
+  .driver-unavailable-log-summary {
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+
+  .driver-unavailable-log-summary > div:first-child {
+    font-size: 11px !important;
+    line-height: 1.25;
+  }
+
+  .driver-unavailable-log-summary-value {
+    font-size: 13px !important;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  .driver-unavailable-log-card > div:last-child {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+    font-size: 13px !important;
+    line-height: 1.4;
+    color: #334155;
+  }
+
+  .driver-unavailable-log-card > div:last-child > div {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 6px 10px;
+    align-items: start;
+    min-width: 0;
+  }
+
+  .driver-unavailable-log-card > div:last-child span:first-child {
+    font-size: 12px !important;
+    font-weight: 700;
+    color: #64748b !important;
+    line-height: 1.35;
+  }
+
+  .driver-unavailable-log-card > div:last-child span:last-child {
+    min-width: 0;
+    font-size: 13px !important;
+    line-height: 1.4;
+    color: #0f172a;
+    font-weight: 700;
+    word-break: break-word;
+  }
+}
