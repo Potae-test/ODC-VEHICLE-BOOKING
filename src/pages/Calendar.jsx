@@ -281,6 +281,21 @@ const THAI_MONTH_LABELS = [
   "ธันวาคม",
 ];
 
+const THAI_SHORT_MONTH_LABELS = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
 const EN_MONTH_LABELS = [
   "January",
   "February",
@@ -299,6 +314,50 @@ const EN_MONTH_LABELS = [
 function getThaiHolidayKey(date) {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
   return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function formatCalendarDateTimeWithTimeText(value) {
+  if (!value) return "-";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  const day = date.getDate();
+  const monthLabel = THAI_SHORT_MONTH_LABELS[date.getMonth()];
+  const year = date.getFullYear() + 543;
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${day} ${monthLabel} ${year} เวลา ${hours}:${minutes} น.`;
+}
+
+function captureCalendarScrollPosition() {
+  const mainContent = document.querySelector(".main-content");
+  return {
+    windowX: window.scrollX || 0,
+    windowY: window.scrollY || 0,
+    documentTop: document.documentElement?.scrollTop || 0,
+    bodyTop: document.body?.scrollTop || 0,
+    mainContentTop: mainContent?.scrollTop || 0,
+  };
+}
+
+function restoreCalendarScrollPosition(position) {
+  const mainContent = document.querySelector(".main-content");
+
+  if (mainContent) {
+    mainContent.scrollTop = position.mainContentTop;
+  }
+
+  if (document.documentElement) {
+    document.documentElement.scrollTop = position.documentTop;
+  }
+
+  if (document.body) {
+    document.body.scrollTop = position.bodyTop;
+  }
+
+  window.scrollTo(position.windowX, position.windowY);
 }
 
 function normalizeHolidayDateKey(value) {
@@ -1122,6 +1181,16 @@ export default function CalendarPage() {
     return availableDrivers;
   }, [driverUnavailableRecords, users]);
 
+  const activeUnavailableRecords = useMemo(() => {
+    return driverUnavailableRecords
+      .filter((record) => normalizeStatus(record.status) === "ACTIVE")
+      .sort((a, b) => {
+        const timeA = new Date(a.start_datetime || 0).getTime();
+        const timeB = new Date(b.start_datetime || 0).getTime();
+        return timeA - timeB;
+      });
+  }, [driverUnavailableRecords]);
+
   const activeQueueRows = useMemo(() => {
     return [...driverQueueRows]
       .filter(
@@ -1218,21 +1287,24 @@ export default function CalendarPage() {
       const displayStart = resource.original_start_datetime || resource.start_datetime;
       const displayEnd = resource.original_end_datetime || resource.end_datetime;
       await Swal.fire({
-        title: "รายละเอียดวันไม่รับงาน",
+        title: "รายละเอียดการปฏิบัติงาน",
         html: `
           <div style="text-align:left;font-size:25px;line-height:1.7;color:#1f2937">
             <div><b>คนขับ:</b> ${resource.driver_name || "-"}</div>
             <div><b>ประเภท:</b> ${getStatusBadgeHtml(meta)}</div>
             <div><b>เหตุผล:</b> ${resource.reason || "-"}</div>
-            <div><b>เวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
-            <div><b>เวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
-            <div><b>สถานะ:</b> ${normalizeStatus(resource.status)}</div>
+            <div><b>ตั้งแต่:</b> ${formatCalendarDateTimeWithTimeText(displayStart)}</div>
+            <div><b>ถึง:</b> ${formatCalendarDateTimeWithTimeText(displayEnd)}</div>
           </div>
         `,
         confirmButtonText: "ปิด",
         confirmButtonColor: "#334155",
         width: 560,
         buttonsStyling: true,
+        heightAuto: false,
+        scrollbarPadding: false,
+        returnFocus: false,
+        focusConfirm: false,
       });
       return;
     }
@@ -1247,8 +1319,8 @@ export default function CalendarPage() {
       html: `
         <div style="text-align:left;font-size:25px;line-height:1.7;color:#1f2937">
           <div><b>ผู้จอง:</b> ${booking.requester_name || "-"}</div>
-          <div><b>วันเวลาเริ่ม:</b> ${formatThaiDateTime(displayStart)}</div>
-          <div><b>วันเวลาสิ้นสุด:</b> ${formatThaiDateTime(displayEnd)}</div>
+          <div><b>ตั้งแต่:</b> ${formatThaiDateTime(displayStart)}</div>
+          <div><b>ถึง:</b> ${formatThaiDateTime(displayEnd)}</div>
           <div><b>ปลายทาง:</b> ${booking.destination || "-"}</div>
           ${FEATURES.vehicleModule ? `<div><b>รถ:</b> ${getVehicleLabel(booking, vehicleMap)}</div>` : ""}
           <div><b>คนขับ:</b> ${getDriverLabel(booking)}</div>
@@ -1260,14 +1332,27 @@ export default function CalendarPage() {
       confirmButtonColor: "#334155",
       width: 560,
       buttonsStyling: true,
+      heightAuto: false,
+      scrollbarPadding: false,
+      returnFocus: false,
+      focusConfirm: false,
     });
   }, [vehicleMap]);
 
   const handleFullCalendarEventClick = useCallback(
-    (info) => {
+    async (info) => {
+      info.jsEvent?.preventDefault();
+      info.jsEvent?.stopPropagation();
       const originalEvent = info.event.extendedProps?.originalEvent;
       if (!originalEvent) return;
-      handleSelectEvent(originalEvent);
+      const scrollPosition = captureCalendarScrollPosition();
+      await handleSelectEvent(originalEvent);
+      requestAnimationFrame(() => {
+        restoreCalendarScrollPosition(scrollPosition);
+        requestAnimationFrame(() => {
+          restoreCalendarScrollPosition(scrollPosition);
+        });
+      });
     },
     [handleSelectEvent]
   );
@@ -1552,6 +1637,34 @@ export default function CalendarPage() {
                   ) : (
                     <span className="text-[17px] text-slate-500 sm:text-[22px]">
                       ไม่มีคนขับที่พร้อมรับงานในตอนนี้
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3 sm:gap-2.5 sm:px-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[17px] font-bold text-slate-800 sm:text-[22px]">
+                      รายการปฏิบัติงาน
+                    </span>
+                    <span className="status red calendar-summary-chip shrink-0 border border-red-200 text-[13px] font-bold sm:text-[18px]">
+                      {activeUnavailableRecords.length} รายการ
+                    </span>
+                  </div>
+
+                  {activeUnavailableRecords.length > 0 ? (
+                    <div className="grid gap-2">
+                      {activeUnavailableRecords.map((record) => (
+                        <div
+                          key={record.unavailable_id || `${record.driver_user_id || ""}-${record.start_datetime || ""}`}
+                          className="rounded-2xl border border-red-100 bg-white px-3 py-2.5 text-[15px] leading-[1.55] text-slate-700 shadow-sm sm:px-4 sm:text-[19px]"
+                        >
+                          {`คนขับ: ${record.driver_name || "-"} | ${normalizeUnavailableType(record.type) || "-"} | ตั้งแต่ ${formatCalendarDateTimeWithTimeText(record.start_datetime)} | ถึง ${formatCalendarDateTimeWithTimeText(record.end_datetime)}`}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[16px] text-slate-500 sm:text-[20px]">
+                      ไม่มีรายการไม่พร้อมปฏิบัติงานที่กำลังใช้งานอยู่
                     </span>
                   )}
                 </div>

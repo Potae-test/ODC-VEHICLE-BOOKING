@@ -734,6 +734,16 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
   const fcmResponseAt = new Date().toISOString();
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.warn("[push-debug] FCM send failed", {
+      token: maskedToken,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+      notification_created_at: notificationCreatedAt,
+      push_send_started_at: pushSendStartedAt,
+      status: response.status,
+      title: content.title,
+      message: content.body,
+    });
     console.warn("[push] send fail", {
       token: maskedToken,
       type: notification.type || "",
@@ -764,6 +774,16 @@ async function sendFcmPush(env: Env, fcmToken: string, notification: WorkerNotif
     throw error;
   }
 
+  console.log("[push-debug] FCM send success", {
+    token: maskedToken,
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+    notification_created_at: notificationCreatedAt,
+    push_send_started_at: pushSendStartedAt,
+    fcm_response_at: fcmResponseAt,
+    title: content.title,
+    message: content.body,
+  });
   console.log("[push] firebase send ok", {
     token: maskedToken,
     type: notification.type || "",
@@ -854,6 +874,16 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
   const fcmResponseAt = new Date().toISOString();
   if (!response.ok) {
     const payloadText = await response.text().catch(() => "");
+    console.warn("[push-debug] WebPush send failed", {
+      endpoint: previewTarget(endpoint, { head: 42, tail: 14 }),
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+      notification_created_at: notificationCreatedAt,
+      push_send_started_at: pushSendStartedAt,
+      status: response.status,
+      title: content.title,
+      message: content.body,
+    });
     const error = new Error(`Web Push send failed with status ${response.status}`) as Error & {
       status?: number;
       code?: string;
@@ -879,6 +909,16 @@ async function sendWebPush(env: Env, subscription: PushSubscriptionRecord, notif
     throw error;
   }
 
+  console.log("[push-debug] WebPush send success", {
+    endpoint: previewTarget(endpoint, { head: 42, tail: 14 }),
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+    notification_created_at: notificationCreatedAt,
+    push_send_started_at: pushSendStartedAt,
+    fcm_response_at: fcmResponseAt,
+    title: content.title,
+    message: content.body,
+  });
   console.log("[push] web push send ok", {
     endpoint,
     target_endpoint: targetEndpoint,
@@ -969,6 +1009,16 @@ async function sendPushNotificationBatch(
     type: notification.type || "",
     booking_id: notification.booking_id || "",
     notification_created_at: String(notification.created_at || "").trim(),
+  });
+  console.log("[push-debug] subscription count", {
+    user_id: targetUserId,
+    notification_id: String(notification.notification_id || "").trim(),
+    type: notification.type || "",
+    booking_id: notification.booking_id || "",
+    subscription_count: subscriptionsBeforeDedupe,
+    total_subscription_count: subscriptionsAfterDedupe,
+    fcm_count: uniqueFcmSubscriptions.length,
+    web_push_count: uniqueWebPushSubscriptions.length,
   });
   console.log(`${logPrefix} subscriptions before dedupe`, {
     user_id: targetUserId,
@@ -1223,6 +1273,10 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
   const targetUserIds = new Set<string>();
   const sentNotificationKeys = new Set<string>();
 
+  console.log("[push-debug] push dispatch started", {
+    notification_count: Array.isArray(notifications) ? notifications.length : 0,
+  });
+
   for (const notification of notifications) {
     const targetUserId = String(notification?.target_user_id || "").trim();
     const targetRole = String(notification?.target_role || "").trim().toUpperCase();
@@ -1261,6 +1315,16 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
       type: notification.type || "",
       booking_id: notification.booking_id || "",
     });
+    console.log("[push-debug] dispatch notification", {
+      notification_id: String(notification.notification_id || "").trim(),
+      target_user_id: targetUserId,
+      target_role: targetRole,
+      resolved_target_user_ids: resolvedTargetUserIds,
+      type: notification.type || "",
+      booking_id: notification.booking_id || "",
+      title: String(notification.title || "").trim(),
+      message: String(notification.message || "").trim(),
+    });
 
     for (const resolvedUserId of resolvedTargetUserIds) {
       try {
@@ -1284,6 +1348,9 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
 }
 
 async function maybeDeliverCreatedNotifications(env: Env, response: SheetResponse) {
+  console.log("[push-debug] created notifications received", {
+    created_notification_count: response.created_notifications?.length || 0,
+  });
   console.log(
     "[push] created_notifications:",
     response.created_notifications?.length || 0

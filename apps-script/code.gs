@@ -1050,6 +1050,16 @@ function appendNotificationRecord_(data) {
 
   appendSheetRow(sheet, row);
   trackCreatedNotification_(record);
+  console.log("[push-debug] notification created", {
+    notification_id: record.notification_id,
+    target_user_id: record.target_user_id,
+    target_role: record.target_role,
+    category: record.category,
+    title: record.title,
+    type: record.type,
+    booking_id: record.booking_id,
+    created_at: record.created_at,
+  });
   return record;
 }
 
@@ -1060,6 +1070,12 @@ function buildNotificationMessageForBooking_(booking, fallbackMessage) {
 function createRoleNotifications_(roles, payload) {
   (roles || []).forEach((role) => {
     try {
+      console.log("[push-debug] createRoleNotifications start", {
+        target_role: normalizeRoleValue_(role),
+        title: String(payload && payload.title || "").trim(),
+        type: String(payload && payload.type || "").trim(),
+        booking_id: String(payload && payload.booking_id || "").trim(),
+      });
       appendNotificationRecord_({
         ...payload,
         target_user_id: "",
@@ -4942,6 +4958,7 @@ function createDriverUnavailable(data) {
       cancelled_at: "",
       cancelled_by: "",
     },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -5057,6 +5074,7 @@ function updateDriverUnavailable(data) {
     success: true,
     message: "Update driver unavailable success",
     data: newValue,
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
@@ -5135,6 +5153,7 @@ function cancelDriverUnavailable(data) {
     success: true,
     message: "Cancel driver unavailable success",
     data: newValue,
+    created_notifications: getCreatedNotifications_(),
   });
 }
 
