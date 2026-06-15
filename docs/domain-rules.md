@@ -14,6 +14,7 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Booking and calendar visibility stay global across users; do not filter shared lists by `requester_user_id`.
 - Do not overwrite `start_datetime` or `end_datetime`.
 - Use `actual_start_datetime` and `actual_return_datetime` for real usage timestamps.
+- Before destructive or closing actions such as backdated completion, central-office completion, and cancellation, the backend must re-read the latest booking row and reject the action with `รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล` when the latest status is already `COMPLETED` or `CANCELLED`, without writing logs, notifications, or row updates.
 - The `CENTRAL_VEHICLE` flow is a direct `PENDING` -> `COMPLETED` transition for central office usage, must assign driver `U007`, must not create active driver work, and must not move the queue pointer.
 - New bookings created by a logged-in `USER` must write the real owner into `requester_user_id`, `requester_name`, `department`, and `phone`, and user-specific notifications must target that owner id.
 

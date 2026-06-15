@@ -80,35 +80,143 @@ function doPost(e) {
     const body = JSON.parse(e && e.postData ? e.postData.contents || "{}" : "{}");
     const action = body.action;
 
-    if (action === "createVehicle") return createVehicle(body.data);
+    if (action === "createVehicle") {
+      var denied = requireActionPermission_(body.data, "vehicles_create");
+      if (denied) return denied;
+      return createVehicle(body.data);
+    }
     if (action === "createNotification") return createNotification(body.data);
-    if (action === "createBooking") return createBooking(body.data);
-    if (action === "updateBooking") return updateBooking(body.data);
-    if (action === "approveBooking") return approveBooking(body.data);
-    if (action === "assignCentralVehicle") return assignCentralVehicle(body.data);
-    if (action === "startTrip") return startTrip(body.data);
-    if (action === "completeTrip") return completeTrip(body.data);
-    if (action === "backdate_complete_booking") return backdateCompleteBooking(body.data);
-    if (action === "driverCancelJob") return driverCancelJob(body.data);
-    if (action === "requestDriverCancelJob") return requestDriverCancelJob(body.data);
-    if (action === "withdrawDriverCancelRequest") return withdrawDriverCancelRequest(body.data);
-    if (action === "reviewDriverCancelRequest") return reviewDriverCancelRequest(body.data);
-    if (action === "cancelBooking") return cancelBooking(body.data);
+    if (action === "createBooking") {
+      var denied = requireActionPermission_(body.data, "bookings_create");
+      if (denied) return denied;
+      return createBooking(body.data);
+    }
+    if (action === "updateBooking") {
+      var denied = requireActionPermission_(body.data, "bookings_edit");
+      if (denied) return denied;
+      return updateBooking(body.data);
+    }
+    if (action === "approveBooking") {
+      var denied = requireActionPermission_(body.data, "bookings_approve");
+      if (denied) return denied;
+      return approveBooking(body.data);
+    }
+    if (action === "assignCentralVehicle") {
+      var denied = requireActionPermission_(body.data, "bookings_assign_central_vehicle");
+      if (denied) return denied;
+      return assignCentralVehicle(body.data);
+    }
+    if (action === "startTrip") {
+      var denied = requireActionPermission_(body.data, "driver_jobs_start");
+      if (denied) return denied;
+      return startTrip(body.data);
+    }
+    if (action === "completeTrip") {
+      var denied = requireActionPermission_(body.data, "driver_jobs_complete");
+      if (denied) return denied;
+      return completeTrip(body.data);
+    }
+    if (action === "backdate_complete_booking") {
+      var denied = requireActionPermission_(body.data, "bookings_backdate_complete");
+      if (denied) return denied;
+      return backdateCompleteBooking(body.data);
+    }
+    if (action === "driverCancelJob") {
+      var denied = requireActionPermission_(body.data, "driver_jobs_complete");
+      if (denied) return denied;
+      return driverCancelJob(body.data);
+    }
+    if (action === "requestDriverCancelJob") {
+      var denied = requireActionPermission_(body.data, "driver_jobs_complete");
+      if (denied) return denied;
+      return requestDriverCancelJob(body.data);
+    }
+    if (action === "withdrawDriverCancelRequest") {
+      var denied = requireActionPermission_(body.data, "driver_jobs_complete");
+      if (denied) return denied;
+      return withdrawDriverCancelRequest(body.data);
+    }
+    if (action === "reviewDriverCancelRequest") {
+      var denied = requireActionPermission_(body.data, "bookings_approve");
+      if (denied) return denied;
+      return reviewDriverCancelRequest(body.data);
+    }
+    if (action === "cancelBooking") {
+      var denied = requireActionPermission_(body.data, "bookings_cancel");
+      if (denied) return denied;
+      return cancelBooking(body.data);
+    }
     if (action === "loginUser") return loginUser(body.data);
-    if (action === "createDriver") return createDriver(body.data);
-    if (action === "updateDriverStatus") return updateDriverStatus(body.data);
-    if (action === "createUser") return createUser(body.data);
-    if (action === "updateUser") return updateUser(body.data);
-    if (action === "resetUserPassword") return resetUserPassword(body.data);
-    if (action === "updateVehicle") return updateVehicle(body.data);
-    if (action === "deleteVehicle") return deleteVehicle(body.data);
-    if (action === "disableUser") return disableUser(body.data);
-    if (action === "deleteUser") return deleteUser(body.data);
-    if (action === "updateDriver") return updateDriver(body.data);
-    if (action === "deleteDriver") return deleteDriver(body.data);
-    if (action === "createDriverUnavailable") return createDriverUnavailable(body.data);
-    if (action === "updateDriverUnavailable") return updateDriverUnavailable(body.data);
-    if (action === "cancelDriverUnavailable") return cancelDriverUnavailable(body.data);
+    if (action === "createDriver") {
+      var denied = requireActionPermission_(body.data, "drivers_create");
+      if (denied) return denied;
+      return createDriver(body.data);
+    }
+    if (action === "updateDriverStatus") {
+      var denied = requireActionPermission_(body.data, "drivers_edit");
+      if (denied) return denied;
+      return updateDriverStatus(body.data);
+    }
+    if (action === "createUser") {
+      var denied = requireActionPermission_(body.data, "users_create");
+      if (denied) return denied;
+      return createUser(body.data);
+    }
+    if (action === "updateUser") {
+      var denied = requireActionPermission_(body.data, "users_edit");
+      if (denied) return denied;
+      return updateUser(body.data);
+    }
+    if (action === "resetUserPassword") {
+      var denied = requireActionPermission_(body.data, "users_edit");
+      if (denied) return denied;
+      return resetUserPassword(body.data);
+    }
+    if (action === "updateVehicle") {
+      var denied = requireActionPermission_(body.data, "vehicles_edit");
+      if (denied) return denied;
+      return updateVehicle(body.data);
+    }
+    if (action === "deleteVehicle") {
+      var denied = requireActionPermission_(body.data, "vehicles_delete");
+      if (denied) return denied;
+      return deleteVehicle(body.data);
+    }
+    if (action === "disableUser") {
+      var denied = requireActionPermission_(body.data, "users_delete");
+      if (denied) return denied;
+      return disableUser(body.data);
+    }
+    if (action === "deleteUser") {
+      var denied = requireActionPermission_(body.data, "users_delete");
+      if (denied) return denied;
+      return deleteUser(body.data);
+    }
+    if (action === "updateDriver") {
+      var denied = requireActionPermission_(body.data, "drivers_edit");
+      if (denied) return denied;
+      return updateDriver(body.data);
+    }
+    if (action === "deleteDriver") {
+      var denied = requireActionPermission_(body.data, "drivers_delete");
+      if (denied) return denied;
+      return deleteDriver(body.data);
+    }
+    if (action === "createDriverUnavailable") {
+      var denied = requireActionPermission_(body.data, "driver_unavailable_create");
+      if (denied) return denied;
+      return createDriverUnavailable(body.data);
+    }
+    if (action === "updateDriverUnavailable") {
+      var denied = requireActionPermission_(body.data, "driver_unavailable_edit");
+      if (denied) return denied;
+      return updateDriverUnavailable(body.data);
+    }
+    if (action === "cancelDriverUnavailable") {
+      var denied = requireActionPermission_(body.data, "driver_unavailable_cancel");
+      if (denied) return denied;
+      return cancelDriverUnavailable(body.data);
+    }
     if (action === "checkDriverUnavailable") return checkDriverUnavailable(body.data);
     if (action === "thai_holidays" || action === "getThaiHolidays") {
       return jsonOutput({
@@ -116,14 +224,42 @@ function doPost(e) {
         data: getThaiHolidays(),
       });
     }
-    if (action === "updateDriverQueue") return updateDriverQueue(body.data);
-    if (action === "updateDriverQueueMaster") return updateDriverQueueMaster(body.data);
-    if (action === "deleteDriverQueueLog") return deleteDriverQueueLog(body.data || body);
-    if (action === "resetDriverQueueState") return resetDriverQueueState(body.data);
-    if (action === "resetDriverQueuePointer") return resetDriverQueuePointer(body.data);
-    if (action === "setCurrentDriverQueuePointer") return setCurrentDriverQueuePointer(body.data);
+    if (action === "updateDriverQueue") {
+      var denied = requireActionPermission_(body.data, "driver_queue_manage");
+      if (denied) return denied;
+      return updateDriverQueue(body.data);
+    }
+    if (action === "updateDriverQueueMaster") {
+      var denied = requireActionPermission_(body.data, "driver_queue_manage");
+      if (denied) return denied;
+      return updateDriverQueueMaster(body.data);
+    }
+    if (action === "deleteDriverQueueLog") {
+      var denied = requireActionPermission_(body.data || body, "driver_queue_reset");
+      if (denied) return denied;
+      return deleteDriverQueueLog(body.data || body);
+    }
+    if (action === "resetDriverQueueState") {
+      var denied = requireActionPermission_(body.data, "driver_queue_reset");
+      if (denied) return denied;
+      return resetDriverQueueState(body.data);
+    }
+    if (action === "resetDriverQueuePointer") {
+      var denied = requireActionPermission_(body.data, "driver_queue_reset");
+      if (denied) return denied;
+      return resetDriverQueuePointer(body.data);
+    }
+    if (action === "setCurrentDriverQueuePointer") {
+      var denied = requireActionPermission_(body.data, "driver_queue_manage");
+      if (denied) return denied;
+      return setCurrentDriverQueuePointer(body.data);
+    }
     if (action === "recommendDriverForBooking") return recommendDriverForBooking(body.data);
-    if (action === "confirmDriverQueueAssignment") return confirmDriverQueueAssignment(body.data);
+    if (action === "confirmDriverQueueAssignment") {
+      var denied = requireActionPermission_(body.data, "driver_queue_manage");
+      if (denied) return denied;
+      return confirmDriverQueueAssignment(body.data);
+    }
     if (action === "markNotificationRead") return markNotificationRead(body.data);
     if (action === "markAllNotificationsRead") return markAllNotificationsRead(body.data);
     if (action === "savePushSubscription") return savePushSubscription(body.data);
@@ -131,7 +267,11 @@ function doPost(e) {
     if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data || body);
     if (action === "sendBookingReminderNotifications1Hour") return sendBookingReminderNotifications1Hour(body.data || body);
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
-    if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") return deleteBookingCancellationHistory(body.data || body);
+    if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") {
+      var denied = requireActionPermission_(body.data || body, "bookings_delete");
+      if (denied) return denied;
+      return deleteBookingCancellationHistory(body.data || body);
+    }
   
     return jsonOutput({
       success: false,
@@ -265,6 +405,173 @@ function verifyPasswordHash_(inputPassword, storedHash) {
   const actualHash = sha256Hex_(salt + ":" + String(inputPassword || ""));
 
   return actualHash === expectedHash;
+}
+
+function normalizeRole_(role) {
+  return String(role || "").trim().toUpperCase();
+}
+
+function getPayloadPermissionIds_(data) {
+  const raw =
+    data && (
+      data.current_user_permissions ||
+      data.current_permissions ||
+      data.permissions ||
+      []
+    );
+
+  if (Array.isArray(raw)) {
+    return raw.map(function (item) {
+      return String(item || "").trim();
+    }).filter(Boolean);
+  }
+
+  if (typeof raw === "string") {
+    return raw.split(",").map(function (item) {
+      return String(item || "").trim();
+    }).filter(Boolean);
+  }
+
+  return [];
+}
+
+function getUserRoleFromUsersSheet_(userId) {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return "";
+
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  if (!sheet) return "";
+
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const userIdCol = headers.indexOf("user_id");
+  const roleCol = headers.indexOf("role");
+  const statusCol = headers.indexOf("status");
+
+  if (userIdCol === -1 || roleCol === -1) return "";
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowUserId = String(row[userIdCol] || "").trim();
+    const rowStatus = statusCol === -1
+      ? "ACTIVE"
+      : String(row[statusCol] || "").trim().toUpperCase();
+
+    if (rowUserId === normalizedUserId && rowStatus === "ACTIVE") {
+      return normalizeRole_(row[roleCol]);
+    }
+  }
+
+  return "";
+}
+
+function getTrustedCurrentUserId_(data) {
+  return String(data && (
+    data.current_user_id ||
+    data.currentUserId ||
+    data.user_id ||
+    ""
+  )).trim();
+}
+
+var DEFAULT_ROLE_ACTION_PERMISSIONS_ = {
+  ADMIN: ["*"],
+  STAFF: [
+    "bookings_view",
+    "bookings_detail",
+    "bookings_edit",
+    "bookings_create",
+    "bookings_create_backdated",
+    "bookings_backdate_complete",
+    "bookings_approve",
+    "bookings_assign_central_vehicle",
+    "bookings_cancel",
+    "bookings_delete",
+    "drivers_view",
+    "vehicles_view",
+    "vehicles_create",
+    "vehicles_edit",
+    "vehicles_delete",
+    "driver_summary_view",
+    "driver_jobs_view",
+    "drivers_create",
+    "drivers_edit",
+    "drivers_delete",
+    "driver_jobs_start",
+    "driver_jobs_complete",
+    "driver_summary_cards_scope",
+    "calendar_active_drivers_view",
+    "calendar_next_queue_driver_view",
+    "driver_unavailable_view",
+    "driver_unavailable_create",
+    "driver_unavailable_edit",
+    "driver_unavailable_cancel",
+    "driver_unavailable_logs_view",
+    "driver_queue_view",
+    "driver_queue_manage",
+    "driver_queue_logs_view",
+    "driver_queue_reset",
+    "booking_manual_driver_override"
+  ],
+  USER: [
+    "bookings_view",
+    "bookings_detail",
+    "bookings_create",
+    "bookings_edit",
+    "bookings_cancel",
+    "driver_jobs_complete",
+    "calendar_active_drivers_view",
+    "bookings_create_backdated",
+    "bookings_assign_central_vehicle",
+    "bookings_backdate_complete"
+  ],
+  DRIVER: [
+    "bookings_view",
+    "bookings_detail",
+    "vehicles_view",
+    "driver_summary_view",
+    "driver_jobs_view",
+    "driver_jobs_start",
+    "driver_jobs_complete",
+    "driver_summary_cards_scope",
+    "vehicles_edit",
+    "driver_unavailable_view",
+    "driver_unavailable_create",
+    "driver_unavailable_edit",
+    "driver_unavailable_cancel",
+    "bookings_approve"
+  ]
+};
+
+function hasPayloadPermission_(data, permissionId) {
+  const currentUserId = getTrustedCurrentUserId_(data);
+  const realRole = getUserRoleFromUsersSheet_(currentUserId);
+
+  if (!currentUserId || !realRole) {
+    return false;
+  }
+
+  if (realRole === "ADMIN") return true;
+
+  const payloadPermissions = getPayloadPermissionIds_(data);
+  if (payloadPermissions.length > 0) {
+    return payloadPermissions.indexOf(permissionId) !== -1;
+  }
+
+  const defaultPermissions = DEFAULT_ROLE_ACTION_PERMISSIONS_[realRole] || [];
+  return defaultPermissions.indexOf("*") !== -1 || defaultPermissions.indexOf(permissionId) !== -1;
+}
+
+function requireActionPermission_(data, permissionId) {
+  if (hasPayloadPermission_(data || {}, permissionId)) {
+    return null;
+  }
+
+  return jsonOutput({
+    success: false,
+    message: "คุณไม่มีสิทธิ์ดำเนินการนี้"
+  });
 }
 
 function getSheetByName_(sheetName) {
@@ -621,6 +928,58 @@ function ensurePushSubscriptionsSheet() {
 
   ensureSheetColumns_(sheet, headers);
   return sheet;
+}
+
+function ensureSessionsSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("Sessions");
+  const headers = [
+    "session_token",
+    "user_id",
+    "role",
+    "status",
+    "created_at",
+    "expires_at",
+    "last_seen_at",
+    "user_agent",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("Sessions");
+  }
+
+  ensureSheetColumns_(sheet, headers);
+  return sheet;
+}
+
+function normalizeSessionDate_(date) {
+  return date instanceof Date ? date.toISOString() : new Date(date || new Date()).toISOString();
+}
+
+function createSessionForUser_(userObj) {
+  const sessionSheet = ensureSessionsSheet_();
+  const table = readSheetTable(sessionSheet);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + (30 * 60 * 1000));
+  const sessionToken = Utilities.getUuid() + Utilities.getUuid();
+  const row = table.headers.map(function (header) {
+    if (header === "session_token") return sessionToken;
+    if (header === "user_id") return String(userObj && userObj.user_id || "").trim();
+    if (header === "role") return String(userObj && userObj.role || "").trim();
+    if (header === "status") return "ACTIVE";
+    if (header === "created_at") return normalizeSessionDate_(now);
+    if (header === "expires_at") return normalizeSessionDate_(expiresAt);
+    if (header === "last_seen_at") return normalizeSessionDate_(now);
+    if (header === "user_agent") return String(userObj && userObj.user_agent || "").trim();
+    return "";
+  });
+
+  appendSheetRow(sessionSheet, row);
+
+  return {
+    session_token: sessionToken,
+    session_expires_at: normalizeSessionDate_(expiresAt),
+  };
 }
 
 function ensureVehicleLogsSheet() {
@@ -1983,6 +2342,51 @@ function findRowByBookingId(sheetOrTable, bookingId) {
   return -1;
 }
 
+var CLOSED_BOOKING_ACTION_MESSAGE_ = "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล";
+
+function getLatestBookingActionContext_(sheet, bookingId) {
+  const table = readSheetTable(sheet);
+  const row = findRowByBookingId(table, bookingId);
+
+  if (row <= 1) {
+    return {
+      table,
+      row,
+      rowValues: null,
+      status: "",
+      denied: jsonOutput({
+        success: false,
+        message: "Booking not found",
+      }),
+    };
+  }
+
+  const statusCol = table.columnMap.status;
+  const rowValues = table.rows[row - 2].slice();
+  const status = String(statusCol !== undefined ? rowValues[statusCol] : "").trim().toUpperCase();
+
+  if (status === "COMPLETED" || status === "CANCELLED") {
+    return {
+      table,
+      row,
+      rowValues,
+      status,
+      denied: jsonOutput({
+        success: false,
+        message: CLOSED_BOOKING_ACTION_MESSAGE_,
+      }),
+    };
+  }
+
+  return {
+    table,
+    row,
+    rowValues,
+    status,
+    denied: null,
+  };
+}
+
 function logBookingAction(actionName, bookingId, row) {
   return {
     action: actionName,
@@ -2837,21 +3241,18 @@ function assignCentralVehicle(data) {
   const now = new Date();
   const nowIso = now.toISOString();
   const sheet = ensureBookingsSheet();
-  const table = readSheetTable(sheet);
-  const headers = table.headers;
-  const columnMap = table.columnMap;
-  const rowNumber = findRowByBookingId(table, bookingId);
-
-  logBookingAction("assignCentralVehicle", bookingId, rowNumber);
-
-  if (rowNumber <= 1) {
-    return jsonOutput({
-      success: false,
-      message: "Booking not found",
-    });
+  const actionContext = getLatestBookingActionContext_(sheet, bookingId);
+  if (actionContext.denied) {
+    return actionContext.denied;
   }
 
-  const rowValues = table.rows[rowNumber - 2].slice();
+  const table = actionContext.table;
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const rowNumber = actionContext.row;
+
+  logBookingAction("assignCentralVehicle", bookingId, rowNumber);
+  const rowValues = actionContext.rowValues.slice();
   const statusCol = columnMap.status;
   const bookingNoCol = columnMap.booking_no;
   const requesterNameCol = columnMap.requester_name;
@@ -2877,7 +3278,7 @@ function assignCentralVehicle(data) {
   const actualReturnByCol = ensureColumn(sheet, headers, "actual_return_by");
   const driverCancelRequestStatusCol = ensureColumn(sheet, headers, "driver_cancel_request_status");
 
-  const currentStatus = String(statusCol !== undefined ? rowValues[statusCol] : "").trim().toUpperCase();
+  const currentStatus = actionContext.status;
   if (currentStatus !== "PENDING") {
     return jsonOutput({
       success: false,
@@ -3301,11 +3702,20 @@ function appendBookingBypassLog_(payload) {
 
 function backdateCompleteBooking(data) {
   const bookingSheet = ensureBookingsSheet();
-  const table = readSheetTable(bookingSheet);
+
+  if (!data.booking_id) {
+    return jsonOutput({ success: false, message: "booking_id is required" });
+  }
+
+  const actionContext = getLatestBookingActionContext_(bookingSheet, data.booking_id);
+  if (actionContext.denied) {
+    return actionContext.denied;
+  }
+
+  const table = actionContext.table;
   const headers = table.headers;
   const columnMap = table.columnMap;
   const userLookup = buildUserLookup();
-
   const statusCol = columnMap.status;
   const assignedUserIdCol = ensureColumn(bookingSheet, headers, "assigned_user_id");
   const assignedUserNameCol = ensureColumn(bookingSheet, headers, "assigned_user_name");
@@ -3321,15 +3731,8 @@ function backdateCompleteBooking(data) {
   const updatedAtCol = ensureColumn(bookingSheet, headers, "updated_at");
   const updatedByCol = ensureColumn(bookingSheet, headers, "updated_by");
 
-  if (!data.booking_id) {
-    return jsonOutput({ success: false, message: "booking_id is required" });
-  }
-
-  const row = findRowByBookingId(table, data.booking_id);
+  const row = actionContext.row;
   logBookingAction("backdateCompleteBooking", data.booking_id, row);
-  if (row <= 1) {
-    return jsonOutput({ success: false, message: "Booking not found" });
-  }
 
   const now = new Date();
   const actor = String(data.actual_start_by || data.actual_return_by || data.updated_by || "").trim();
@@ -3338,7 +3741,7 @@ function backdateCompleteBooking(data) {
   const vehicleId = String(data.vehicle_id || "").trim();
   const note = normalizeNoteParts([data.staff_note || ""]).join("\n");
 
-  const rowValues = table.rows[row - 2].slice();
+  const rowValues = actionContext.rowValues.slice();
   rowValues[assignedUserIdCol] = assignedUserId;
   rowValues[assignedUserNameCol] = assignedUserName;
   rowValues[vehicleIdCol] = vehicleId;
@@ -4015,11 +4418,22 @@ function getDriverJobLogs() {
 function cancelBooking(data) {
   const sheet = ensureBookingsSheet();
 
-  const table = readSheetTable(sheet);
+  if (!data.booking_id) {
+    return jsonOutput({
+      success: false,
+      message: "booking_id is required"
+    });
+  }
+
+  const actionContext = getLatestBookingActionContext_(sheet, data.booking_id);
+  if (actionContext.denied) {
+    return actionContext.denied;
+  }
+
+  const table = actionContext.table;
   const values = [table.headers].concat(table.rows);
   const headers = table.headers;
   const columnMap = table.columnMap;
-
   const bookingIdCol = columnMap.booking_id;
   const bookingNoCol = columnMap.booking_no;
   const requesterNameCol = columnMap.requester_name;
@@ -4037,28 +4451,15 @@ function cancelBooking(data) {
   const staffNoteCol = columnMap.staff_note;
   const updatedAtCol = columnMap.updated_at;
 
-  if (!data.booking_id) {
-    return jsonOutput({
-      success: false,
-      message: "booking_id is required"
-    });
-  }
-
-  const row = findRowByBookingId(table, data.booking_id);
+  const row = actionContext.row;
   logBookingAction("cancelBooking", data.booking_id, row);
-  if (row <= 1) {
-    return jsonOutput({
-      success: false,
-      message: "Booking not found"
-    });
-  }
 
   const now = new Date();
   const reason = normalizeNoteParts([data.reason || ""]).join("\n");
   const cancelledBy = String(data.cancelled_by || data.cancelled_by_name || "").trim();
   const booking = values[row - 1];
 
-  const rowValues = table.rows[row - 2].slice();
+  const rowValues = actionContext.rowValues.slice();
   rowValues[statusCol] = "CANCELLED";
   rowValues[staffNoteCol] = appendUniqueNote(rowValues[staffNoteCol], reason);
   rowValues[updatedAtCol] = now;
@@ -4482,10 +4883,18 @@ function loginUser(data) {
     obj[header] = matchedUser[index];
   });
 
+  const session = createSessionForUser_({
+    user_id: obj.user_id || "",
+    role: obj.role || "",
+    user_agent: data && data.user_agent || "",
+  });
+
   delete obj.password;
   delete obj.password_hash;
   delete obj.driver_id;
   delete obj.driver_name;
+  obj.session_token = session.session_token;
+  obj.session_expires_at = session.session_expires_at;
 
   return jsonOutput({
     success: true,

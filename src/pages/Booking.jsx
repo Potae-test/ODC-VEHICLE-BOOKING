@@ -78,6 +78,11 @@ function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
 }
 
+function isClosedBookingStatus(status) {
+  const normalized = normalizeStatus(status);
+  return normalized === "COMPLETED" || normalized === "CANCELLED";
+}
+
 function normalizeVehicleStatus(status) {
   const normalized = String(status || "").trim().toUpperCase();
   if (normalized === "MAINTENANCE" || normalized === "INACTIVE") return "UNAVAILABLE";
@@ -1567,14 +1572,15 @@ function getBookingActionState({
   const canShowBackdateComplete =
     canManageBackdateComplete &&
     rowBookingId &&
-    !["COMPLETED", "CANCELLED"].includes(status);
+    !isClosedBookingStatus(status);
   const canShowProcess =
     canManageProcessBooking && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
   const canShowEdit =
     canManageEditBooking && isEditableBookingStatus(status) && !hasPendingDriverCancelRequest;
   const canShowCancel =
     canManageCancelBooking &&
-    !["COMPLETED", "CANCELLED", "IN_USE"].includes(status) &&
+    !isClosedBookingStatus(status) &&
+    status !== "IN_USE" &&
     !hasPendingDriverCancelRequest;
   const canShowUnassign = canUnassignBookings && status === "APPROVED" && !hasPendingDriverCancelRequest;
   const canShowAssignCentralVehicle =
@@ -2274,6 +2280,20 @@ export default function Booking() {
     }
   }, []);
 
+  const getLatestBookingForAction = useCallback((booking) => {
+    const bookingId = getBookingId(booking);
+    if (!bookingId) {
+      return null;
+    }
+
+    return bookingById.get(String(bookingId).trim()) || booking;
+  }, [bookingById]);
+
+  const refreshAfterRejectedClosedAction = useCallback(async (message) => {
+    showError(message || "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+    await refreshBookings();
+  }, [refreshBookings]);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
@@ -2783,6 +2803,17 @@ export default function Booking() {
   const handleBackdateComplete = useCallback(
     async (booking) => {
       if (processingAction) return;
+      const latestBooking = getLatestBookingForAction(booking);
+      const latestStatus = normalizeStatus(latestBooking?.status);
+      if (!latestBooking?.booking_id) {
+        showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+        return;
+      }
+      if (isClosedBookingStatus(latestStatus)) {
+        await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+        return;
+      }
+
       let backdateActualStart = "";
       let backdateActualReturn = "";
       let actualStartRoot = null;
@@ -2903,10 +2934,17 @@ export default function Booking() {
       if (!result.isConfirmed) return;
 
       try {
-        const bookingId = getBookingId(booking);
+        const currentBooking = getLatestBookingForAction(booking) || latestBooking;
+        const currentStatus = normalizeStatus(currentBooking?.status);
+        const bookingId = getBookingId(currentBooking);
 
         if (!bookingId) {
           showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+          return;
+        }
+
+        if (isClosedBookingStatus(currentStatus)) {
+          await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
           return;
         }
 
@@ -2931,26 +2969,24 @@ export default function Booking() {
 
         const response = await backdateCompleteBooking(payload);
         if (response?.success === false) {
-          showError(response?.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+          await refreshAfterRejectedClosedAction(response?.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
           return;
         }
 
-        mergeBooking({
-          ...(response || {}),
-          ...payload,
-          booking_id: bookingId,
-          status: "COMPLETED",
-          updated_at: nowIso,
-        });
-
+        await refreshBookings();
         await showSuccess("บันทึกงานย้อนหลังสำเร็จ");
       } catch (err) {
-        showError(err.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+        if ((err.message || "").trim() === "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล") {
+          await refreshAfterRejectedClosedAction(err.message);
+        } else {
+          showError(err.message || "บันทึกงานย้อนหลังไม่สำเร็จ");
+          await refreshBookings();
+        }
       } finally {
         setProcessingAction(null);
       }
     },
-    [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, mergeBooking, processingAction]
+    [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, getLatestBookingForAction, processingAction, refreshAfterRejectedClosedAction, refreshBookings]
   );
 
   const handleViewBookingDetail = useCallback(
@@ -3044,6 +3080,22 @@ export default function Booking() {
 
   const handleCancelBooking = useCallback(async (booking) => {
     if (processingAction) return;
+    const latestBooking = getLatestBookingForAction(booking);
+    const latestStatus = normalizeStatus(latestBooking?.status);
+    if (!latestBooking?.booking_id) {
+      showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+      return;
+    }
+    if (isClosedBookingStatus(latestStatus)) {
+      await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+      return;
+    }
+    if (latestStatus === "IN_USE") {
+      showError("รายการนี้ไม่สามารถยกเลิกได้ กรุณารีเฟรชข้อมูล");
+      await refreshBookings();
+      return;
+    }
+
     const result = await Swal.fire({
       title: normalizeStatus(booking.status) === "PENDING" ? "ยกเลิกรายการจอง" : "ยกเลิกรายการจอง",
       html: `
@@ -3080,26 +3132,43 @@ export default function Booking() {
     if (!result.isConfirmed) return;
 
     try {
-      setProcessingAction({ bookingId: booking.booking_id, type: "cancel" });
+      const currentBooking = getLatestBookingForAction(booking) || latestBooking;
+      const currentStatus = normalizeStatus(currentBooking?.status);
+      if (isClosedBookingStatus(currentStatus)) {
+        await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+        return;
+      }
+      if (currentStatus === "IN_USE") {
+        showError("รายการนี้ไม่สามารถยกเลิกได้ กรุณารีเฟรชข้อมูล");
+        await refreshBookings();
+        return;
+      }
+
+      setProcessingAction({ bookingId: currentBooking.booking_id, type: "cancel" });
       const cancelled = await cancelBooking({
-        booking_id: booking.booking_id,
+        booking_id: currentBooking.booking_id,
         reason: result.value,
         cancelled_by: currentUser?.name || currentUser?.email || "",
       });
-      mergeBooking({
-        ...(cancelled || {}),
-        booking_id: booking.booking_id,
-        status: "CANCELLED",
-        staff_note: result.value,
-      });
 
+      if (cancelled?.success === false) {
+        await refreshAfterRejectedClosedAction(cancelled?.message || "ยกเลิกรายการไม่สำเร็จ");
+        return;
+      }
+
+      await refreshBookings();
       await showSuccess("ยกเลิกรายการสำเร็จ");
     } catch (err) {
-      showError(err.message || "ยกเลิกรายการไม่สำเร็จ");
+      if ((err.message || "").trim() === "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล") {
+        await refreshAfterRejectedClosedAction(err.message);
+      } else {
+        showError(err.message || "ยกเลิกรายการไม่สำเร็จ");
+        await refreshBookings();
+      }
     } finally {
       setProcessingAction(null);
     }
-  }, [currentUser?.email, currentUser?.name, mergeBooking, processingAction]);
+  }, [cancelBooking, currentUser?.email, currentUser?.name, getLatestBookingForAction, processingAction, refreshAfterRejectedClosedAction, refreshBookings]);
 
   const handleUnassignBooking = useCallback(async (booking) => {
     if (processingAction) return;
@@ -3178,6 +3247,16 @@ export default function Booking() {
 
   const handleAssignCentralVehicle = useCallback(async (booking) => {
     if (processingAction) return;
+    const latestBooking = getLatestBookingForAction(booking);
+    const latestStatus = normalizeStatus(latestBooking?.status);
+    if (!latestBooking?.booking_id) {
+      showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+      return;
+    }
+    if (isClosedBookingStatus(latestStatus)) {
+      await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+      return;
+    }
 
     const reasonDefault = "ใช้รถ สนง.กลาง (รถไม่ว่าง)";
     const result = await Swal.fire({
@@ -3217,9 +3296,16 @@ export default function Booking() {
     if (!result.isConfirmed) return;
 
     try {
-      const bookingId = getBookingId(booking);
+      const currentBooking = getLatestBookingForAction(booking) || latestBooking;
+      const currentStatus = normalizeStatus(currentBooking?.status);
+      const bookingId = getBookingId(currentBooking);
       if (!bookingId) {
         showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+        return;
+      }
+
+      if (isClosedBookingStatus(currentStatus)) {
+        await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
         return;
       }
 
@@ -3234,29 +3320,23 @@ export default function Booking() {
       });
 
       if (response?.success === false) {
-        showError(response?.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
+        await refreshAfterRejectedClosedAction(response?.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
         return;
       }
 
-      mergeBooking({
-        ...(response || {}),
-        booking_id: bookingId,
-        assigned_user_id: CENTRAL_OFFICE_DRIVER_ID,
-        assigned_user_name: CENTRAL_OFFICE_DRIVER_NAME,
-        driver_user_id: CENTRAL_OFFICE_DRIVER_ID,
-        driver_name: CENTRAL_OFFICE_DRIVER_NAME,
-        status: "COMPLETED",
-        assignment_mode: "CENTRAL_VEHICLE",
-        central_vehicle_reason: result.value,
-      });
-
+      await refreshBookings();
       await showSuccess("บันทึกใช้รถ สนง.กลาง สำเร็จ");
     } catch (err) {
-      showError(err.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
+      if ((err.message || "").trim() === "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล") {
+        await refreshAfterRejectedClosedAction(err.message);
+      } else {
+        showError(err.message || "ใช้รถ สนง.กลาง ไม่สำเร็จ");
+        await refreshBookings();
+      }
     } finally {
       setProcessingAction(null);
     }
-  }, [currentUser?.email, currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
+  }, [assignCentralVehicle, currentUser?.email, currentUser?.name, currentUser?.user_id, getLatestBookingForAction, processingAction, refreshAfterRejectedClosedAction, refreshBookings]);
 
   const handleReviewDriverCancelRequest = useCallback(async (booking, decision) => {
     if (processingAction) return;

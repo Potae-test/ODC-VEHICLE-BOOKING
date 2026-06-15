@@ -21,8 +21,49 @@ function emitNotificationsRefresh() {
   window.dispatchEvent(new Event("odc-notifications-refresh"));
 }
 
+function getStoredCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("odc_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function withCurrentUserMeta(payload = {}) {
+  const user = getStoredCurrentUser() || {};
+  return {
+    ...payload,
+    current_user_id: payload.current_user_id || user.user_id || "",
+    current_user_role: payload.current_user_role || user.role || "",
+    current_user_name: payload.current_user_name || user.name || user.email || "",
+  };
+}
+
+function getStoredSessionToken() {
+  try {
+    return localStorage.getItem("odc_session_token") || "";
+  } catch {
+    return "";
+  }
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  const token = getStoredSessionToken();
+  return {
+    ...extraHeaders,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function fetchJson(url, options) {
-  const res = await fetch(url, options);
+  const { skipAuth, headers, ...fetchOptions } = options || {};
+  const mergedHeaders = skipAuth
+    ? { ...(headers || {}) }
+    : getAuthHeaders(headers || {});
+  const res = await fetch(url, {
+    ...fetchOptions,
+    headers: mergedHeaders,
+  });
   const json = await res.json();
 
   if (!json.success) {
@@ -81,7 +122,7 @@ async function apiRequest(action, options = {}) {
       },
       body: JSON.stringify({
         action,
-        data: options.body || options || {},
+        data: withCurrentUserMeta(options.body || options || {}),
       }),
     });
 
@@ -150,7 +191,7 @@ export async function createVehicle(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(toVehiclePayload(data)),
+    body: JSON.stringify(withCurrentUserMeta(toVehiclePayload(data))),
   });
 
   invalidateApiCache(["vehicles", "bookings"]);
@@ -161,7 +202,7 @@ export async function updateVehicle(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/vehicles/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(toVehiclePayload(data)),
+    body: JSON.stringify(withCurrentUserMeta(toVehiclePayload(data))),
   });
 
   invalidateApiCache(["vehicles", "bookings"]);
@@ -172,7 +213,7 @@ export async function deleteVehicle(vehicle_id) {
   const json = await fetchJson(`${API_BASE_URL}/api/vehicles/delete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ vehicle_id }),
+    body: JSON.stringify(withCurrentUserMeta({ vehicle_id })),
   });
 
   invalidateApiCache(["vehicles", "bookings"]);
@@ -316,7 +357,7 @@ export async function deleteBookingCancellationHistory(input) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(withCurrentUserMeta(payload)),
   });
 
   invalidateApiCache(["booking-cancellations"]);
@@ -330,7 +371,7 @@ export async function createBooking(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings"]);
@@ -355,7 +396,7 @@ export async function approveBooking(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(withCurrentUserMeta(payload)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -367,7 +408,7 @@ export async function assignCentralVehicle(payload) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/assign-central-vehicle`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(withCurrentUserMeta(payload || {})),
   });
 
   invalidateApiCache(["bookings", "notifications", "driver_summary", "driver_job_logs"]);
@@ -382,7 +423,7 @@ export async function backdateCompleteBooking(payload) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload || {}),
+    body: JSON.stringify(withCurrentUserMeta(payload || {})),
   });
 
   emitNotificationsRefresh();
@@ -393,7 +434,7 @@ export async function startTrip(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/start-trip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -405,7 +446,7 @@ export async function completeTrip(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/complete-trip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -417,7 +458,7 @@ export async function driverCancelJob(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/driver-cancel-job`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -428,7 +469,7 @@ export async function requestDriverCancelJob(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/requestDriverCancelJob`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -440,7 +481,7 @@ export async function withdrawDriverCancelRequest(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/withdrawDriverCancelRequest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -452,7 +493,7 @@ export async function reviewDriverCancelRequest(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/reviewDriverCancelRequest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "driver_job_logs"]);
@@ -464,7 +505,7 @@ export async function cancelBooking(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/cancel`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings", "booking-cancellations"]);
@@ -490,7 +531,7 @@ export async function updateBooking(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["bookings"]);
@@ -520,7 +561,7 @@ export async function createDriverUnavailable(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
@@ -533,7 +574,7 @@ export async function updateDriverUnavailable(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
@@ -546,7 +587,7 @@ export async function cancelDriverUnavailable(data) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverUnavailable", "getDriverUnavailableLogs"]);
@@ -603,7 +644,7 @@ export async function updateDriverQueue(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/updateDriverQueue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -615,7 +656,7 @@ export async function updateDriverQueueMaster(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/updateDriverQueueMaster`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -626,7 +667,7 @@ export async function resetDriverQueueState(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/resetDriverQueueState`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -637,7 +678,7 @@ export async function resetDriverQueuePointer(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/resetDriverQueuePointer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -648,7 +689,7 @@ export async function setCurrentDriverQueuePointer(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/setCurrentDriverQueuePointer`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -669,7 +710,7 @@ export async function confirmDriverQueueAssignment(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/confirmDriverQueueAssignment`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["getDriverQueue", "getDriverQueueState", "getDriverQueueLogs", "bookings"]);
@@ -685,10 +726,26 @@ export async function login(email, password) {
   const json = await fetchJson(`${API_BASE_URL}/api/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    skipAuth: true,
     body: JSON.stringify({ email, password }),
   });
 
-  return json.data;
+  const user = json.data || {};
+  const token = user.session_token || user.token || "";
+  const expiresAt = user.session_expires_at || user.expires_at || "";
+
+  try {
+    if (token) {
+      localStorage.setItem("odc_session_token", String(token));
+    }
+    if (expiresAt) {
+      localStorage.setItem("odc_session_expires_at", String(expiresAt));
+    }
+  } catch {
+    // Ignore storage failures and keep login response unchanged.
+  }
+
+  return user;
 }
 
 // ---------------------
@@ -711,7 +768,7 @@ export async function createDriver(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/drivers`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["drivers"]);
@@ -722,7 +779,7 @@ export async function updateDriverStatus(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/drivers/status`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["drivers", "bookings"]);
@@ -733,7 +790,7 @@ export async function updateDriver(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/drivers/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["drivers"]);
@@ -744,7 +801,7 @@ export async function deleteDriver(driver_id) {
   const json = await fetchJson(`${API_BASE_URL}/api/drivers/delete`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ driver_id }),
+    body: JSON.stringify(withCurrentUserMeta({ driver_id })),
   });
 
   invalidateApiCache(["drivers", "bookings"]);
@@ -771,7 +828,7 @@ export async function createUser(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/users`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["users"]);
@@ -782,7 +839,7 @@ export async function updateUser(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/users/update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["users"]);
@@ -793,7 +850,7 @@ export async function resetUserPassword(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/users/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
+    body: JSON.stringify(withCurrentUserMeta(data)),
   });
 
   invalidateApiCache(["users"]);
@@ -806,7 +863,7 @@ export async function disableUser(user_id) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ user_id }),
+    body: JSON.stringify(withCurrentUserMeta({ user_id })),
   });
 
   invalidateApiCache(["users"]);
@@ -819,7 +876,7 @@ export async function deleteUser(user_id) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ user_id }),
+    body: JSON.stringify(withCurrentUserMeta({ user_id })),
   });
 
   invalidateApiCache(["users"]);
