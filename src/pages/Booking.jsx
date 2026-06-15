@@ -2280,6 +2280,17 @@ export default function Booking() {
     }
   }, []);
 
+  const bookingById = useMemo(() => {
+    const map = new Map();
+    bookings.forEach((booking) => {
+      const id = String(booking.booking_id || "").trim();
+      if (id) {
+        map.set(id, booking);
+      }
+    });
+    return map;
+  }, [bookings]);
+
   const getLatestBookingForAction = useCallback((booking) => {
     const bookingId = getBookingId(booking);
     if (!bookingId) {
@@ -2338,17 +2349,6 @@ export default function Booking() {
 
     return map;
   }, [activeDrivers]);
-
-  const bookingById = useMemo(() => {
-    const map = new Map();
-    bookings.forEach((booking) => {
-      const id = String(booking.booking_id || "").trim();
-      if (id) {
-        map.set(id, booking);
-      }
-    });
-    return map;
-  }, [bookings]);
 
   const resolveDriverName = useCallback(
     (driverUserId, fallbackName = "") => {
