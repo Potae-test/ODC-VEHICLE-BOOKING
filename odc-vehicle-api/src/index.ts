@@ -63,6 +63,7 @@ const postRouteActions: Record<string, string> = {
   "/api/bookings/cancellations/delete": "deleteBookingCancellationHistory",
   "/api/unassign_booking_driver": "unassign_booking_driver",
   "/api/login": "loginUser",
+  "/api/logout-session": "logoutSession",
   "/api/drivers": "createDriver",
   "/api/drivers/status": "updateDriverStatus",
   "/api/drivers/update": "updateDriver",

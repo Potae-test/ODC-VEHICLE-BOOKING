@@ -748,6 +748,27 @@ export async function login(email, password) {
   return user;
 }
 
+export async function logoutSession() {
+  const token = getStoredSessionToken();
+
+  try {
+    if (token) {
+      await fetchJson(`${API_BASE_URL}/api/logout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_token: token }),
+      });
+    }
+  } finally {
+    try {
+      localStorage.removeItem("odc_session_token");
+      localStorage.removeItem("odc_session_expires_at");
+    } catch {
+      // Ignore storage failures during logout cleanup.
+    }
+  }
+}
+
 // ---------------------
 // DRIVERS
 // ---------------------

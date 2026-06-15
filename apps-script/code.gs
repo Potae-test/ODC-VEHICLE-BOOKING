@@ -251,6 +251,7 @@ function doPost(e) {
       return cancelBooking(body.data);
     }
     if (action === "loginUser") return loginUser(body.data);
+    if (action === "logoutSession") return logoutSession(body.data || body);
     if (action === "createDriver") {
       var trusted = applyTrustedSession_(body.data);
       if (!trusted.ok) {
@@ -758,10 +759,48 @@ function getTrustedCurrentUserId_(data) {
   )).trim();
 }
 
+function cleanupExpiredSessions_() {
+  const sheet = ensureSessionsSheet_();
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const statusCol = headers.indexOf("status");
+  const expiresAtCol = headers.indexOf("expires_at");
+
+  if (statusCol === -1 || expiresAtCol === -1) {
+    return 0;
+  }
+
+  const now = Date.now();
+  const expiredRows = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const status = String(row[statusCol] || "").trim().toUpperCase();
+    const expiresAt = new Date(row[expiresAtCol]).getTime();
+
+    if (status !== "ACTIVE") continue;
+    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt >= now) continue;
+
+    expiredRows.push(i + 2);
+  }
+
+  for (let i = 0; i < expiredRows.length; i++) {
+    sheet.getRange(expiredRows[i], statusCol + 1).setValue("EXPIRED");
+  }
+
+  if (expiredRows.length > 0) {
+    invalidateSheetCache_(sheet);
+  }
+
+  return expiredRows.length;
+}
+
 function getActiveSessionByToken_(token) {
   const normalizedToken = String(token || "").trim();
   if (!normalizedToken) return null;
 
+  cleanupExpiredSessions_();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sessions");
   if (!sheet) return null;
 
@@ -1310,6 +1349,7 @@ function normalizeSessionDate_(date) {
 }
 
 function createSessionForUser_(userObj) {
+  cleanupExpiredSessions_();
   const sessionSheet = ensureSessionsSheet_();
   const table = readSheetTable(sessionSheet);
   const now = new Date();
@@ -1333,6 +1373,100 @@ function createSessionForUser_(userObj) {
     session_token: sessionToken,
     session_expires_at: normalizeSessionDate_(expiresAt),
   };
+}
+
+function clearOldSessions() {
+  const sheet = ensureSessionsSheet_();
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const statusCol = headers.indexOf("status");
+  const expiresAtCol = headers.indexOf("expires_at");
+
+  if (statusCol === -1 || expiresAtCol === -1) {
+    return jsonOutput({
+      success: true,
+      deleted: 0
+    });
+  }
+
+  const cutoff = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const rowsToDelete = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const status = String(row[statusCol] || "").trim().toUpperCase();
+    const expiresAt = new Date(row[expiresAtCol]).getTime();
+
+    if (status !== "EXPIRED" && status !== "INACTIVE") continue;
+    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt >= cutoff) continue;
+
+    rowsToDelete.push(i + 2);
+  }
+
+  for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+    sheet.deleteRow(rowsToDelete[i]);
+  }
+
+  if (rowsToDelete.length > 0) {
+    invalidateSheetCache_(sheet);
+  }
+
+  return jsonOutput({
+    success: true,
+    deleted: rowsToDelete.length
+  });
+}
+
+function logoutSession(data) {
+  const payload = data || {};
+  const token = String(payload.session_token || "").trim();
+
+  if (!token) {
+    return jsonOutput({
+      success: true,
+      message: "Session already inactive"
+    });
+  }
+
+  cleanupExpiredSessions_();
+  const sheet = ensureSessionsSheet_();
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const tokenCol = headers.indexOf("session_token");
+  const statusCol = headers.indexOf("status");
+  const lastSeenAtCol = headers.indexOf("last_seen_at");
+
+  if (tokenCol === -1 || statusCol === -1) {
+    return jsonOutput({
+      success: true,
+      message: "Session already inactive"
+    });
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowToken = String(row[tokenCol] || "").trim();
+    const rowStatus = String(row[statusCol] || "").trim().toUpperCase();
+
+    if (rowToken !== token || rowStatus !== "ACTIVE") continue;
+
+    sheet.getRange(i + 2, statusCol + 1).setValue("INACTIVE");
+    if (lastSeenAtCol !== -1) {
+      sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(normalizeSessionDate_(new Date()));
+    }
+    invalidateSheetCache_(sheet);
+
+    return jsonOutput({
+      success: true
+    });
+  }
+
+  return jsonOutput({
+    success: true,
+    message: "Session already inactive"
+  });
 }
 
 function ensureVehicleLogsSheet() {
