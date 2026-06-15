@@ -597,6 +597,428 @@ function getBookingDetailGroupName(field) {
   return "ข้อมูลเพิ่มเติม";
 }
 
+function normalizeDriverChangeValue(value) {
+  return String(value || "").trim();
+}
+
+function parseStructuredDriverChangeEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+
+  const oldDriver = normalizeDriverChangeValue(
+    entry.previous_driver_name ||
+      entry.previous_assigned_user_name ||
+      entry.old_driver_name ||
+      entry.old_assigned_user_name ||
+      entry.driver_change_from ||
+      entry.from_driver_name ||
+      entry.old_driver ||
+      entry.previous_driver
+  );
+
+  const newDriver = normalizeDriverChangeValue(
+    entry.driver_change_to ||
+      entry.new_driver_name ||
+      entry.new_assigned_user_name ||
+      entry.to_driver_name ||
+      entry.assigned_user_name ||
+      entry.driver_name ||
+      entry.new_driver
+  );
+
+  if (!oldDriver || !newDriver || oldDriver === newDriver) return null;
+
+  return [
+    { label: "คนขับเดิม:", value: oldDriver },
+    { label: "เปลี่ยนเป็น:", value: newDriver },
+  ];
+}
+
+function parsePossibleDriverChangeCollection(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "object") {
+    return [value];
+  }
+
+  const text = String(value || "").trim();
+  if (!text) return [];
+
+  if ((text.startsWith("[") && text.endsWith("]")) || (text.startsWith("{") && text.endsWith("}"))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === "object") return [parsed];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function parseDriverChangeRowsFromStaffNote(note) {
+  const noteText = normalizeBookingNote(note);
+  if (!noteText) return [];
+
+  const oldMatch = noteText.match(/คนขับเดิม\s*[:：]\s*(.+)/);
+  const newMatch = noteText.match(/เปลี่ยนเป็น\s*[:：]\s*(.+)/);
+
+  if (!oldMatch || !newMatch) return [];
+
+  const oldDriver = normalizeDriverChangeValue(oldMatch[1]);
+  const newDriver = normalizeDriverChangeValue(newMatch[1]);
+
+  if (!oldDriver || !newDriver || oldDriver === newDriver) return [];
+
+  return [
+    { label: "คนขับเดิม:", value: oldDriver },
+    { label: "เปลี่ยนเป็น:", value: newDriver },
+  ];
+}
+
+function getDriverChangeHistoryRows(booking) {
+  const directRows = parseStructuredDriverChangeEntry({
+    previous_driver_name: booking?.previous_driver_name,
+    previous_assigned_user_name: booking?.previous_assigned_user_name,
+    old_driver_name: booking?.old_driver_name,
+    old_assigned_user_name: booking?.old_assigned_user_name,
+    driver_change_from: booking?.driver_change_from,
+    driver_change_to: booking?.driver_change_to,
+    assigned_user_name: booking?.assigned_user_name,
+    driver_name: booking?.driver_name,
+  });
+
+  if (directRows) {
+    return directRows;
+  }
+
+  const structuredHistorySources = [
+    booking?.timeline,
+    booking?.activity_logs,
+    booking?.booking_logs,
+    booking?.audit_logs,
+    booking?.history,
+    booking?.assignment_history,
+    booking?.driver_change_history,
+    booking?.driver_change_logs,
+  ];
+
+  for (const source of structuredHistorySources) {
+    const entries = parsePossibleDriverChangeCollection(source);
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const rows = parseStructuredDriverChangeEntry(entries[index]);
+      if (rows) {
+        return rows;
+      }
+    }
+  }
+
+  return parseDriverChangeRowsFromStaffNote(booking?.staff_note);
+}
+
+const BOOKING_TIMELINE_META = {
+  "สร้างรายการ": { dot: "#1455c8", surface: "#eff6ff" },
+  "อนุมัติรายการ": { dot: "#15803d", surface: "#ecfdf5" },
+  "เปลี่ยนคนขับ": { dot: "#7c3aed", surface: "#f5f3ff" },
+  "เปลี่ยนรถ": { dot: "#0f766e", surface: "#ecfeff" },
+  "ดึงงานกลับ": { dot: "#b45309", surface: "#fffbeb" },
+  "ใช้รถ สนง.กลาง": { dot: "#1d4ed8", surface: "#dbeafe" },
+  "คนขับขอยกเลิกงาน": { dot: "#dc2626", surface: "#fef2f2" },
+  "อนุมัติยกเลิกงาน": { dot: "#b91c1c", surface: "#fef2f2" },
+  "ไม่อนุมัติยกเลิกงาน": { dot: "#c2410c", surface: "#fff7ed" },
+  "บันทึกงานย้อนหลัง": { dot: "#475569", surface: "#f8fafc" },
+  "แก้ไขรายการ": { dot: "#0369a1", surface: "#f0f9ff" },
+  "ยกเลิกรายการ": { dot: "#991b1b", surface: "#fef2f2" },
+};
+
+function getBookingTimelineMeta(eventType) {
+  return BOOKING_TIMELINE_META[String(eventType || "").trim()] || {
+    dot: "#475569",
+    surface: "#f8fafc",
+  };
+}
+
+function buildBookingTimelineFallbackDetail(entry) {
+  const eventType = String(entry?.event_type || entry?.event_title || "").trim();
+  const oldDriver = normalizeDriverChangeValue(
+    entry?.old_driver_name || entry?.previous_driver_name || entry?.previous_assigned_user_name
+  );
+  const newDriver = normalizeDriverChangeValue(
+    entry?.new_driver_name || entry?.assigned_user_name || entry?.driver_name
+  );
+  const oldVehicle = normalizeDriverChangeValue(entry?.old_vehicle_id);
+  const newVehicle = normalizeDriverChangeValue(entry?.new_vehicle_id);
+
+  if (eventType === "เปลี่ยนคนขับ" && oldDriver && newDriver) {
+    return `${oldDriver} → ${newDriver}`;
+  }
+
+  if (eventType === "เปลี่ยนรถ" && oldVehicle && newVehicle) {
+    return `${oldVehicle} → ${newVehicle}`;
+  }
+
+  return "";
+}
+
+function normalizeBookingTimelineEntry(entry) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+
+  const eventTitle = String(entry.event_title || entry.title || entry.event_type || entry.type || "").trim();
+  if (!eventTitle) return null;
+
+  const detail = String(entry.detail || entry.description || buildBookingTimelineFallbackDetail(entry) || "").trim();
+  const actorName = String(
+    entry.actor_name || entry.actor || entry.created_by || entry.updated_by || entry.cancelled_by || ""
+  ).trim();
+  const createdAt = entry.created_at || entry.timestamp || entry.createdAt || "";
+
+  return {
+    log_id: String(entry.log_id || entry.id || "").trim(),
+    event_type: String(entry.event_type || entry.type || eventTitle).trim(),
+    event_title: eventTitle,
+    detail,
+    actor_name: actorName,
+    created_at: createdAt,
+    old_driver_name: normalizeDriverChangeValue(entry.old_driver_name),
+    new_driver_name: normalizeDriverChangeValue(entry.new_driver_name),
+    old_vehicle_id: normalizeDriverChangeValue(entry.old_vehicle_id),
+    new_vehicle_id: normalizeDriverChangeValue(entry.new_vehicle_id),
+  };
+}
+
+function getBookingTimelineEntries(booking) {
+  const timelineSource =
+    booking?.timeline ||
+    booking?.activity_logs ||
+    booking?.booking_logs ||
+    booking?.audit_logs ||
+    booking?.history ||
+    [];
+
+  const entries = parsePossibleDriverChangeCollection(timelineSource);
+  const normalizedEntries = entries
+    .map((entry) => normalizeBookingTimelineEntry(entry))
+    .filter(Boolean);
+  const dedupedEntries = [];
+  const seenKeys = new Set();
+
+  normalizedEntries.forEach((entry) => {
+    const dedupeKey = entry.log_id || `${entry.event_type}__${entry.created_at}`;
+    if (!dedupeKey || seenKeys.has(dedupeKey)) return;
+    seenKeys.add(dedupeKey);
+    dedupedEntries.push(entry);
+  });
+
+  return dedupedEntries.sort((a, b) => {
+    const dateA = new Date(a.created_at || 0).getTime();
+    const dateB = new Date(b.created_at || 0).getTime();
+    return dateB - dateA;
+  });
+}
+
+const ALWAYS_EXPANDED_BOOKING_DETAIL_GROUPS = new Set([
+  "ข้อมูลผู้จอง",
+  "ข้อมูลการเดินทาง",
+  "ข้อมูลการใช้งานรถ",
+  "การมอบหมายงาน",
+]);
+
+function getBookingDetailDefaultExpanded(groupName, isMobile) {
+  if (ALWAYS_EXPANDED_BOOKING_DETAIL_GROUPS.has(groupName)) {
+    return true;
+  }
+
+  if (groupName === "ประวัติการเปลี่ยนคนขับ" || groupName === "ประวัติการดำเนินงาน") {
+    return !isMobile;
+  }
+
+  if (groupName === "ข้อมูลระบบ / ผู้ดูแลระบบ" || groupName === "ข้อมูลเพิ่มเติม") {
+    return false;
+  }
+
+  return true;
+}
+
+function BookingDetailSectionHeader({ title, collapsible, expanded, onToggle }) {
+  if (!collapsible) {
+    return (
+      <h3 className="booking-detail-group-title text-[20px] md:text-base font-semibold leading-tight">
+        {title}
+      </h3>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="booking-detail-group-title flex w-full items-center justify-between gap-3 rounded-xl !bg-transparent !px-0 !py-0 text-left !text-slate-900 shadow-none transition-colors hover:!bg-slate-50 focus-visible:!bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 !min-h-0"
+    >
+      <span className="text-[20px] md:text-base font-semibold leading-tight text-[#073b8e]">
+        {title}
+      </span>
+      <ChevronDownIcon
+        className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${
+          expanded ? "rotate-180" : "rotate-0"
+        }`}
+      />
+    </button>
+  );
+}
+
+function BookingDetailFieldRows({ rows }) {
+  return rows.map((field) => (
+    <div key={`${field.label}-${field.value}`} className="booking-detail-row">
+      <span className="booking-detail-label">{field.label}</span>
+      <span className="booking-detail-value">{field.value}</span>
+    </div>
+  ));
+}
+
+function BookingDetailDriverChangeRows({ rows }) {
+  if (rows.length === 0) {
+    return (
+      <div className="booking-detail-row" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <span className="booking-detail-value">ไม่มีประวัติการเปลี่ยนคนขับ</span>
+      </div>
+    );
+  }
+
+  return <BookingDetailFieldRows rows={rows} />;
+}
+
+function BookingDetailTimelineRows({ entries }) {
+  if (entries.length === 0) {
+    return (
+      <div className="booking-detail-row" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+        <span className="booking-detail-value">ยังไม่มีประวัติการดำเนินงาน</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {entries.map((entry) => {
+        const meta = getBookingTimelineMeta(entry.event_type || entry.event_title);
+        const dateText = formatBookingDateTimeDisplay(entry.created_at);
+        const actorText = entry.actor_name ? `ดำเนินการโดย: ${entry.actor_name}` : "";
+
+        return (
+          <div
+            key={entry.log_id || `${entry.event_title}-${entry.created_at}-${entry.detail}`}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "16px minmax(0, 1fr)",
+              gap: 10,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <span
+                style={{
+                  display: "block",
+                  width: 12,
+                  height: 12,
+                  marginTop: 6,
+                  borderRadius: 999,
+                  background: meta.dot,
+                  boxShadow: `0 0 0 4px ${meta.surface}`,
+                }}
+              />
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gap: 4,
+                border: "1px solid #dbe6f3",
+                borderRadius: 12,
+                background: meta.surface,
+                padding: "10px 12px",
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a", lineHeight: 1.25 }}>
+                {entry.event_title}
+              </div>
+              {entry.detail ? (
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#334155", lineHeight: 1.45 }}>
+                  {entry.detail}
+                </div>
+              ) : null}
+              {actorText ? (
+                <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.35 }}>{actorText}</div>
+              ) : null}
+              <div style={{ fontSize: 14, color: "#64748b", lineHeight: 1.35 }}>{dateText}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function BookingDetailCollapsibleSection({ title, defaultExpanded, children }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  return (
+    <section className="booking-detail-group">
+      <BookingDetailSectionHeader
+        title={title}
+        collapsible
+        expanded={expanded}
+        onToggle={() => setExpanded((current) => !current)}
+      />
+      {expanded ? children : null}
+    </section>
+  );
+}
+
+function BookingDetailModalContent({ sections, isMobile }) {
+  return (
+    <div className="swal-form booking-detail-modal">
+      <div className="booking-detail-group-list">
+        {sections.map((section) => {
+          const body = (() => {
+            if (section.type === "driver-change") {
+              return <BookingDetailDriverChangeRows rows={section.items} />;
+            }
+
+            if (section.type === "timeline") {
+              return <BookingDetailTimelineRows entries={section.items} />;
+            }
+
+            return <BookingDetailFieldRows rows={section.items} />;
+          })();
+
+          const collapsible = !ALWAYS_EXPANDED_BOOKING_DETAIL_GROUPS.has(section.name);
+          if (collapsible) {
+            return (
+              <BookingDetailCollapsibleSection
+                key={section.name}
+                title={section.name}
+                defaultExpanded={getBookingDetailDefaultExpanded(section.name, isMobile)}
+              >
+                {body}
+              </BookingDetailCollapsibleSection>
+            );
+          }
+
+          return (
+            <section key={section.name} className="booking-detail-group">
+              <BookingDetailSectionHeader title={section.name} collapsible={false} expanded />
+              {body}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function formatBookingDateTimeDisplay(value) {
   if (!value) return "-";
 
@@ -2546,55 +2968,75 @@ export default function Booking() {
         groups.get(groupName).push(field);
         return groups;
       }, new Map());
+      const driverChangeRows = getDriverChangeHistoryRows(booking);
+      const timelineEntries = getBookingTimelineEntries(booking);
 
       const groupOrder = [
         "ข้อมูลผู้จอง",
         "ข้อมูลการเดินทาง",
         "ข้อมูลการใช้งานรถ",
         "การมอบหมายงาน",
+        "ประวัติการเปลี่ยนคนขับ",
+        "ประวัติการดำเนินงาน",
         "ข้อมูลระบบ / ผู้ดูแลระบบ",
         "ข้อมูลเพิ่มเติม",
       ];
+      const detailSections = groupOrder.reduce((sections, groupName) => {
+        if (groupName === "ประวัติการเปลี่ยนคนขับ") {
+          sections.push({
+            name: groupName,
+            type: "driver-change",
+            items: driverChangeRows,
+          });
+          return sections;
+        }
 
-      const detailGroupsHtml = groupOrder
-        .filter((groupName) => (detailGroups.get(groupName) || []).length > 0)
-        .map((groupName) => {
-          const rowsHtml = (detailGroups.get(groupName) || [])
-            .map(
-              (field) => `
-              <div class="booking-detail-row">
-                <span class="booking-detail-label">${escapeHtml(field.label)}</span>
-                <span class="booking-detail-value">${escapeHtml(field.value)}</span>
-              </div>
-            `
-            )
-            .join("");
+        if (groupName === "ประวัติการดำเนินงาน") {
+          sections.push({
+            name: groupName,
+            type: "timeline",
+            items: timelineEntries,
+          });
+          return sections;
+        }
 
-          return `
-            <section class="booking-detail-group">
-              <h3 class="booking-detail-group-title">${escapeHtml(groupName)}</h3>
-              ${rowsHtml}
-            </section>
-          `;
-        })
-        .join("");
+        const groupFields = detailGroups.get(groupName) || [];
+        if (groupFields.length > 0) {
+          sections.push({
+            name: groupName,
+            type: "fields",
+            items: groupFields.map((field) => ({
+              label: field.label,
+              value: field.value,
+            })),
+          });
+        }
 
-      const detailHtml = `
-        <div class="swal-form booking-detail-modal">
-          <div class="booking-detail-group-list">
-            ${detailGroupsHtml}
-          </div>
-        </div>
-      `;
-        // <div><span class="booking-detail-label">เลขที่รายการ</span><span class="booking-detail-value">${escapeHtml(booking.booking_no || booking.booking_id || "-")}</span></div>
-        // <div><span class="booking-detail-label">created_at</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.created_at) || "-")}</span></div>
-        // <div><span class="booking-detail-label">updated_at</span><span class="booking-detail-value">${escapeHtml(formatThaiDateTime(booking.updated_at) || "-")}</span></div>
+        return sections;
+      }, []);
+      const isMobileDetailModal = typeof window !== "undefined" ? window.innerWidth < 768 : false;
+      let detailModalRoot = null;
+
       await Swal.fire({
         title: "รายละเอียดรายการจอง",
-        html: detailHtml,
+        html: '<div id="booking-detail-modal-root"></div>',
         width: 820,
         confirmButtonText: "ปิด",
         confirmButtonColor: "#1455c8",
+        didOpen: () => {
+          const detailModalElement = document.getElementById("booking-detail-modal-root");
+          if (!detailModalElement) return;
+          detailModalRoot = createRoot(detailModalElement);
+          detailModalRoot.render(
+            <BookingDetailModalContent sections={detailSections} isMobile={isMobileDetailModal} />
+          );
+        },
+        willClose: () => {
+          if (detailModalRoot) {
+            detailModalRoot.unmount();
+            detailModalRoot = null;
+          }
+        },
       });
     },
     [currentUser?.role, vehicleMap]

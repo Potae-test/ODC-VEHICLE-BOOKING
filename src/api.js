@@ -436,6 +436,18 @@ export async function requestDriverCancelJob(data) {
   return json.data || json;
 }
 
+export async function withdrawDriverCancelRequest(data) {
+  const json = await fetchJson(`${API_BASE_URL}/api/withdrawDriverCancelRequest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
+  return json.data || json;
+}
+
 export async function reviewDriverCancelRequest(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/reviewDriverCancelRequest`, {
     method: "POST",

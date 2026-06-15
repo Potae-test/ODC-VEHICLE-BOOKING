@@ -755,7 +755,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                           <span className={`notification-category-badge notification-category-${categoryMeta.className}`}>
                             [{categoryMeta.label}]
                           </span>
-                          <strong>{notification.title || "-"}</strong>
+                          <strong className="notification-item-title">{notification.title || "-"}</strong>
                           {isUnread && <span className="notification-item-dot" aria-hidden="true" />}
                         </div>
                       </div>
@@ -805,8 +805,9 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                       type="button"
                       disabled={page <= 1}
                       onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      aria-label="Previous notifications page"
                     >
-                      &lt;&lt;
+                      &lsaquo;
                     </button>
 
                     {visiblePageNumbers.map((pageNumber) => (
@@ -824,8 +825,9 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                       type="button"
                       disabled={page >= totalPages}
                       onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                      aria-label="Next notifications page"
                     >
-                      &gt;&gt;
+                      &rsaquo;
                     </button>
                   </div>
                 )}

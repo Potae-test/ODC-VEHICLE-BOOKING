@@ -6,6 +6,7 @@ import {
   getVehicles,
   requestDriverCancelJob,
   startTrip,
+  withdrawDriverCancelRequest,
 } from "../api";
 import AppLayout from "../layouts/AppLayout";
 import MobileGrid from "../layouts/MobileGrid";
@@ -256,7 +257,7 @@ function getDriverCancelRequestStateLabel(booking) {
   }
 
   const status = getDriverCancelRequestStatus(booking);
-  if (status === "PENDING") return "รอ STAFF อนุมัติยกเลิก";
+  if (status === "PENDING") return "รอพิจารณายกเลิกงาน";
   if (status === "REJECTED") return "ไม่อนุมัติการยกเลิก";
   if (status === "APPROVED") return "อนุมัติยกเลิกแล้ว";
   return "";
@@ -338,6 +339,7 @@ function DriverJobCompactCard({
   onStart,
   onComplete,
   onCancelJob,
+  onWithdrawCancelRequest,
   onShowDetails,
   canStart,
   canComplete,
@@ -403,6 +405,9 @@ const startTime = booking.start_datetime
 
         <div className="driver-job-compact-right">
           <span className={`status ${statusMeta.className}`}>{statusMeta.label}</span>
+          {hasPendingDriverCancelRequest ? (
+            <span className="status amber">{getDriverCancelRequestStateLabel(booking)}</span>
+          ) : null}
           <ChevronDownIcon
             className={[
               "driver-job-compact-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform",
@@ -463,6 +468,19 @@ const startTime = booking.start_datetime
               ดูรายละเอียด
             </button>
 
+            {hasPendingDriverCancelRequest ? (
+              <button
+                type="button"
+                className="driver-job-compact-action border border-amber-200 !bg-amber-50 !text-amber-800"
+                disabled={disabled}
+                onClick={() => onWithdrawCancelRequest(booking)}
+              >
+                {processing === "withdraw-cancel-request"
+                  ? "กำลังยกเลิกคำขอ..."
+                  : "ยกเลิกการส่งคำขอพิจารณายกเลิกรับงาน"}
+              </button>
+            ) : null}
+
             {canRequestCancel ? (
               <button
                 type="button"
@@ -506,6 +524,7 @@ function DriverJobTableActions({
   processing,
   onShowDetails,
   onCancelJob,
+  onWithdrawCancelRequest,
   onStart,
   onComplete,
   canStart,
@@ -520,6 +539,19 @@ function DriverJobTableActions({
       <button type="button" className="driver-job-detail-button" disabled={disabled} onClick={() => onShowDetails(booking)}>
         ดูรายละเอียด
       </button>
+
+      {hasPendingDriverCancelRequest && (
+        <button
+          type="button"
+          className="warning-button"
+          disabled={disabled}
+          onClick={() => onWithdrawCancelRequest(booking)}
+        >
+          {processing === "withdraw-cancel-request"
+            ? "กำลังยกเลิกคำขอ..."
+            : "ยกเลิกการส่งคำขอพิจารณายกเลิกรับงาน"}
+        </button>
+      )}
 
       {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
         <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
@@ -548,6 +580,7 @@ const JobCard = memo(function JobCard({
   onStart,
   onComplete,
   onCancelJob,
+  onWithdrawCancelRequest,
   onShowDetails,
   canStart,
   canComplete,
@@ -633,6 +666,19 @@ const JobCard = memo(function JobCard({
         <button type="button" className="driver-job-detail-button" disabled={disabled} onClick={() => onShowDetails(booking)}>
           ดูรายละเอียด
         </button>
+
+        {hasPendingDriverCancelRequest && (
+          <button
+            type="button"
+            className="warning-button"
+            disabled={disabled}
+            onClick={() => onWithdrawCancelRequest(booking)}
+          >
+            {processing === "withdraw-cancel-request"
+              ? "กำลังยกเลิกคำขอ..."
+              : "ยกเลิกการส่งคำขอพิจารณายกเลิกรับงาน"}
+          </button>
+        )}
 
         {status === "APPROVED" && onCancelJob && !hasPendingDriverCancelRequest && (
           <button type="button" className="warning-button" disabled={disabled} onClick={() => onCancelJob(booking)}>
@@ -752,7 +798,7 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          return isToday(booking.start_datetime, todayKey) && status === "APPROVED" && !isPendingDriverCancel(booking);
+          return isToday(booking.start_datetime, todayKey) && status === "APPROVED";
         })
       ),
     [assignedBookings, todayKey]
@@ -763,7 +809,7 @@ export default function DriverJobs() {
       sortByTodayPriority(
         assignedBookings.filter((booking) => {
           const status = normalizeStatus(booking.status);
-          return status === "APPROVED" && !isPendingDriverCancel(booking);
+          return status === "APPROVED";
         })
       ),
     [assignedBookings]
@@ -973,6 +1019,7 @@ export default function DriverJobs() {
         booking_id: booking.booking_id,
         reason: result.value,
         requested_by: currentUser?.name || currentUser?.email || "",
+        requested_by_user_id: currentUser?.user_id || "",
       });
 
       if (response?.success === false) {
@@ -987,13 +1034,64 @@ export default function DriverJobs() {
         driver_cancel_request_status: "PENDING",
         driver_cancel_request_reason: result.value,
         driver_cancel_requested_by: currentUser?.name || currentUser?.email || "",
+        driver_cancel_requested_by_user_id: currentUser?.user_id || "",
       });
     } catch (err) {
       showError(err.message || "ส่งคำขอยกเลิกงานไม่สำเร็จ");
     } finally {
       setProcessingAction(null);
     }
-  }, [currentUser?.email, currentUser?.name, mergeBooking, processingAction]);
+  }, [currentUser?.email, currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
+
+  const handleWithdrawCancelRequest = useCallback(async (booking) => {
+    if (processingAction) return;
+
+    const result = await Swal.fire({
+      title: "ยกเลิกคำขอยกเลิกรับงาน",
+      text: "ต้องการยกเลิกการส่งคำขอพิจารณายกเลิกรับงานนี้หรือไม่",
+      showCancelButton: true,
+      confirmButtonText: "ยืนยัน",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#d97706",
+      cancelButtonColor: "#64748b",
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      setProcessingAction({ bookingId: booking.booking_id, type: "withdraw-cancel-request" });
+      const response = await withdrawDriverCancelRequest({
+        booking_id: booking.booking_id,
+        current_role: currentRole,
+        current_user_id: currentUser?.user_id || "",
+        current_user_name: currentUser?.name || currentUser?.email || "",
+      });
+
+      if (response?.success === false) {
+        showError(response?.message || "ยกเลิกคำขอไม่สำเร็จ");
+        return;
+      }
+
+      await showSuccess("ยกเลิกการส่งคำขอพิจารณายกเลิกรับงานแล้ว");
+      mergeBooking(booking.booking_id, {
+        ...(response || {}),
+        booking_id: booking.booking_id,
+        driver_cancel_request_status: "",
+        driver_cancel_request_reason: "",
+        driver_cancel_requested_by: "",
+        driver_cancel_requested_by_user_id: "",
+        driver_cancel_requested_at: "",
+        driver_cancel_review_status: "",
+        driver_cancel_review_reason: "",
+        driver_cancel_reviewed_by: "",
+        driver_cancel_reviewed_at: "",
+      });
+    } catch (err) {
+      showError(err.message || "ยกเลิกคำขอไม่สำเร็จ");
+    } finally {
+      setProcessingAction(null);
+    }
+  }, [currentRole, currentUser?.email, currentUser?.name, currentUser?.user_id, mergeBooking, processingAction]);
 
   const showDetails = useCallback((booking) => {
     const vehicleLabel = formatVehicleLabel(booking, vehicleMap);
@@ -1066,6 +1164,7 @@ export default function DriverJobs() {
                       onStart={handleStart}
                       onComplete={handleComplete}
                       onCancelJob={handleCancelJob}
+                      onWithdrawCancelRequest={handleWithdrawCancelRequest}
                       onShowDetails={showDetails}
                       canStart={canStartTrip}
                       canComplete={canCompleteTrip}
@@ -1123,7 +1222,7 @@ export default function DriverJobs() {
                               {renderStatusBadge(job.status)}
                               {isPendingDriverCancel(job) && (
                                 <div style={{ marginTop: 6 }}>
-                                  <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                                  <span className="status amber">รอพิจารณายกเลิกงาน</span>
                                 </div>
                               )}
                               {getDriverCancelRequestStatus(job) === "REJECTED" && (
@@ -1155,6 +1254,7 @@ export default function DriverJobs() {
                                 }
                                 onShowDetails={showDetails}
                                 onCancelJob={handleCancelJob}
+                                onWithdrawCancelRequest={handleWithdrawCancelRequest}
                                 onStart={handleStart}
                                 onComplete={handleComplete}
                                 canStart={canStartTrip}
@@ -1226,7 +1326,7 @@ export default function DriverJobs() {
                               {renderStatusBadge(job.status)}
                               {isPendingDriverCancel(job) && (
                                 <div style={{ marginTop: 6 }}>
-                                  <span className="status amber">รอ STAFF อนุมัติยกเลิก</span>
+                                  <span className="status amber">รอพิจารณายกเลิกงาน</span>
                                 </div>
                               )}
                               {getDriverCancelRequestStatus(job) === "REJECTED" && (
@@ -1258,6 +1358,7 @@ export default function DriverJobs() {
                                 }
                                 onShowDetails={showDetails}
                                 onCancelJob={handleCancelJob}
+                                onWithdrawCancelRequest={handleWithdrawCancelRequest}
                                 onStart={handleStart}
                                 onComplete={handleComplete}
                                 canStart={canStartTrip}
@@ -1344,6 +1445,7 @@ export default function DriverJobs() {
                     onStart={handleStart}
                     onComplete={handleComplete}
                     onCancelJob={handleCancelJob}
+                    onWithdrawCancelRequest={handleWithdrawCancelRequest}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
@@ -1384,6 +1486,7 @@ export default function DriverJobs() {
                     onStart={handleStart}
                     onComplete={handleComplete}
                     onCancelJob={handleCancelJob}
+                    onWithdrawCancelRequest={handleWithdrawCancelRequest}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}
@@ -1440,6 +1543,7 @@ export default function DriverJobs() {
                     onStart={handleStart}
                     onComplete={handleComplete}
                     onCancelJob={handleCancelJob}
+                    onWithdrawCancelRequest={handleWithdrawCancelRequest}
                     onShowDetails={showDetails}
                     canStart={canStartTrip}
                     canComplete={canCompleteTrip}

@@ -28,15 +28,42 @@ function parseJsonMaybe(value) {
   }
 }
 
+function normalizeType(type) {
+  const raw = String(type || "").trim();
+  if (!raw) return "ลา";
+  if (raw.toLowerCase() === "holiday") return "ลา";
+  if (raw.toLowerCase() === "unable to complete a task.") return "หยุด";
+  if (raw.toUpperCase() === "LEAVE") return "ลา";
+  if (raw.toUpperCase() === "TEMP_UNAVAILABLE") return "หยุด";
+  if (raw === "ลา / หยุด") return "ลา";
+  if (raw === "ติดภารกิจ (ชั่วคราว)") return "หยุด";
+  if (
+    raw.toUpperCase() === "OUT_PROVINCE" ||
+    raw === "ปฏิบัติงานต่างจังหวัด" ||
+    raw.toUpperCase() === "OTHER"
+  ) {
+    return "OUT_PROVINCE";
+  }
+  return raw;
+}
+
+function getTypeLabel(type) {
+  const normalized = normalizeType(type);
+  if (normalized === "ลา") return "ลา / หยุด";
+  if (normalized === "หยุด") return "ติดภารกิจ (ชั่วคราว)";
+  if (normalized === "OUT_PROVINCE") return "ปฏิบัติงานต่างจังหวัด";
+  return normalized || "-";
+}
+
 function summarizeValue(value) {
   const parsed = parseJsonMaybe(value);
   if (!parsed) return "-";
 
   if (typeof parsed === "string") {
-    return parsed;
+    return getTypeLabel(parsed);
   }
 
-  const type = parsed.type || parsed.action || "";
+  const type = parsed.type ? getTypeLabel(parsed.type) : parsed.action || "";
   const reason = parsed.reason || "";
   const startDatetime = parsed.start_datetime ? formatThaiDateTime(parsed.start_datetime) : "";
   const endDatetime = parsed.end_datetime ? formatThaiDateTime(parsed.end_datetime) : "";
@@ -207,7 +234,10 @@ export default function DriverUnavailableLogs() {
       }
 
       if (keyword) {
-        const haystack = [log.driver_name, getLogSummary(log), log.created_by]
+        const rawSummary = [log.new_value, log.old_value]
+          .map((value) => String(value || ""))
+          .join(" ");
+        const haystack = [log.driver_name, getLogSummary(log), rawSummary, log.created_by]
           .map((value) => String(value || "").toLowerCase())
           .join(" ");
 
@@ -307,7 +337,7 @@ export default function DriverUnavailableLogs() {
                   labelClassName="text-[15px] font-semibold text-slate-600"
                   inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
-                <FilterField
+                {/* <FilterField
                   label="action"
                   value={filters.action}
                   onChange={(value) => setFilter("action", value)}
@@ -315,7 +345,7 @@ export default function DriverUnavailableLogs() {
                   options={ACTION_FILTER_OPTIONS}
                   labelClassName="text-[15px] font-semibold text-slate-600"
                   inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                />
+                /> */}
                 <FilterField
                   label="ผู้บันทึก"
                   value={filters.createdBy}
@@ -470,20 +500,20 @@ export default function DriverUnavailableLogs() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               <FilterField
                 label="ค้นหา"
                 value={filters.keyword}
                 onChange={(value) => setFilter("keyword", value)}
                 placeholder="ค้นหาคนขับ รายละเอียด ผู้บันทึก"
               />
-              <FilterField
+              {/* <FilterField
                 label="action"
                 value={filters.action}
                 onChange={(value) => setFilter("action", value)}
                 as="select"
                 options={ACTION_FILTER_OPTIONS}
-              />
+              /> */}
               <FilterField
                 label="ผู้บันทึก"
                 value={filters.createdBy}
@@ -511,7 +541,7 @@ export default function DriverUnavailableLogs() {
               <thead>
                 <tr>
                   <th>คนขับ</th>
-                  <th>action</th>
+                  {/* <th>action</th> */}
                   <th>รายละเอียด</th>
                   <th>วันที่</th>
                   <th>ผู้บันทึก</th>
@@ -526,7 +556,7 @@ export default function DriverUnavailableLogs() {
                   visibleLogs.map((log) => (
                     <tr key={log.log_id}>
                       <td>{log.driver_name || "-"}</td>
-                      <td>{getActionLabel(log.action)}</td>
+                      {/* <td>{getActionLabel(log.action)}</td> */}
                       <td>
                         {summarizeValue(log.new_value) !== "-"
                           ? summarizeValue(log.new_value)

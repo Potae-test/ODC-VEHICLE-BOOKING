@@ -32,12 +32,12 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Keep legacy unavailable-type compatibility when reading older rows: `holiday` -> `ลา`, `unable to complete a task.` -> `หยุด`, and Thai display labels should still resolve to the matching canonical type.
 
 ## Google Sheets Rules
-- Important sheets: `Users`, `Bookings`, `Vehicles`, `DriverUnavailable`, `DriverUnavailableLogs`, `DriverQueue`, `DriverQueueLogs`, `DriverQueueState`, `DriverJobLogs`, `BookingCancellationHistory`.
+- Important sheets: `Users`, `Bookings`, `Vehicles`, `DriverUnavailable`, `DriverUnavailableLogs`, `DriverQueue`, `DriverQueueLogs`, `DriverQueueState`, `DriverJobLogs`, `BookingCancellationHistory`, `BookingActivityLogs`.
 - Never rename sheet headers without migration handling.
 
 ## Logging and Cache Rules
 - Important actions must create append-only logs.
-- Log at minimum: driver assignment, manual override, driver cancellation, unavailable create/update/cancel, and queue movement.
+- Log at minimum: booking create/update/cancel, booking approval and reassignment, driver assignment recall, central-vehicle completion, driver cancel request/withdraw/review, backdated completion, unavailable create/update/cancel, and queue movement.
 - After mutations, invalidate related caches such as `bookings`, `users`, `vehicles`, `driver_queue`, and `driver_unavailable`.
 
 ## Push Notification Rules

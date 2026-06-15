@@ -41,6 +41,7 @@ const postRouteActions: Record<string, string> = {
   "/api/backdate_complete_booking": "backdate_complete_booking",
   "/api/bookings/driver-cancel-job": "driverCancelJob",
   "/api/requestDriverCancelJob": "requestDriverCancelJob",
+  "/api/withdrawDriverCancelRequest": "withdrawDriverCancelRequest",
   "/api/reviewDriverCancelRequest": "reviewDriverCancelRequest",
   "/api/bookings/cancel": "cancelBooking",
   "/api/bookings/cancellations/delete": "deleteBookingCancellationHistory",

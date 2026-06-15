@@ -91,6 +91,7 @@ function doPost(e) {
     if (action === "backdate_complete_booking") return backdateCompleteBooking(body.data);
     if (action === "driverCancelJob") return driverCancelJob(body.data);
     if (action === "requestDriverCancelJob") return requestDriverCancelJob(body.data);
+    if (action === "withdrawDriverCancelRequest") return withdrawDriverCancelRequest(body.data);
     if (action === "reviewDriverCancelRequest") return reviewDriverCancelRequest(body.data);
     if (action === "cancelBooking") return cancelBooking(body.data);
     if (action === "loginUser") return loginUser(body.data);
@@ -483,6 +484,7 @@ function ensureBookingsSheet() {
     "driver_cancel_request_status",
     "driver_cancel_request_reason",
     "driver_cancel_requested_by",
+    "driver_cancel_requested_by_user_id",
     "driver_cancel_requested_at",
     "driver_cancel_review_status",
     "driver_cancel_review_reason",
@@ -604,6 +606,165 @@ function ensureVehicleLogsSheet() {
   return sheet;
 }
 
+function ensureBookingActivityLogsSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("BookingActivityLogs");
+
+  const headers = [
+    "log_id",
+    "booking_id",
+    "event_type",
+    "event_title",
+    "detail",
+    "actor_name",
+    "actor_user_id",
+    "old_driver_user_id",
+    "old_driver_name",
+    "new_driver_user_id",
+    "new_driver_name",
+    "old_vehicle_id",
+    "new_vehicle_id",
+    "created_at",
+    "payload_json",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("BookingActivityLogs");
+  }
+
+  ensureSheetColumns_(sheet, headers);
+  return sheet;
+}
+
+function normalizeBookingActivityText_(value) {
+  return String(value || "").trim();
+}
+
+function normalizeBookingActivityTimestamp_(value) {
+  if (!value) return new Date().toISOString();
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const date = new Date(value);
+  if (!Number.isNaN(date.getTime())) {
+    return date.toISOString();
+  }
+
+  return String(value || "").trim();
+}
+
+function appendBookingActivityLog(bookingId, eventType, payload) {
+  const normalizedBookingId = normalizeBookingActivityText_(bookingId);
+  const normalizedEventType = normalizeBookingActivityText_(eventType);
+
+  if (!normalizedBookingId || !normalizedEventType) return null;
+
+  const sheet = ensureBookingActivityLogsSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const rowValues = Array(headers.length).fill("");
+  const createdAt = normalizeBookingActivityTimestamp_(payload && payload.created_at);
+
+  rowValues[ensureColumn(sheet, headers, "log_id")] = "BAL-" + Date.now();
+  rowValues[ensureColumn(sheet, headers, "booking_id")] = normalizedBookingId;
+  rowValues[ensureColumn(sheet, headers, "event_type")] = normalizedEventType;
+  rowValues[ensureColumn(sheet, headers, "event_title")] = normalizeBookingActivityText_(
+    payload && (payload.event_title || payload.title || normalizedEventType)
+  );
+  rowValues[ensureColumn(sheet, headers, "detail")] = normalizeBookingActivityText_(payload && payload.detail);
+  rowValues[ensureColumn(sheet, headers, "actor_name")] = normalizeBookingActivityText_(
+    payload && (payload.actor_name || payload.actor || payload.created_by || payload.updated_by || payload.completed_by || payload.cancelled_by || payload.requested_by || payload.reviewed_by)
+  );
+  rowValues[ensureColumn(sheet, headers, "actor_user_id")] = normalizeBookingActivityText_(
+    payload && (payload.actor_user_id || payload.created_by_user_id || payload.updated_by_user_id || payload.completed_by_user_id)
+  );
+  rowValues[ensureColumn(sheet, headers, "old_driver_user_id")] = normalizeBookingActivityText_(payload && payload.old_driver_user_id);
+  rowValues[ensureColumn(sheet, headers, "old_driver_name")] = normalizeBookingActivityText_(payload && payload.old_driver_name);
+  rowValues[ensureColumn(sheet, headers, "new_driver_user_id")] = normalizeBookingActivityText_(payload && payload.new_driver_user_id);
+  rowValues[ensureColumn(sheet, headers, "new_driver_name")] = normalizeBookingActivityText_(payload && payload.new_driver_name);
+  rowValues[ensureColumn(sheet, headers, "old_vehicle_id")] = normalizeBookingActivityText_(payload && payload.old_vehicle_id);
+  rowValues[ensureColumn(sheet, headers, "new_vehicle_id")] = normalizeBookingActivityText_(payload && payload.new_vehicle_id);
+  rowValues[ensureColumn(sheet, headers, "created_at")] = createdAt;
+  rowValues[ensureColumn(sheet, headers, "payload_json")] = safeStringifyNotificationPayload_(payload || {});
+
+  appendSheetRow(sheet, rowValues);
+  return rowsToObjects(headers, [rowValues])[0] || null;
+}
+
+function buildBookingActivityLogsMap_() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("BookingActivityLogs");
+  if (!sheet) return {};
+
+  const table = readSheetTable(sheet);
+  if (!table.rows.length) return {};
+
+  const data = rowsToObjects(table.headers, table.rows);
+  const map = {};
+
+  data.forEach((entry) => {
+    const bookingId = normalizeBookingActivityText_(entry.booking_id);
+    if (!bookingId) return;
+
+    if (!map[bookingId]) {
+      map[bookingId] = [];
+    }
+
+    map[bookingId].push({
+      log_id: normalizeBookingActivityText_(entry.log_id),
+      booking_id: bookingId,
+      event_type: normalizeBookingActivityText_(entry.event_type),
+      event_title: normalizeBookingActivityText_(entry.event_title || entry.event_type),
+      detail: normalizeBookingActivityText_(entry.detail),
+      actor_name: normalizeBookingActivityText_(entry.actor_name),
+      actor_user_id: normalizeBookingActivityText_(entry.actor_user_id),
+      old_driver_user_id: normalizeBookingActivityText_(entry.old_driver_user_id),
+      old_driver_name: normalizeBookingActivityText_(entry.old_driver_name),
+      new_driver_user_id: normalizeBookingActivityText_(entry.new_driver_user_id),
+      new_driver_name: normalizeBookingActivityText_(entry.new_driver_name),
+      old_vehicle_id: normalizeBookingActivityText_(entry.old_vehicle_id),
+      new_vehicle_id: normalizeBookingActivityText_(entry.new_vehicle_id),
+      created_at: normalizeBookingActivityTimestamp_(entry.created_at),
+      payload_json: normalizeBookingActivityText_(entry.payload_json),
+    });
+  });
+
+  Object.keys(map).forEach((bookingId) => {
+    map[bookingId].sort((a, b) => {
+      const timeA = new Date(a.created_at || 0).getTime();
+      const timeB = new Date(b.created_at || 0).getTime();
+      return timeB - timeA;
+    });
+  });
+
+  return map;
+}
+
+function enrichBookingWithActivityData_(booking, activityLogsMap) {
+  const bookingId = normalizeBookingActivityText_(booking && booking.booking_id);
+  const timeline = bookingId && activityLogsMap && activityLogsMap[bookingId]
+    ? activityLogsMap[bookingId].slice()
+    : [];
+
+  return {
+    ...booking,
+    timeline,
+    activity_logs: timeline.slice(),
+    booking_logs: timeline.slice(),
+    audit_logs: timeline.slice(),
+    history: timeline.slice(),
+  };
+}
+
+function buildBookingResponseWithActivityData_(booking, userLookup) {
+  const bookingObject = booking ? { ...booking } : {};
+  if (userLookup) {
+    applyAssignedUserFallback(bookingObject, userLookup);
+  }
+  return enrichBookingWithActivityData_(bookingObject, buildBookingActivityLogsMap_());
+}
+
 function normalizeRoleValue_(role) {
   return String(role || "").trim().toUpperCase();
 }
@@ -696,7 +857,7 @@ function buildDriverUnavailableNotificationMessage_(payload, includeReason) {
   const driverName = String(payload && payload.driver_name || "").trim();
   const startDatetime = formatThaiNotificationDateTime_(payload && payload.start_datetime || "");
   const endDatetime = formatThaiNotificationDateTime_(payload && payload.end_datetime || "");
-  const unavailableType = String(payload && payload.type || "").trim();
+  const unavailableType = getDriverUnavailableTypeDisplayLabel_(payload && payload.type || "");
   const parts = [];
 
   if (driverName) parts.push(driverName);
@@ -705,6 +866,39 @@ function buildDriverUnavailableNotificationMessage_(payload, includeReason) {
   if (unavailableType) parts.push(unavailableType);
 
   return parts.join(" | ");
+}
+
+function getDriverUnavailableTypeDisplayLabel_(value) {
+  const raw = String(value || "").trim();
+  const normalizedUpper = raw.toUpperCase();
+  const normalizedLower = raw.toLowerCase();
+
+  if (!raw) return "";
+  if (
+    normalizedUpper === "LEAVE" ||
+    normalizedLower === "holiday" ||
+    raw === "ลา" ||
+    raw === "ลา / หยุด"
+  ) {
+    return "ลา / หยุด";
+  }
+  if (
+    normalizedUpper === "TEMP_UNAVAILABLE" ||
+    normalizedLower === "unable to complete a task." ||
+    raw === "หยุด" ||
+    raw === "ติดภารกิจ (ชั่วคราว)"
+  ) {
+    return "ติดภารกิจ (ชั่วคราว)";
+  }
+  if (
+    normalizedUpper === "OUT_PROVINCE" ||
+    normalizedUpper === "OTHER" ||
+    raw === "ปฏิบัติงานต่างจังหวัด"
+  ) {
+    return "ปฏิบัติงานต่างจังหวัด";
+  }
+
+  return raw;
 }
 
 function inferNotificationCategory_(input) {
@@ -2007,6 +2201,7 @@ function getBookings() {
 
   const data = rowsToObjects(headers, rows);
   const userLookup = buildUserLookup();
+  const activityLogsMap = buildBookingActivityLogsMap_();
   data.forEach((obj) => {
     applyAssignedUserFallback(obj, userLookup);
   });
@@ -2014,7 +2209,7 @@ function getBookings() {
   return jsonOutput({
     success: true,
     total: data.length,
-    data: data
+    data: data.map((booking) => enrichBookingWithActivityData_(booking, activityLogsMap))
   });
 }
 
@@ -2089,6 +2284,22 @@ function createBooking(data) {
 
     logBookingAction("createBooking", bookingId, row);
 
+    appendBookingActivityLog(bookingId, "สร้างรายการ", {
+      actor_name: String(data.created_by || data.requester_name || "").trim(),
+      actor_user_id: String(data.created_by_user_id || data.requester_user_id || "").trim(),
+      detail: [
+        String(data.requester_name || "").trim(),
+        String(data.destination || "").trim(),
+        formatThaiNotificationDateTime_(data.start_datetime || ""),
+      ].filter(Boolean).join(" | "),
+      created_at: now,
+      payload: {
+        requester_name: data.requester_name || "",
+        destination: data.destination || "",
+        start_datetime: data.start_datetime || "",
+      },
+    });
+
     createRoleNotifications_(["STAFF", "ADMIN"], {
       category: "Booking",
       title: "มีรายการจองใหม่",
@@ -2106,7 +2317,7 @@ function createBooking(data) {
     return jsonOutput({
       success: true,
       message: "Create booking success",
-      data: {
+      data: buildBookingResponseWithActivityData_({
         ...data,
         booking_id: bookingId,
         booking_no: bookingNo,
@@ -2116,7 +2327,7 @@ function createBooking(data) {
         assigned_user_id: data.assigned_user_id || "",
         assigned_user_name: data.assigned_user_name || "",
         is_backdated: bookingRow[isBackdatedCol],
-      },
+      }),
       created_notifications: getCreatedNotifications_(),
     });
   } catch (err) {
@@ -2159,6 +2370,7 @@ function updateBooking(data) {
     return jsonOutput({ success: false, message: "Booking not found" });
   }
 
+  const previousBooking = rowsToObjects(headers, [table.rows[row - 2]])[0] || {};
   const rowValues = table.rows[row - 2].slice();
   editableFields.forEach((field) => {
     const col = columnMap[field];
@@ -2186,6 +2398,38 @@ function updateBooking(data) {
   const updatedBy = String(data.updated_by || data.created_by || "").trim();
   const updatedByRole = String(data.updated_by_role || "").trim().toUpperCase();
   const updatedByUserId = String(data.updated_by_user_id || data.created_by_user_id || "").trim();
+  const changedFieldLabels = {
+    requester_name: "ผู้จอง",
+    department: "หน่วยงาน",
+    phone: "เบอร์โทร",
+    start_datetime: "เวลาไป",
+    end_datetime: "เวลากลับ",
+    destination: "ปลายทาง",
+    purpose: "รายละเอียดการใช้รถ",
+    vehicle_type_request: "ประเภทรถ",
+    assigned_user_name: "คนขับ",
+    is_backdated: "รายการย้อนหลัง",
+  };
+  const changedDetails = Object.keys(changedFieldLabels).reduce((result, field) => {
+    const beforeValue = normalizeBookingActivityText_(previousBooking[field]);
+    const afterValue = normalizeBookingActivityText_(updatedBooking[field]);
+    if (beforeValue === afterValue) return result;
+    result.push(`${changedFieldLabels[field]}: ${afterValue || "-"}`);
+    return result;
+  }, []);
+
+  appendBookingActivityLog(data.booking_id, "แก้ไขรายการ", {
+    actor_name: updatedBy,
+    actor_user_id: updatedByUserId,
+    detail: changedDetails.join(" | ") || "แก้ไขรายละเอียดรายการจอง",
+    old_driver_user_id: normalizeBookingActivityText_(previousBooking.assigned_user_id),
+    old_driver_name: normalizeBookingActivityText_(previousBooking.assigned_user_name),
+    new_driver_user_id: normalizeBookingActivityText_(updatedBooking.assigned_user_id),
+    new_driver_name: normalizeBookingActivityText_(updatedBooking.assigned_user_name),
+    old_vehicle_id: normalizeBookingActivityText_(previousBooking.vehicle_id),
+    new_vehicle_id: normalizeBookingActivityText_(updatedBooking.vehicle_id),
+    created_at: rowValues[updatedAtCol],
+  });
 
   try {
     const requesterUserId = resolveRequesterNotificationUserId_(updatedBooking);
@@ -2262,10 +2506,10 @@ function updateBooking(data) {
   return jsonOutput({
     success: true,
     message: "Update booking success",
-    data: {
+    data: buildBookingResponseWithActivityData_({
       ...updatedBooking,
       booking_id: data.booking_id,
-    },
+    }),
     created_notifications: getCreatedNotifications_(),
   });
 }
@@ -2372,9 +2616,77 @@ function approveBooking(data) {
   rowValues[updatedAtCol] = new Date();
   setRowValues(sheet, row, rowValues);
 
-  const currentUserName = String(
+  const updatedAtValue = rowValues[updatedAtCol];
+  const resolvedAssignedDriverName = rowValues[assignedUserNameCol];
+  const resolvedVehicleId = rowValues[vehicleIdCol];
+  const previousAssignedDriverName = String(currentBooking.assigned_user_name || "").trim();
+  const previousAssignedDriverId = String(currentBooking.assigned_user_id || "").trim();
+  const previousVehicleId = String(currentBooking.vehicle_id || "").trim();
+  const previousStatus = String(currentBooking.status || "").trim().toUpperCase();
+  const approvalActorName = String(
     data.current_user_name || data.created_by || data.updated_by || data.staff_name || ""
   ).trim();
+  const approvalActorUserId = String(
+    data.current_user_id || data.created_by_user_id || data.updated_by_user_id || ""
+  ).trim();
+
+  if (previousStatus !== "APPROVED") {
+    appendBookingActivityLog(data.booking_id, "อนุมัติรายการ", {
+      actor_name: approvalActorName,
+      actor_user_id: approvalActorUserId,
+      detail: [
+        resolvedAssignedDriverName ? `คนขับ: ${resolvedAssignedDriverName}` : "",
+        resolvedVehicleId ? `รถ: ${resolvedVehicleId}` : "",
+      ].filter(Boolean).join(" | ") || "อนุมัติรายการจอง",
+      old_driver_user_id: previousAssignedDriverId,
+      old_driver_name: previousAssignedDriverName,
+      new_driver_user_id: assignedDriverUserId,
+      new_driver_name: resolvedAssignedDriverName,
+      old_vehicle_id: previousVehicleId,
+      new_vehicle_id: resolvedVehicleId,
+      created_at: updatedAtValue,
+    });
+  }
+
+  if (
+    previousAssignedDriverId &&
+    assignedDriverUserId &&
+    previousAssignedDriverId !== assignedDriverUserId
+  ) {
+    appendBookingActivityLog(data.booking_id, "เปลี่ยนคนขับ", {
+      actor_name: approvalActorName,
+      actor_user_id: approvalActorUserId,
+      detail: `${previousAssignedDriverName || previousAssignedDriverId} → ${resolvedAssignedDriverName || assignedDriverUserId}`,
+      old_driver_user_id: previousAssignedDriverId,
+      old_driver_name: previousAssignedDriverName,
+      new_driver_user_id: assignedDriverUserId,
+      new_driver_name: resolvedAssignedDriverName,
+      old_vehicle_id: previousVehicleId,
+      new_vehicle_id: resolvedVehicleId,
+      created_at: updatedAtValue,
+    });
+  }
+
+  if (
+    previousVehicleId &&
+    resolvedVehicleId &&
+    previousVehicleId !== resolvedVehicleId
+  ) {
+    appendBookingActivityLog(data.booking_id, "เปลี่ยนรถ", {
+      actor_name: approvalActorName,
+      actor_user_id: approvalActorUserId,
+      detail: `${previousVehicleId} → ${resolvedVehicleId}`,
+      old_driver_user_id: previousAssignedDriverId,
+      old_driver_name: previousAssignedDriverName,
+      new_driver_user_id: assignedDriverUserId,
+      new_driver_name: resolvedAssignedDriverName,
+      old_vehicle_id: previousVehicleId,
+      new_vehicle_id: resolvedVehicleId,
+      created_at: updatedAtValue,
+    });
+  }
+
+  const currentUserName = approvalActorName;
   if (String(rowValues[assignedUserIdCol] || "").trim()) {
     appendDriverJobLog_(
       createDriverJobLogPayload_({
@@ -2414,14 +2726,14 @@ function approveBooking(data) {
   return jsonOutput({
     success: true,
     message: "Approve booking success",
-    data: {
+    data: buildBookingResponseWithActivityData_({
       booking_id: values[currentRow][bookingIdCol],
       booking_no: bookingNoCol !== -1 ? values[currentRow][bookingNoCol] : "",
       vehicle_id: data.vehicle_id || "",
       assigned_user_id: data.assigned_user_id || data.driver_id || "",
       assigned_user_name: data.assigned_user_name || data.driver_name || "",
       status: "APPROVED"
-    },
+    }),
     created_notifications: getCreatedNotifications_(),
   });
 }
@@ -2546,7 +2858,17 @@ function assignCentralVehicle(data) {
 
   setRowValues(sheet, rowNumber, rowValues);
 
-  const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
+  appendBookingActivityLog(bookingId, "ใช้รถ สนง.กลาง", {
+    actor_name: completedBy,
+    actor_user_id: completedByUserId,
+    detail: reason,
+    new_driver_user_id: centralDriverUserId,
+    new_driver_name: centralDriverName,
+    new_vehicle_id: normalizeBookingActivityText_(rowValues[vehicleIdCol]),
+    created_at: nowIso,
+  });
+
+  const updatedBooking = buildBookingResponseWithActivityData_(rowsToObjects(headers, [rowValues])[0] || {});
   const bookingNo = bookingNoCol !== undefined && bookingNoCol !== -1 ? String(rowValues[bookingNoCol] || "").trim() : "";
 
   appendDriverJobLog_(
@@ -3004,10 +3326,24 @@ function backdateCompleteBooking(data) {
     created_by: actor || "",
   });
 
+  appendBookingActivityLog(data.booking_id, "บันทึกงานย้อนหลัง", {
+    actor_name: actor,
+    actor_user_id: String(data.updated_by_user_id || data.created_by_user_id || "").trim(),
+    detail: [
+      note ? `หมายเหตุ: ${note}` : "",
+      rowValues[actualStartDatetimeCol] ? `เวลาออกจริง: ${formatThaiNotificationDateTime_(rowValues[actualStartDatetimeCol])}` : "",
+      rowValues[actualReturnDatetimeCol] ? `เวลากลับจริง: ${formatThaiNotificationDateTime_(rowValues[actualReturnDatetimeCol])}` : "",
+    ].filter(Boolean).join(" | ") || "บันทึกงานย้อนหลัง",
+    new_driver_user_id: assignedUserId,
+    new_driver_name: assignedUserName,
+    new_vehicle_id: vehicleId,
+    created_at: rowValues[updatedAtCol],
+  });
+
   return jsonOutput({
     success: true,
     message: "Backdate complete booking success",
-    data: {
+    data: buildBookingResponseWithActivityData_({
       booking_id: currentBooking.booking_id || data.booking_id,
       booking_no: currentBooking.booking_no || "",
       assigned_user_id: assignedUserId,
@@ -3024,7 +3360,7 @@ function backdateCompleteBooking(data) {
       backdated_completed_by: rowValues[backdatedCompletedByCol] || actor,
       updated_at: now.toISOString(),
       updated_by: rowValues[updatedByCol] || actor,
-    },
+    }, userLookup),
   });
 }
 
@@ -3127,6 +3463,7 @@ function requestDriverCancelJob(data) {
 
   const reason = String(data.reason || "").trim();
   const requestedBy = String(data.requested_by || "").trim();
+  const requestedByUserId = String(data.requested_by_user_id || "").trim();
 
   if (!reason) {
     return jsonOutput({
@@ -3156,6 +3493,7 @@ function requestDriverCancelJob(data) {
   const requestStatusCol = ensureColumn(sheet, headers, "driver_cancel_request_status");
   const requestReasonCol = ensureColumn(sheet, headers, "driver_cancel_request_reason");
   const requestedByCol = ensureColumn(sheet, headers, "driver_cancel_requested_by");
+  const requestedByUserIdCol = ensureColumn(sheet, headers, "driver_cancel_requested_by_user_id");
   const requestedAtCol = ensureColumn(sheet, headers, "driver_cancel_requested_at");
   const reviewStatusCol = ensureColumn(sheet, headers, "driver_cancel_review_status");
   const reviewReasonCol = ensureColumn(sheet, headers, "driver_cancel_review_reason");
@@ -3166,6 +3504,7 @@ function requestDriverCancelJob(data) {
   rowValues[requestStatusCol] = "PENDING";
   rowValues[requestReasonCol] = reason;
   rowValues[requestedByCol] = requestedBy;
+  rowValues[requestedByUserIdCol] = requestedByUserId;
   rowValues[requestedAtCol] = now;
   rowValues[reviewStatusCol] = "";
   rowValues[reviewReasonCol] = "";
@@ -3175,6 +3514,15 @@ function requestDriverCancelJob(data) {
   setRowValues(sheet, row, rowValues);
 
   const currentBooking = rowsToObjects(headers, [rowValues])[0] || {};
+
+  appendBookingActivityLog(data.booking_id, "คนขับขอยกเลิกงาน", {
+    actor_name: requestedBy,
+    detail: reason,
+    new_driver_user_id: normalizeBookingActivityText_(currentBooking.assigned_user_id),
+    new_driver_name: normalizeBookingActivityText_(currentBooking.assigned_user_name),
+    new_vehicle_id: normalizeBookingActivityText_(currentBooking.vehicle_id),
+    created_at: now,
+  });
 
   appendDriverJobLog_(
     createDriverJobLogPayload_({
@@ -3212,18 +3560,147 @@ function requestDriverCancelJob(data) {
   return jsonOutput({
     success: true,
     message: "Driver cancel request created",
-    data: {
+    data: buildBookingResponseWithActivityData_({
       ...currentBooking,
       driver_cancel_request_status: "PENDING",
       driver_cancel_request_reason: reason,
       driver_cancel_requested_by: requestedBy,
+      driver_cancel_requested_by_user_id: requestedByUserId,
       driver_cancel_requested_at: now.toISOString(),
       driver_cancel_review_status: "",
       driver_cancel_review_reason: "",
       driver_cancel_reviewed_by: "",
       driver_cancel_reviewed_at: "",
       updated_at: now.toISOString(),
-    },
+    }),
+    created_notifications: getCreatedNotifications_(),
+  });
+}
+
+function withdrawDriverCancelRequest(data) {
+  const sheet = ensureBookingsSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+
+  const bookingId = String(data && data.booking_id || "").trim();
+  if (!bookingId) {
+    return jsonOutput({
+      success: false,
+      message: "booking_id is required",
+    });
+  }
+
+  const row = findRowByBookingId(table, bookingId);
+  if (row <= 1) {
+    return jsonOutput({
+      success: false,
+      message: "Booking not found",
+    });
+  }
+
+  const requestStatusCol = ensureColumn(sheet, headers, "driver_cancel_request_status");
+  const requestReasonCol = ensureColumn(sheet, headers, "driver_cancel_request_reason");
+  const requestedByCol = ensureColumn(sheet, headers, "driver_cancel_requested_by");
+  const requestedByUserIdCol = ensureColumn(sheet, headers, "driver_cancel_requested_by_user_id");
+  const requestedAtCol = ensureColumn(sheet, headers, "driver_cancel_requested_at");
+  const reviewStatusCol = ensureColumn(sheet, headers, "driver_cancel_review_status");
+  const reviewReasonCol = ensureColumn(sheet, headers, "driver_cancel_review_reason");
+  const reviewedByCol = ensureColumn(sheet, headers, "driver_cancel_reviewed_by");
+  const reviewedAtCol = ensureColumn(sheet, headers, "driver_cancel_reviewed_at");
+  const updatedAtCol = ensureColumn(sheet, headers, "updated_at");
+  const updatedByCol = ensureColumn(sheet, headers, "updated_by");
+  const assignedUserIdCol = ensureColumn(sheet, headers, "assigned_user_id");
+  const assignedUserNameCol = ensureColumn(sheet, headers, "assigned_user_name");
+
+  const rowValues = table.rows[row - 2].slice();
+  const requestStatus = String(rowValues[requestStatusCol] || "").trim().toUpperCase();
+  if (requestStatus !== "PENDING") {
+    return jsonOutput({
+      success: false,
+      message: "No pending driver cancel request",
+    });
+  }
+
+  const currentRole = normalizeRoleValue_(data && data.current_role || "");
+  const currentUserId = String(data && data.current_user_id || "").trim();
+  const currentUserName = String(data && (data.current_user_name || data.requested_by || data.updated_by) || "").trim();
+  const assignedUserId = String(rowValues[assignedUserIdCol] || "").trim();
+  const assignedUserName = String(rowValues[assignedUserNameCol] || "").trim();
+
+  if (currentRole === "DRIVER") {
+    const userIdMatches = Boolean(currentUserId) && Boolean(assignedUserId) && currentUserId === assignedUserId;
+    const userNameMatches = Boolean(currentUserName) && Boolean(assignedUserName) && currentUserName === assignedUserName;
+
+    if (!userIdMatches && !userNameMatches) {
+      return jsonOutput({
+        success: false,
+        message: "Driver is not assigned to this booking",
+      });
+    }
+  }
+
+  const currentBooking = rowsToObjects(headers, [rowValues])[0] || {};
+  const driverLabel = String(
+    currentBooking.assigned_user_name ||
+    currentBooking.driver_name ||
+    currentUserName ||
+    ""
+  ).trim();
+  const detailMessage = buildDriverDestinationStartMessage_(
+    currentBooking,
+    driverLabel,
+    "คนขับยกเลิกคำขอยกเลิกรับงาน"
+  );
+  const now = new Date();
+  const actorName = currentUserName || driverLabel || String(rowValues[requestedByCol] || "").trim();
+  const actorUserId = currentUserId || String(rowValues[requestedByUserIdCol] || "").trim();
+
+  rowValues[requestStatusCol] = "";
+  rowValues[requestReasonCol] = "";
+  rowValues[requestedByCol] = "";
+  rowValues[requestedByUserIdCol] = "";
+  rowValues[requestedAtCol] = "";
+  rowValues[reviewStatusCol] = "";
+  rowValues[reviewReasonCol] = "";
+  rowValues[reviewedByCol] = "";
+  rowValues[reviewedAtCol] = "";
+  rowValues[updatedAtCol] = now;
+  rowValues[updatedByCol] = actorName;
+  setRowValues(sheet, row, rowValues);
+
+  const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
+
+  appendBookingActivityLog(bookingId, "WITHDRAW_DRIVER_CANCEL_REQUEST", {
+    event_title: "คนขับยกเลิกคำขอยกเลิกรับงาน",
+    actor_name: actorName,
+    actor_user_id: actorUserId,
+    detail: detailMessage,
+    new_driver_user_id: String(updatedBooking.assigned_user_id || "").trim(),
+    new_driver_name: String(updatedBooking.assigned_user_name || "").trim(),
+    new_vehicle_id: String(updatedBooking.vehicle_id || "").trim(),
+    created_at: now,
+  });
+
+  createRoleNotifications_(["STAFF", "ADMIN"], {
+    category: "Cancellation",
+    title: "คนขับยกเลิกคำขอยกเลิกรับงาน",
+    message: detailMessage,
+    type: "WITHDRAW_DRIVER_CANCEL_REQUEST",
+    booking_id: bookingId,
+    url: "/booking",
+    created_by: actorName,
+    payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+      status: String(updatedBooking.status || "").trim(),
+      actor_name: actorName,
+      driver_cancel_request_status: "",
+    }),
+  });
+
+  return jsonOutput({
+    success: true,
+    message: "Driver cancel request withdrawn",
+    data: buildBookingResponseWithActivityData_(updatedBooking),
     created_notifications: getCreatedNotifications_(),
   });
 }
@@ -3306,6 +3783,14 @@ function reviewDriverCancelRequest(data) {
     setRowValues(sheet, row, updatedValues);
 
     const currentBooking = rowsToObjects(headers, [updatedValues])[0] || {};
+    appendBookingActivityLog(data.booking_id, "อนุมัติยกเลิกงาน", {
+      actor_name: reviewedBy,
+      detail: reviewReason || String(currentRowValues[requestReasonCol] || "").trim(),
+      old_driver_user_id: currentAssignedUserId,
+      old_driver_name: normalizeBookingActivityText_(currentRowValues[columnMap.assigned_user_name]),
+      old_vehicle_id: normalizeBookingActivityText_(currentRowValues[columnMap.vehicle_id]),
+      created_at: now,
+    });
     try {
       const requesterUserId = resolveRequesterNotificationUserId_(currentBooking);
       if (requesterUserId) {
@@ -3349,7 +3834,7 @@ function reviewDriverCancelRequest(data) {
     return jsonOutput({
       success: true,
       message: "Driver cancel request approved",
-      data: {
+      data: buildBookingResponseWithActivityData_({
         ...currentBooking,
         driver_cancel_request_status: "APPROVED",
         driver_cancel_review_status: "APPROVED",
@@ -3364,7 +3849,7 @@ function reviewDriverCancelRequest(data) {
         vehicle_code: "",
         vehicle_plate: "",
         updated_at: now.toISOString(),
-      },
+      }),
       created_notifications: getCreatedNotifications_(),
     });
   }
@@ -3386,6 +3871,14 @@ function reviewDriverCancelRequest(data) {
   setRowValues(sheet, row, rejectedValues);
 
   const currentBooking = rowsToObjects(headers, [rejectedValues])[0] || {};
+  appendBookingActivityLog(data.booking_id, "ไม่อนุมัติยกเลิกงาน", {
+    actor_name: reviewedBy,
+    detail: reviewReason,
+    new_driver_user_id: normalizeBookingActivityText_(currentBooking.assigned_user_id || currentAssignedUserId),
+    new_driver_name: normalizeBookingActivityText_(currentBooking.assigned_user_name),
+    new_vehicle_id: normalizeBookingActivityText_(currentBooking.vehicle_id),
+    created_at: now,
+  });
   appendDriverJobLog_(
     createDriverJobLogPayload_({
       booking_id: currentBooking.booking_id || data.booking_id,
@@ -3425,7 +3918,7 @@ function reviewDriverCancelRequest(data) {
   return jsonOutput({
     success: true,
     message: "Driver cancel request rejected",
-    data: {
+    data: buildBookingResponseWithActivityData_({
       ...currentBooking,
       driver_cancel_request_status: "REJECTED",
       driver_cancel_review_status: "REJECTED",
@@ -3433,7 +3926,7 @@ function reviewDriverCancelRequest(data) {
       driver_cancel_reviewed_by: reviewedBy,
       driver_cancel_reviewed_at: now.toISOString(),
       updated_at: now.toISOString(),
-    },
+    }),
     created_notifications: getCreatedNotifications_(),
   });
 }
@@ -3512,6 +4005,15 @@ function cancelBooking(data) {
   setRowValues(sheet, row, rowValues);
   const cancelledBooking = rowsToObjects(headers, [rowValues])[0] || {};
 
+  appendBookingActivityLog(data.booking_id, "ยกเลิกรายการ", {
+    actor_name: cancelledBy,
+    detail: reason,
+    old_driver_user_id: normalizeBookingActivityText_(booking[assignedUserIdCol]),
+    old_driver_name: normalizeBookingActivityText_(booking[assignedUserNameCol]),
+    old_vehicle_id: normalizeBookingActivityText_(booking[vehicleIdCol]),
+    created_at: now,
+  });
+
   const historySheet = ensureCancellationHistorySheet();
   const historyHeaders = readSheetTable(historySheet).headers;
   const historyId = "BCH" + Utilities.formatString("%04d", historySheet.getLastRow());
@@ -3583,12 +4085,13 @@ function cancelBooking(data) {
   return jsonOutput({
     success: true,
     message: "Cancel booking success",
-    data: {
+    data: buildBookingResponseWithActivityData_({
+      ...cancelledBooking,
       booking_id: data.booking_id,
       status: "CANCELLED",
       reason,
       cancelled_by: cancelledBy,
-    },
+    }),
     created_notifications: getCreatedNotifications_(),
   });
 }
@@ -7565,6 +8068,13 @@ function unassignBookingDriver(data) {
   setRowValues(sheet, rowNumber, rowValues);
 
   const updatedBooking = rowsToObjects(headers, [rowValues])[0] || {};
+  appendBookingActivityLog(bookingId, "ดึงงานกลับ", {
+    actor_name: updatedBy,
+    detail: reason,
+    old_driver_user_id: oldDriverUserId,
+    old_driver_name: oldDriverName,
+    created_at: rowValues[updatedAtCol],
+  });
 
   const logSheet = ensureDriverQueueLogsSheet();
   const logTable = readSheetTable(logSheet);
@@ -7654,7 +8164,7 @@ function unassignBookingDriver(data) {
   return jsonOutput({
     success: true,
     message: "Unassign booking driver success",
-    data: updatedBooking,
+    data: buildBookingResponseWithActivityData_(updatedBooking),
     created_notifications: getCreatedNotifications_(),
   });
 }
