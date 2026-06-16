@@ -464,12 +464,12 @@ export default function DriverUnavailableLogs() {
           <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="text-[20px] font-bold text-slate-900">ตัวกรองข้อมูล</h3>
-                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                <span className="text-[25px] font-bold text-slate-900">ตัวกรองข้อมูล</span>
+                <p className="mt-1 text-[20px] leading-6 text-slate-500">
                   ค้นหาตามคนขับ รายละเอียด หรือผู้บันทึก
                 </p>
               </div>
-              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-[13px] font-semibold text-slate-600 shadow-sm">
+              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-[20px] font-semibold text-slate-600 shadow-sm">
                 ใช้งาน {activeFilterCount} ตัวกรอง
               </div>
             </div>
@@ -480,12 +480,14 @@ export default function DriverUnavailableLogs() {
                 value={filters.keyword}
                 onChange={(value) => setFilter("keyword", value)}
                 placeholder="ค้นหาคนขับ รายละเอียด ผู้บันทึก"
+                labelClassName="text-[20px]"
               />
               <FilterField
                 label="ผู้บันทึก"
                 value={filters.createdBy}
                 onChange={(value) => setFilter("createdBy", value)}
                 placeholder="ค้นหาผู้บันทึก"
+                labelClassName="text-[20px]"
               />
             </div>
 

@@ -290,17 +290,14 @@ function Pagination({ page, totalPages, totalItems, onChangePage }) {
 function QueueExplanationCard() {
   return (
     <div className="mb-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
-      <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
-        ประวัติคิวคนขับ
-      </h3>
       <p className="mt-1 leading-8 text-slate-700" style={{ fontSize: 20 }}>
         แสดงประวัติการเลือกคนขับของแต่ละรายการจอง ว่าระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวเพราะเหตุผลใด
       </p>
       <div className="mt-4 rounded-2xl border border-white/80 bg-white/90 p-4">
-        <div className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+        <div className="font-bold  text-slate-900" style={{ fontSize: 23 }}>
           คำอธิบาย:
         </div>
-        <ul className="mt-2 grid gap-2 leading-8 text-slate-600" style={{ fontSize: 20 }}>
+        <ul className="mt-2 grid gap-2 leading-8 text-slate-600" style={{ fontSize: 22 }}>
           <li>- “คนขับที่ระบบจัดการให้” คือคนขับที่ระบบเลือกตามคิว</li>
           <li>- “คนขับที่เลือกจริง” คือคนขับที่ถูกมอบหมายจริง</li>
           <li>- “คิวก่อนหน้า/คิวถัดไป” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</li>
@@ -824,7 +821,7 @@ export default function DriverQueueLogs() {
           type="button"
           disabled={refreshing || loading}
           onClick={() => loadData({ refreshOnly: true })}
-          style={{ fontSize: 16 }}
+          style={{ fontSize: 25}}
         >
           {refreshing ? "กำลังรีเฟรช..." : "รีเฟรชข้อมูล"}
         </button>
@@ -840,9 +837,9 @@ export default function DriverQueueLogs() {
           <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+                <span className="font-bold text-[20px] text-slate-900">
                   ตัวกรองข้อมูล
-                </h3>
+                </span>
                 <p className="mt-1 leading-8 text-slate-500" style={{ fontSize: 20 }}>
                   ค้นหาตามเลขที่จอง คนขับ เหตุผล หรือผู้บันทึก
                 </p>
@@ -882,7 +879,7 @@ export default function DriverQueueLogs() {
                 type="button"
                 onClick={clearFilters}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
-                style={{ fontSize: 16 }}
+                style={{ fontSize: 25 }}
               >
                 ล้างตัวกรอง
               </button>
@@ -892,9 +889,9 @@ export default function DriverQueueLogs() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <h3 className="font-bold text-slate-900" style={{ fontSize: 20 }}>
+                <span className="font-bold text-[20px] text-slate-900">
                   รายการบันทึกคิว
-                </h3>
+                </span>
                 <p className="mt-1 leading-8 text-slate-500" style={{ fontSize: 20 }}>
                   ดูว่าแต่ละรายการจอง ระบบจัดการให้ใคร เลือกจริงเป็นใคร และมีการข้ามคิวคนใดบ้าง
                 </p>

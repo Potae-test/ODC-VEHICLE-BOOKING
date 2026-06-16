@@ -388,7 +388,7 @@ export default function BookingCancellationHistory() {
             <h2 className="text-[26px] font-bold leading-tight text-blue-950 sm:text-[28px]">
               ประวัติรายการยกเลิก
             </h2>
-            <p className="mt-1 text-[15px] leading-6 text-slate-500 sm:text-[16px]">
+            <p className="mt-1 text-[15px] leading-6 text-slate-500 sm:text-[20px]">
               ตรวจสอบประวัติการยกเลิก เหตุผล ผู้ยกเลิก และช่วงเวลาที่บันทึกไว้
             </p>
           </div>
@@ -431,16 +431,16 @@ export default function BookingCancellationHistory() {
                   <FilterIcon className="h-5 w-5 text-blue-700" />
                   <span>กรองข้อมูล</span>
                 </h3>
-                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                <p className="mt-1 text-[20px] leading-6 text-slate-500">
                   ค้นหาตามผู้จอง ปลายทาง เหตุผล หรือผู้ยกเลิก
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <span className="inline-flex min-h-8 items-center rounded-full bg-slate-100 px-3.5 text-[14px] font-semibold text-slate-700">
+                <span className="inline-flex min-h-8 items-center rounded-full bg-slate-100 px-3.5 text-[20px] font-semibold text-slate-700">
                   จำนวนรายการยกเลิกทั้งหมด {history.length} รายการ
                 </span>
-                <span className="inline-flex min-h-8 items-center rounded-full bg-blue-50 px-3.5 text-[14px] font-semibold text-blue-700">
+                <span className="inline-flex min-h-8 items-center rounded-full bg-blue-50 px-3.5 text-[20px] font-semibold text-blue-700">
                   จำนวนที่แสดงหลังกรอง {filteredHistory.length} รายการ
                 </span>
               </div>
@@ -479,7 +479,7 @@ export default function BookingCancellationHistory() {
             </div>
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-[15px] leading-6 text-slate-600">
+              <div className="text-[20px] leading-6 text-slate-600">
                 {filteredHistory.length > 0
                   ? `แสดง ${pageStart}-${pageEnd} จากทั้งหมด ${filteredHistory.length} รายการ`
                   : "ไม่พบข้อมูลที่ตรงกับตัวกรอง"}
@@ -502,7 +502,7 @@ export default function BookingCancellationHistory() {
                 <h3 className="flex items-center gap-2 text-[20px] font-bold text-slate-900 sm:text-[22px]">
                   <span>ประวัติรายการยกเลิก</span>
                 </h3>
-                <p className="mt-1 text-[15px] leading-6 text-slate-500">
+                <p className="mt-1 text-[20px] leading-6 text-slate-500">
                   ตารางสรุปรายการยกเลิกล่าสุด พร้อมข้อมูลผู้จอง เหตุผล และผู้ยกเลิก
                 </p>
               </div>
@@ -534,7 +534,7 @@ export default function BookingCancellationHistory() {
                           <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                             <FilterIcon className="h-5 w-5" />
                           </span>
-                          <span className="text-[16px] font-medium text-slate-600">
+                          <span className="text-[20px] font-medium text-slate-600">
                             ไม่พบประวัติการยกเลิก
                           </span>
                         </div>
