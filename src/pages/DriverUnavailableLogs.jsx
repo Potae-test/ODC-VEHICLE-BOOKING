@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDriverUnavailableLogs } from "../api";
-import MobileGrid from "../layouts/MobileGrid";
 import MobilePageHeader from "../layouts/MobilePageHeader";
 import MobilePageSection from "../layouts/MobilePageSection";
 import useIsMobile from "../hooks/useIsMobile";
 import { formatThaiDateTime } from "../utils/date";
+import { formatThaiDate, formatThaiTime } from "../utils/datetime";
 import { showError } from "../utils/alert";
-
 
 const LOGS_PER_PAGE = 5;
 
@@ -37,11 +36,7 @@ function normalizeType(type) {
   if (raw.toUpperCase() === "TEMP_UNAVAILABLE") return "หยุด";
   if (raw === "ลา / หยุด") return "ลา";
   if (raw === "ติดภารกิจ (ชั่วคราว)") return "หยุด";
-  if (
-    raw.toUpperCase() === "OUT_PROVINCE" ||
-    raw === "ปฏิบัติงานต่างจังหวัด" ||
-    raw.toUpperCase() === "OTHER"
-  ) {
+  if (raw.toUpperCase() === "OUT_PROVINCE" || raw === "ปฏิบัติงานต่างจังหวัด" || raw.toUpperCase() === "OTHER") {
     return "OUT_PROVINCE";
   }
   return raw;
@@ -92,42 +87,37 @@ function getActionTone(action) {
   return "gray";
 }
 
-const ACTION_FILTER_OPTIONS = [
-  { value: "", label: "ทั้งหมด" },
-  { value: "CREATED", label: "สร้าง" },
-  { value: "UPDATED", label: "แก้ไข" },
-  { value: "CANCELLED", label: "ยกเลิก" },
-];
+function getLogParsedValue(log) {
+  return parseJsonMaybe(log?.new_value) || parseJsonMaybe(log?.old_value) || null;
+}
+
+function getLogRecordId(log) {
+  const parsed = getLogParsedValue(log);
+  return parsed?.unavailable_id || log?.unavailable_id || log?.log_id || "-";
+}
+
+function getLogTypeDisplay(log) {
+  const parsed = getLogParsedValue(log);
+  return getTypeLabel(parsed?.type || log?.type || "");
+}
 
 function FilterField({
   label,
   value,
   onChange,
   placeholder = "",
-  as = "input",
-  options = [],
   labelClassName = "text-[13px] font-semibold text-slate-600",
   inputClassName = "h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-[15px] text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100",
 }) {
   return (
     <label className="grid gap-1">
       <span className={labelClassName}>{label}</span>
-      {as === "select" ? (
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClassName}>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={inputClassName}
-        />
-      )}
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={inputClassName}
+      />
     </label>
   );
 }
@@ -186,6 +176,7 @@ export default function DriverUnavailableLogs() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [expandedLogId, setExpandedLogId] = useState(null);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [filters, setFilters] = useState({
     keyword: "",
@@ -249,29 +240,13 @@ export default function DriverUnavailableLogs() {
       return true;
     });
   }, [filters, sortedLogs]);
-  const summaryCounts = useMemo(() => {
-    return visibleLogs.reduce(
-      (counts, log) => {
-        counts.totalCount += 1;
-        const action = String(log.action || "").trim().toUpperCase();
-        if (action === "CREATED") counts.createdCount += 1;
-        if (action === "UPDATED") counts.updatedCount += 1;
-        if (action === "CANCELLED") counts.cancelledCount += 1;
-        return counts;
-      },
-      {
-        totalCount: 0,
-        createdCount: 0,
-        updatedCount: 0,
-        cancelledCount: 0,
-      }
-    );
-  }, [visibleLogs]);
+
   const historyPages = useMemo(() => Math.max(1, Math.ceil(visibleLogs.length / LOGS_PER_PAGE)), [visibleLogs.length]);
   const pageItems = useMemo(() => visibleLogs.slice((page - 1) * LOGS_PER_PAGE, page * LOGS_PER_PAGE), [visibleLogs, page]);
 
   useEffect(() => {
     setPage(1);
+    setExpandedLogId(null);
   }, [filters, sortedLogs]);
 
   function setFilter(field, value) {
@@ -299,7 +274,7 @@ export default function DriverUnavailableLogs() {
       <div className="driver-unavailable-logs-mobile mt-[57px] flex w-full flex-col gap-3 pb-6">
         <MobilePageHeader
           title="ประวัติการปฏิบัติงาน"
-          subtitle="บันทึกการสร้าง แก้ไข และยกเลิกวันที่ไม่ปฏิบัติงาน"
+          subtitle="บันทึกการสร้าง แก้ไข และยกเลิกวันไม่ปฏิบัติงาน"
           actions={
             <button
               type="button"
@@ -337,15 +312,6 @@ export default function DriverUnavailableLogs() {
                   labelClassName="text-[15px] font-semibold text-slate-600"
                   inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
-                {/* <FilterField
-                  label="action"
-                  value={filters.action}
-                  onChange={(value) => setFilter("action", value)}
-                  as="select"
-                  options={ACTION_FILTER_OPTIONS}
-                  labelClassName="text-[15px] font-semibold text-slate-600"
-                  inputClassName="mobile-filter-input h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                /> */}
                 <FilterField
                   label="ผู้บันทึก"
                   value={filters.createdBy}
@@ -371,27 +337,6 @@ export default function DriverUnavailableLogs() {
             </div>
           ) : null}
         </MobilePageSection>
-
-        {/* <MobilePageSection title="สรุปภาพรวม" subtitle="สรุปจำนวนรายการตามประเภทการเปลี่ยนแปลง">
-          <MobileGrid columns={{ base: 2 }} gap="sm">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[13px] font-semibold text-slate-500">ทั้งหมด</div>
-              <div className="mt-1 text-[24px] font-bold text-slate-900">{summaryCounts.totalCount}</div>
-            </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[13px] font-semibold text-emerald-600">สร้าง</div>
-              <div className="mt-1 text-[24px] font-bold text-emerald-600">{summaryCounts.createdCount}</div>
-            </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[13px] font-semibold text-blue-600">แก้ไข</div>
-              <div className="mt-1 text-[24px] font-bold text-blue-600">{summaryCounts.updatedCount}</div>
-            </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[13px] font-semibold text-red-600">ยกเลิก</div>
-              <div className="mt-1 text-[24px] font-bold text-red-600">{summaryCounts.cancelledCount}</div>
-            </div>
-          </MobileGrid>
-        </MobilePageSection> */}
 
         <MobilePageSection
           title="ประวัติรายการ"
@@ -419,45 +364,74 @@ export default function DriverUnavailableLogs() {
           ) : (
             <div className="grid gap-[10px]">
               {pageItems.map((log) => (
-                <article key={log.log_id} className="driver-unavailable-log-card grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="driver-unavailable-log-driver text-[16px] font-bold leading-5 text-slate-900">
-                        {log.driver_name || "-"}
-                      </div>
-                      <div className="mt-1 text-[12px] font-semibold text-slate-500">ผู้ปฏิบัติงาน</div>
-                    </div>
+                <article key={log.log_id} className="driver-unavailable-logs-mobile-card">
+                  <div className="driver-unavailable-logs-mobile-row">
+                    <span className="driver-unavailable-logs-mobile-label">วันที่</span>
+                    <span className="driver-unavailable-logs-mobile-value">{formatThaiDate(log.created_at) || "-"}</span>
+                  </div>
+
+                  <div className="driver-unavailable-logs-mobile-row">
+                    <span className="driver-unavailable-logs-mobile-label">บันทึก</span>
+                    <span className="driver-unavailable-logs-mobile-value">{formatThaiTime(log.created_at) || "-"}</span>
+                  </div>
+
+                  <div className="driver-unavailable-logs-mobile-block">
+                    <span className="driver-unavailable-logs-mobile-block-label">เลขที่บันทึก</span>
+                    <span className="driver-unavailable-logs-booking-link">{getLogRecordId(log)}</span>
+                  </div>
+
+                  <div className="driver-unavailable-logs-mobile-block">
+                    <span className="driver-unavailable-logs-mobile-block-label">คนขับ</span>
+                    <span className="driver-unavailable-logs-mobile-strong">{log.driver_name || "-"}</span>
+                  </div>
+
+                  <div className="driver-unavailable-logs-mobile-row">
+                    <span className="driver-unavailable-logs-mobile-label">ประเภท</span>
+                    <span className="driver-unavailable-logs-mobile-value">{getLogTypeDisplay(log)}</span>
+                  </div>
+
+                  <div className="driver-unavailable-logs-mobile-row">
+                    <span className="driver-unavailable-logs-mobile-label">การทำรายการ</span>
                     <span
                       className={[
-                        "driver-unavailable-log-badge inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-[11px] font-bold",
+                        "driver-unavailable-logs-mobile-badge",
                         getActionTone(log.action) === "green"
-                          ? "bg-emerald-100 text-emerald-700"
+                          ? "is-green"
                           : getActionTone(log.action) === "blue"
-                            ? "bg-blue-100 text-blue-700"
+                            ? "is-blue"
                             : getActionTone(log.action) === "red"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-slate-100 text-slate-700",
+                              ? "is-red"
+                              : "is-gray",
                       ].join(" ")}
                     >
                       {getActionLabel(log.action)}
                     </span>
                   </div>
 
-                  <div className="driver-unavailable-log-summary rounded-2xl bg-slate-50 px-3 py-3">
-                    <div className="text-[12px] font-semibold text-slate-500">รายละเอียด</div>
-                    <div className="driver-unavailable-log-summary-value mt-1 text-[14px] font-medium leading-5 text-slate-900">{getLogSummary(log)}</div>
-                  </div>
+                  {expandedLogId === log.log_id ? (
+                    <div className="driver-unavailable-logs-mobile-summary">
+                      <div className="driver-unavailable-logs-mobile-summary-row">
+                        <span className="driver-unavailable-logs-mobile-summary-label">รายละเอียด</span>
+                        <span className="driver-unavailable-logs-mobile-summary-value">{getLogSummary(log)}</span>
+                      </div>
+                      <div className="driver-unavailable-logs-mobile-summary-row">
+                        <span className="driver-unavailable-logs-mobile-summary-label">ผู้บันทึก</span>
+                        <span className="driver-unavailable-logs-mobile-summary-value">{log.created_by || "-"}</span>
+                      </div>
+                      <div className="driver-unavailable-logs-mobile-summary-row">
+                        <span className="driver-unavailable-logs-mobile-summary-label">วันเวลา</span>
+                        <span className="driver-unavailable-logs-mobile-summary-value">{formatThaiDateTime(log.created_at)}</span>
+                      </div>
+                    </div>
+                  ) : null}
 
-                  <div className="grid gap-1 text-[13px] text-slate-700">
-                    <div>
-                      <span className="font-semibold text-slate-500">วันที่:</span>{" "}
-                      <span>{formatThaiDateTime(log.created_at)}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-slate-500">ผู้บันทึก:</span>{" "}
-                      <span>{log.created_by || "-"}</span>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    className="driver-unavailable-logs-detail-button"
+                    onClick={() => setExpandedLogId((current) => (current === log.log_id ? null : log.log_id))}
+                  >
+                    {expandedLogId === log.log_id ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}
+                  </button>
                 </article>
               ))}
             </div>
@@ -474,7 +448,7 @@ export default function DriverUnavailableLogs() {
       <div className="page-header">
         <div>
           <h2>ประวัติการปฏิบัติงาน</h2>
-          <p>บันทึกการสร้าง แก้ไข และยกเลิกวันที่ไม่ปฏิบัติงาน</p>
+          <p>บันทึกการสร้าง แก้ไข และยกเลิกวันไม่ปฏิบัติงาน</p>
         </div>
 
         <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
@@ -507,13 +481,6 @@ export default function DriverUnavailableLogs() {
                 onChange={(value) => setFilter("keyword", value)}
                 placeholder="ค้นหาคนขับ รายละเอียด ผู้บันทึก"
               />
-              {/* <FilterField
-                label="action"
-                value={filters.action}
-                onChange={(value) => setFilter("action", value)}
-                as="select"
-                options={ACTION_FILTER_OPTIONS}
-              /> */}
               <FilterField
                 label="ผู้บันทึก"
                 value={filters.createdBy}
@@ -537,38 +504,32 @@ export default function DriverUnavailableLogs() {
             <div className="mobile-empty-state">ไม่พบประวัติการปฏิบัติงาน</div>
           ) : (
             <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>คนขับ</th>
-                  {/* <th>action</th> */}
-                  <th>รายละเอียด</th>
-                  <th>วันที่</th>
-                  <th>ผู้บันทึก</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleLogs.length === 0 ? (
+              <table>
+                <thead>
                   <tr>
-                    <td colSpan="5">ไม่พบประวัติ</td>
+                    <th>คนขับ</th>
+                    <th>รายละเอียด</th>
+                    <th>วันที่</th>
+                    <th>ผู้บันทึก</th>
                   </tr>
-                ) : (
-                  visibleLogs.map((log) => (
-                    <tr key={log.log_id}>
-                      <td>{log.driver_name || "-"}</td>
-                      {/* <td>{getActionLabel(log.action)}</td> */}
-                      <td>
-                        {summarizeValue(log.new_value) !== "-"
-                          ? summarizeValue(log.new_value)
-                          : summarizeValue(log.old_value)}
-                      </td>
-                      <td>{formatThaiDateTime(log.created_at)}</td>
-                      <td>{log.created_by || "-"}</td>
+                </thead>
+                <tbody>
+                  {visibleLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan="5">ไม่พบประวัติ</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    visibleLogs.map((log) => (
+                      <tr key={log.log_id}>
+                        <td>{log.driver_name || "-"}</td>
+                        <td>{getLogSummary(log)}</td>
+                        <td>{formatThaiDateTime(log.created_at)}</td>
+                        <td>{log.created_by || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

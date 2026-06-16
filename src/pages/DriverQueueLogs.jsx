@@ -9,6 +9,7 @@ import { formatThaiDateTime } from "../utils/date";
 import { showConfirm, showError, showSuccess } from "../utils/alert";
 
 const ROWS_PER_PAGE = 5;
+const DESKTOP_COLUMN_COUNT = 10;
 
 function sortLatestFirst(items) {
   return [...items].sort((a, b) => {
@@ -58,14 +59,7 @@ function parseSkippedDrivers(value) {
     if (!Array.isArray(parsed)) return [];
 
     return parsed.map((item, index) => ({
-      id: String(
-        item.driver_user_id ||
-        item.user_id ||
-        item.driver_id ||
-        item.name ||
-        item.driver_name ||
-        index
-      ),
+      id: String(item.driver_user_id || item.user_id || item.driver_id || item.name || item.driver_name || index),
       name: String(item.driver_name || item.name || "-").trim() || "-",
       reason: String(item.reason || "-").trim() || "-",
     }));
@@ -111,11 +105,9 @@ function formatMobileShortDateTime(value) {
     return "-";
   }
 
-  return `${String(date.getDate()).padStart(2, "0")}/${String(
-    date.getMonth() + 1
-  ).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(
-    date.getMinutes()
-  ).padStart(2, "0")}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")} ${String(
+    date.getHours()
+  ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatBookingDetailValue(value) {
@@ -169,24 +161,6 @@ const ASSIGN_MODE_OPTIONS = [
   { value: "SKIPPED_BUSY", label: "ข้ามเพราะติดภารกิจ" },
 ];
 
-function ChevronDownIcon({ className = "" }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      className={className}
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  );
-}
-
 function EyeIcon({ className = "" }) {
   return (
     <svg
@@ -202,6 +176,24 @@ function EyeIcon({ className = "" }) {
     >
       <path d="M2.25 12s3.75-7.5 9.75-7.5S21.75 12 21.75 12 18 19.5 12 19.5 2.25 12 2.25 12Z" />
       <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className = "" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className={className}
+    >
+      <path d="m6 9 6 6 6-6" />
     </svg>
   );
 }
@@ -312,7 +304,7 @@ function QueueExplanationCard() {
           <li>- “คนขับที่ระบบจัดการให้” คือคนขับที่ระบบเลือกตามคิว</li>
           <li>- “คนขับที่เลือกจริง” คือคนขับที่ถูกมอบหมายจริง</li>
           <li>- “คิวก่อนหน้า/คิวถัดไป” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</li>
-          <li>- “ข้ามเพราะไม่ว่าง/ติดภารกิจ” คือคนขับที่ถูกข้ามพร้อมเหตุผล</li>
+          <li>- “รายการที่ข้าม” คือคนขับที่ถูกข้ามพร้อมเหตุผล</li>
         </ul>
       </div>
     </div>
@@ -341,14 +333,35 @@ function BookingDetailModalContent({ booking }) {
   );
 }
 
+function MobileInfoRow({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "92px minmax(0, 1fr)",
+        gap: "6px 12px",
+        alignItems: "start",
+        minWidth: 0,
+      }}
+    >
+      <span className="text-slate-600" style={{ fontSize: 20, lineHeight: 1.35, fontWeight: 700 }}>
+        {label}
+      </span>
+      <div className="min-w-0 text-slate-900" style={{ fontSize: 20, lineHeight: 1.45, wordBreak: "break-word" }}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 export default function DriverQueueLogs() {
   const isMobile = useIsMobile();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [expandedRowId, setExpandedRowId] = useState("");
   const [page, setPage] = useState(1);
+  const [expandedRowId, setExpandedRowId] = useState("");
   const [deletingId, setDeletingId] = useState("");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [detailLoadingKey, setDetailLoadingKey] = useState("");
@@ -422,10 +435,7 @@ export default function DriverQueueLogs() {
     });
   }, [filters, sortedLogs]);
 
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(filteredLogs.length / ROWS_PER_PAGE)),
-    [filteredLogs.length]
-  );
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredLogs.length / ROWS_PER_PAGE)), [filteredLogs.length]);
 
   const pageItems = useMemo(() => {
     const start = (page - 1) * ROWS_PER_PAGE;
@@ -433,8 +443,8 @@ export default function DriverQueueLogs() {
   }, [filteredLogs, page]);
 
   useEffect(() => {
-    setExpandedRowId("");
     setPage(1);
+    setExpandedRowId("");
   }, [filters, sortedLogs]);
 
   useEffect(() => {
@@ -442,6 +452,10 @@ export default function DriverQueueLogs() {
       setPage(totalPages);
     }
   }, [page, totalPages]);
+
+  useEffect(() => {
+    setExpandedRowId("");
+  }, [page]);
 
   function setFilter(field, value) {
     setFilters((current) => ({
@@ -459,13 +473,7 @@ export default function DriverQueueLogs() {
   }
 
   async function handleDeleteLog(log) {
-    const logId = String(
-      log.log_id ||
-      log.id ||
-      log.queue_log_id ||
-      log.row_number ||
-      ""
-    ).trim();
+    const logId = String(log.log_id || log.id || log.queue_log_id || log.row_number || "").trim();
 
     if (!logId) {
       showError("ไม่พบรหัสรายการที่ต้องการลบ");
@@ -487,19 +495,11 @@ export default function DriverQueueLogs() {
 
       setLogs((current) =>
         current.filter((item) => {
-          const itemId = String(
-            item.log_id ||
-            item.id ||
-            item.queue_log_id ||
-            item.row_number ||
-            ""
-          ).trim();
-
+          const itemId = String(item.log_id || item.id || item.queue_log_id || item.row_number || "").trim();
           return itemId !== logId;
         })
       );
 
-      setExpandedRowId("");
       showSuccess("ลบรายการสำเร็จ");
     } catch (err) {
       showError(err.message || "ลบรายการไม่สำเร็จ");
@@ -570,6 +570,9 @@ export default function DriverQueueLogs() {
   const activeFilterCount = [filters.keyword, filters.assignMode, filters.createdBy].filter(Boolean).length;
 
   if (isMobile) {
+    const pageStart = filteredLogs.length === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1;
+    const pageEnd = Math.min(page * ROWS_PER_PAGE, filteredLogs.length);
+
     return (
       <div className="driver-queue-logs-mobile mt-[57px] flex w-full flex-col gap-3 pb-6">
         <MobilePageHeader
@@ -602,8 +605,8 @@ export default function DriverQueueLogs() {
               <div className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-4 leading-8 text-slate-600" style={{ fontSize: 20 }}>
                 <div>- “คนขับที่ระบบจัดการให้” คือคนขับที่ระบบเลือกตามคิว</div>
                 <div>- “คนขับที่เลือกจริง” คือคนขับที่ถูกมอบหมายจริง</div>
-                <div>- “คิวก่อนหน้า/คิวถัดไป” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</div>
-                <div>- “ข้ามเพราะไม่ว่าง/ติดภารกิจ” คือคนขับที่ถูกข้ามพร้อมเหตุผล</div>
+                <div>- “คิวก่อน / คิวหลัง” ใช้สำหรับตรวจสอบลำดับคิวในขณะนั้น</div>
+                <div>- “รายการที่ข้าม” คือคนขับที่ถูกข้ามพร้อมเหตุผล</div>
               </div>
             </MobilePageSection>
 
@@ -669,10 +672,7 @@ export default function DriverQueueLogs() {
               ) : null}
             </MobilePageSection>
 
-            <MobilePageSection
-              title="รายการบันทึกคิว"
-              subtitle={`แสดง ${filteredLogs.length === 0 ? 0 : (page - 1) * ROWS_PER_PAGE + 1} - ${Math.min(page * ROWS_PER_PAGE, filteredLogs.length)} จาก ${filteredLogs.length} รายการ`}
-            >
+            <MobilePageSection title="รายการบันทึกคิว" subtitle={`แสดง ${pageStart} - ${pageEnd} จาก ${filteredLogs.length} รายการ`}>
               {filteredLogs.length === 0 ? (
                 <div className="mobile-empty-state" style={{ fontSize: 20 }}>
                   ไม่พบประวัติ
@@ -681,105 +681,83 @@ export default function DriverQueueLogs() {
                 <div className="grid gap-[10px]">
                   {pageItems.map((log, index) => {
                     const rowKey = String(log.log_id || `${page}-${index}`);
-                    const isExpanded = expandedRowId === rowKey;
-                    const isDeleting = deletingId === String(log.log_id || "");
+                    const deleteKey = String(log.log_id || log.id || log.queue_log_id || log.row_number || "").trim();
+                    const isDeleting = deletingId === deleteKey;
                     const isDetailLoading = detailLoadingKey === String(
                       log.booking_id || log.booking_no || log.log_id || ""
                     ).trim();
                     const badge = getAssignModeBadge(log.assign_mode);
                     const skippedDrivers = parseSkippedDrivers(log.skipped_drivers_json);
+                    const isExpanded = expandedRowId === rowKey;
 
                     return (
                       <article
                         key={rowKey}
-                        className={`mobile-data-card booking-mobile-card driver-queue-logs-mobile-card${isExpanded ? " is-expanded" : ""}`}
+                        className="mobile-data-card booking-mobile-card driver-queue-logs-mobile-card"
+                        style={{ padding: 14, gap: 12, overflow: "hidden" }}
                       >
-                        <div className="driver-queue-logs-mobile-card-summary px-4 pb-3 pt-4">
-                          <div className="grid gap-2">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="text-slate-600" style={{ fontSize: 20 }}>
-                                วันที่บันทึก
-                              </div>
-                              <div className="font-semibold text-slate-900" style={{ fontSize: 20 }}>
-                                {formatMobileShortDateTime(log.created_at)}
-                              </div>
-                            </div>
+                        <div className="grid gap-2.5">
+                          <MobileInfoRow label="วันที่บันทึก" value={formatMobileShortDateTime(log.created_at)} />
 
-                            <div className="grid gap-1">
-                              <span className="text-slate-600" style={{ fontSize: 20 }}>
-                                เลขที่จอง
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleViewBookingDetail(log)}
-                                disabled={isDetailLoading}
-                                className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-2 font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-default disabled:opacity-70"
-                                style={{ fontSize: 18, minHeight: 0 }}
-                              >
-                                <EyeIcon className="h-4 w-4" />
-                                <span>{isDetailLoading ? "กำลังเปิด..." : log.booking_no || log.booking_id || "-"}</span>
-                              </button>
-                            </div>
+                          <div className="grid gap-1.5 min-w-0">
+                            <span className="text-slate-600" style={{ fontSize: 20, lineHeight: 1.35, fontWeight: 700 }}>
+                              เลขที่จอง
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleViewBookingDetail(log)}
+                              disabled={isDetailLoading}
+                              className="inline-flex w-fit max-w-full items-center gap-2 self-start rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 font-bold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100 disabled:cursor-default disabled:opacity-70"
+                              style={{ fontSize: 18, minHeight: 0 }}
+                            >
+                              <EyeIcon className="h-4 w-4" />
+                              <span className="break-all">{isDetailLoading ? "กำลังเปิด..." : log.booking_no || log.booking_id || "-"}</span>
+                            </button>
+                          </div>
 
-                            <div className="grid gap-1">
-                              <span className="text-slate-600" style={{ fontSize: 20 }}>
-                                คนขับที่เลือกจริง
-                              </span>
-                              <b className="text-slate-900" style={{ fontSize: 20 }}>
-                                {log.assigned_driver_name || "-"}
-                              </b>
-                            </div>
-
-                            <div className="flex items-center justify-between gap-3">
-                              <span className="text-slate-600" style={{ fontSize: 20 }}>
-                                วิธีเลือก
-                              </span>
+                          <MobileInfoRow label="คนขับที่เลือกจริง" value={<b>{log.assigned_driver_name || "-"}</b>} />
+                          <MobileInfoRow
+                            label="วิธีเลือก"
+                            value={
                               <span
-                                className={`inline-flex w-fit rounded-full border px-2.5 py-1 font-semibold ${badge.className}`}
+                                className={`inline-flex w-fit max-w-full rounded-full border px-2.5 py-1 font-semibold ${badge.className}`}
                                 style={{ fontSize: 16 }}
                               >
                                 {badge.label}
                               </span>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            aria-expanded={isExpanded}
-                            onClick={() => setExpandedRowId((current) => (current === rowKey ? "" : rowKey))}
-                            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 shadow-sm transition hover:bg-slate-50"
-                            style={{ fontSize: 16, minHeight: 0 }}
-                          >
-                            <span>{isExpanded ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}</span>
-                            <ChevronDownIcon
-                              className={`booking-mobile-card-expand-icon driver-queue-logs-mobile-card-expand-icon${isExpanded ? " is-expanded" : ""}`}
-                            />
-                          </button>
+                            }
+                          />
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRowId((current) => (current === rowKey ? "" : rowKey))}
+                          className="inline-flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 shadow-sm transition hover:bg-slate-50"
+                          aria-expanded={isExpanded}
+                          style={{ fontSize: 20, minHeight: 0 }}
+                        >
+                          <span>{isExpanded ? "ซ่อนรายละเอียด" : "ดูรายละเอียด"}</span>
+                          <ChevronDownIcon
+                            className={`h-5 w-5 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                          />
+                        </button>
+
                         {isExpanded ? (
-                          <div className="booking-mobile-card-expanded driver-queue-log-expanded-detail" id={rowKey}>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>คนขับที่ระบบจัดการให้</span>
-                              <b>{log.recommended_driver_name || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>เหตุผลการเลือก</span>
-                              <b>{log.reason || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>คิวก่อนหน้า</span>
-                              <b>{log.queue_before || log.queue_before_index || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>คิวถัดไป</span>
-                              <b>{log.queue_after || log.queue_after_index || "-"}</b>
-                            </div>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>ข้ามเพราะไม่ว่าง/ติดภารกิจ</span>
-                              <div className="flex flex-wrap gap-2">
+                          <div className="grid gap-2.5 border-t border-slate-200 pt-3">
+                            <MobileInfoRow label="ระบบจัดการให้" value={log.recommended_driver_name || "-"} />
+                            <MobileInfoRow label="เหตุผล" value={log.reason || "-"} />
+                            <MobileInfoRow label="คิวก่อน" value={log.queue_before || log.queue_before_index || "-"} />
+                            <MobileInfoRow label="คิวหลัง" value={log.queue_after || log.queue_after_index || "-"} />
+
+                            <div className="grid gap-1.5 min-w-0">
+                              <span className="text-slate-600" style={{ fontSize: 20, lineHeight: 1.35, fontWeight: 700 }}>
+                                รายการที่ข้าม
+                              </span>
+                              <div className="flex min-w-0 flex-wrap gap-2">
                                 {skippedDrivers.length === 0 ? (
-                                  <b>-</b>
+                                  <span className="text-slate-900" style={{ fontSize: 20, lineHeight: 1.45 }}>
+                                    -
+                                  </span>
                                 ) : (
                                   skippedDrivers.map((item) => (
                                     <span
@@ -794,12 +772,20 @@ export default function DriverQueueLogs() {
                                 )}
                               </div>
                             </div>
-                            <div className="driver-queue-log-detail-item" style={{ fontSize: 20 }}>
-                              <span>ผู้บันทึก</span>
-                              <b>{log.created_by || "-"}</b>
-                            </div>
 
-                            <div className="pt-2">
+                            <MobileInfoRow label="ผู้บันทึก" value={log.created_by || "-"} />
+
+                            <div className="grid gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleViewBookingDetail(log)}
+                                disabled={isDetailLoading}
+                                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-default disabled:opacity-70"
+                                style={{ fontSize: 20, minHeight: 0 }}
+                              >
+                                {isDetailLoading ? "กำลังเปิดรายละเอียด..." : "ดูรายละเอียดรายการจอง"}
+                              </button>
+
                               <button
                                 type="button"
                                 onClick={() => handleDeleteLog(log)}
@@ -818,15 +804,7 @@ export default function DriverQueueLogs() {
                 </div>
               )}
 
-              <Pagination
-                page={page}
-                totalPages={totalPages}
-                totalItems={filteredLogs.length}
-                onChangePage={(nextPage) => {
-                  setPage(nextPage);
-                  setExpandedRowId("");
-                }}
-              />
+              <Pagination page={page} totalPages={totalPages} totalItems={filteredLogs.length} onChangePage={setPage} />
             </MobilePageSection>
           </>
         )}
@@ -932,17 +910,17 @@ export default function DriverQueueLogs() {
                     <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คนขับที่ระบบจัดการให้</th>
                     <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คนขับที่เลือกจริง</th>
                     <th className="whitespace-nowrap" style={{ fontSize: 20 }}>วิธีเลือก</th>
-                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>เหตุผลการเลือก</th>
-                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวก่อนหน้า</th>
-                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวถัดไป</th>
-                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>ข้ามเพราะไม่ว่าง/ติดภารกิจ</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>เหตุผล</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวก่อน</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>คิวหลัง</th>
+                    <th className="whitespace-nowrap" style={{ fontSize: 20 }}>รายการที่ข้าม</th>
                     <th className="whitespace-nowrap" style={{ fontSize: 20 }}>ผู้บันทึก</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.length === 0 ? (
                     <tr>
-                      <td colSpan="10" style={{ fontSize: 20 }}>ไม่พบประวัติ</td>
+                      <td colSpan={DESKTOP_COLUMN_COUNT} style={{ fontSize: 20 }}>ไม่พบประวัติ</td>
                     </tr>
                   ) : (
                     pageItems.map((log, index) => {
