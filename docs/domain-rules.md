@@ -45,6 +45,12 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Keep non-FCM push subscriptions matched by `endpoint`.
 - Keep FCM push subscriptions idempotent per device session by matching `user_id + provider + user_agent` first and falling back to `fcm_token` only when needed.
 - When an FCM token is saved, preserve `subscription_id` and `created_at` on update, refresh `fcm_token`, `endpoint`, `p256dh`, `auth`, `provider`, `user_agent`, `status`, and `updated_at`, and keep only the latest row `ACTIVE` for that device session.
+- Scheduled booking reminders must keep NotificationBell, FCM, and Web Push title/message/category identical by dispatching the stored notification record through the Worker `created_notifications` path.
+- Scheduled reminder dedupe must stay append-only in `Notifications` by using stable per-recipient reminder keys, not by mutating or deleting older rows.
+- Current scheduled reminder types are `BOOKING_REMINDER_1H`, `BOOKING_REMINDER_TOMORROW`, and `BOOKING_OPEN_JOB_DAILY`.
+- If a scheduled reminder is triggered by Apps Script time-driven automation, it must call the Worker reminder endpoint instead of running the Apps Script reminder action alone, otherwise NotificationBell rows will be created without FCM/Web Push dispatch.
+- Recommended schedules: `BOOKING_REMINDER_TOMORROW` around `18:00` Asia/Bangkok and `BOOKING_OPEN_JOB_DAILY` around `21:00` Asia/Bangkok.
+- The protected Worker reminder endpoints are `POST /api/reminders/run` and `POST /api/run-scheduled-reminders`; they require header `X-Reminder-Runner-Secret`, and the Worker must forward the same secret to Apps Script as internal auth for `runScheduledReminderNotifications`.
 
 ## Permission Rules
 - Permissions are managed centrally.

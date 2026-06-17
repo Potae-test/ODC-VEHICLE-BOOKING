@@ -539,6 +539,17 @@ function doPost(e) {
     if (action === "disablePushSubscription") return disablePushSubscription(body.data);
     if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data || body);
     if (action === "sendBookingReminderNotifications1Hour") return sendBookingReminderNotifications1Hour(body.data || body);
+    if (action === "runScheduledReminderNotifications") {
+      var reminderPayload = body.data || {};
+      if (!hasValidInternalReminderAuth_(reminderPayload)) {
+        return jsonOutput({
+          success: false,
+          message: "ไม่ได้รับอนุญาตให้เรียกใช้งาน reminder runner"
+        });
+      }
+
+      return runScheduledReminderNotifications(reminderPayload);
+    }
     if (action === "unassign_booking_driver") return unassignBookingDriver(body.data);
     if (action === "deleteBookingCancellationHistory" || action === "delete_booking_cancellation_history") {
       var trusted = applyTrustedSession_(body.data || body);
@@ -1730,6 +1741,19 @@ function buildDestinationStartMessage_(booking, fallbackMessage) {
   return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
 }
 
+function buildRequesterDestinationLabeledStartMessage_(booking, fallbackMessage) {
+  const requesterName = String(booking && booking.requester_name || "").trim();
+  const destination = String(booking && booking.destination || "").trim();
+  const startDatetime = formatThaiNotificationDateTime_(booking && booking.start_datetime || "");
+  const parts = [];
+
+  if (requesterName) parts.push(requesterName);
+  if (destination) parts.push(`ปลายทาง: ${destination}`);
+  if (startDatetime) parts.push(`เวลาไป: ${startDatetime}`);
+
+  return parts.length > 0 ? parts.join(" | ") : String(fallbackMessage || "").trim();
+}
+
 function buildDriverDestinationStartMessage_(booking, driverName, fallbackMessage) {
   const resolvedDriverName = String(driverName || booking && (booking.assigned_user_name || booking.driver_name) || "").trim();
   const destination = String(booking && booking.destination || "").trim();
@@ -1865,6 +1889,67 @@ function buildNotificationRecord_(data) {
   };
 }
 
+function getInternalReminderSecret_() {
+  try {
+    const value = PropertiesService.getScriptProperties().getProperty("INTERNAL_REMINDER_SECRET");
+    return String(value || "").trim();
+  } catch (err) {
+    return "";
+  }
+}
+
+function hasValidInternalReminderAuth_(data) {
+  const payload = data || {};
+  const configuredSecret = getInternalReminderSecret_();
+  const providedSecret = String(
+    payload.internal_runner_secret ||
+    payload.internal_secret ||
+    ""
+  ).trim();
+
+  if (!configuredSecret || !providedSecret) {
+    return false;
+  }
+
+  return configuredSecret === providedSecret;
+}
+
+function parseNotificationPayloadJson_(value) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+
+  try {
+    const parsed = JSON.parse(String(value || "").trim());
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function getNotificationStableReminderKey_(record) {
+  const type = String(record && record.type || "").trim().toUpperCase();
+  const targetUserId = String(record && record.target_user_id || "").trim();
+  const targetRole = normalizeRoleValue_(record && record.target_role || "");
+  const bookingId = String(record && record.booking_id || "").trim();
+  const payload = parseNotificationPayloadJson_(record && record.payload_json);
+  const reminderKey = String(payload && payload.reminder_key || "").trim();
+
+  if (type === "BOOKING_REMINDER_1H" && targetUserId && bookingId) {
+    return `${targetUserId}|${targetRole}|${type}|${bookingId}`;
+  }
+
+  if (
+    (type === "BOOKING_REMINDER_TOMORROW" || type === "BOOKING_OPEN_JOB_DAILY") &&
+    targetUserId &&
+    bookingId &&
+    reminderKey
+  ) {
+    return `${targetUserId}|${targetRole}|${type}|${bookingId}|${reminderKey}`;
+  }
+
+  return "";
+}
+
 function appendNotificationRecord_(data) {
   const record = buildNotificationRecord_(data);
 
@@ -1884,28 +1969,26 @@ function appendNotificationRecord_(data) {
   const table = readSheetTable(sheet);
   const headers = table.headers;
   const duplicateWindowMs = 30 * 1000;
-  const isStableReminderType = String(record.type || "").trim().toUpperCase() === "BOOKING_REMINDER_1H";
+  const stableReminderKey = getNotificationStableReminderKey_(record);
+  const isStableReminderType = Boolean(stableReminderKey);
 
   for (let index = table.rows.length - 1; index >= 0; index -= 1) {
     const existing = rowsToObjects(headers, [table.rows[index]])[0] || {};
     const createdAt = new Date(existing.created_at || 0).getTime();
 
-    if (
-      isStableReminderType &&
-      String(existing.target_user_id || "").trim() === record.target_user_id &&
-      normalizeRoleValue_(existing.target_role || "") === record.target_role &&
-      String(existing.type || "").trim().toUpperCase() === "BOOKING_REMINDER_1H" &&
-      String(existing.booking_id || "").trim() === record.booking_id
-    ) {
-      return {
-        ...record,
-        notification_id: String(existing.notification_id || "").trim() || record.notification_id,
-        category: String(existing.category || "").trim() || record.category,
-        created_at: String(existing.created_at || "").trim() || record.created_at,
-        is_read: normalizeNotificationReadValue_(existing.is_read),
-        read_at: String(existing.read_at || "").trim(),
-        payload_json: String(existing.payload_json || "").trim() || record.payload_json,
-      };
+    if (isStableReminderType) {
+      const existingStableReminderKey = getNotificationStableReminderKey_(existing);
+      if (existingStableReminderKey && existingStableReminderKey === stableReminderKey) {
+        return {
+          ...record,
+          notification_id: String(existing.notification_id || "").trim() || record.notification_id,
+          category: String(existing.category || "").trim() || record.category,
+          created_at: String(existing.created_at || "").trim() || record.created_at,
+          is_read: normalizeNotificationReadValue_(existing.is_read),
+          read_at: String(existing.read_at || "").trim(),
+          payload_json: String(existing.payload_json || "").trim() || record.payload_json,
+        };
+      }
     }
 
     if (!isStableReminderType && (!createdAt || Date.now() - createdAt > duplicateWindowMs)) {
@@ -5288,6 +5371,267 @@ function sendBookingReminderNotifications1Hour(data) {
     message: "Booking reminder notification run completed",
     created_notifications: getCreatedNotifications_(),
     created_count: createdCount,
+  });
+}
+
+function getBangkokDateKey_(value) {
+  const date = value instanceof Date ? value : new Date(value || "");
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return Utilities.formatDate(date, "Asia/Bangkok", "yyyy-MM-dd");
+}
+
+function getBangkokRelativeDateKey_(offsetDays) {
+  const now = new Date();
+  const offset = Number(offsetDays || 0) || 0;
+  return getBangkokDateKey_(new Date(now.getTime() + (offset * 24 * 60 * 60 * 1000)));
+}
+
+function hasNotificationReminderKey_(notification, expectedType, bookingId, targetUserId, reminderKey) {
+  const normalizedType = String(expectedType || "").trim().toUpperCase();
+  const normalizedBookingId = String(bookingId || "").trim();
+  const normalizedTargetUserId = String(targetUserId || "").trim();
+  const normalizedReminderKey = String(reminderKey || "").trim();
+  if (!normalizedType || !normalizedBookingId || !normalizedTargetUserId || !normalizedReminderKey) {
+    return false;
+  }
+
+  if (String(notification && notification.type || "").trim().toUpperCase() !== normalizedType) {
+    return false;
+  }
+  if (String(notification && notification.booking_id || "").trim() !== normalizedBookingId) {
+    return false;
+  }
+  if (String(notification && notification.target_user_id || "").trim() !== normalizedTargetUserId) {
+    return false;
+  }
+
+  const payload = parseNotificationPayloadJson_(notification && notification.payload_json);
+  return String(payload && payload.reminder_key || "").trim() === normalizedReminderKey;
+}
+
+function isOpenJobReminderEligible_(booking) {
+  const status = String(booking && booking.status || "").trim().toUpperCase();
+  if (status === "COMPLETED" || status === "CANCELLED") {
+    return false;
+  }
+
+  const actualStartDatetime = String(booking && booking.actual_start_datetime || "").trim();
+  const actualReturnDatetime = String(booking && booking.actual_return_datetime || "").trim();
+  return status === "IN_USE" || (Boolean(actualStartDatetime) && !actualReturnDatetime);
+}
+
+function logReminderDebug_(label, payload) {
+  console.log("[reminder-debug] " + label, payload || {});
+}
+
+function sendTomorrowBookingReminders(data) {
+  const bookingsTable = readSheetTable(ensureBookingsSheet());
+  const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
+  const notificationsTable = readSheetTable(ensureNotificationsSheet());
+  const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
+  const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+  const reminderDate = getBangkokRelativeDateKey_(1);
+  const initialCreatedCount = getCreatedNotifications_().length;
+  let checkedCount = 0;
+  let eligibleCount = 0;
+
+  bookings.forEach(function (booking) {
+    checkedCount += 1;
+    const status = String(booking.status || "").trim().toUpperCase();
+    const bookingId = String(booking.booking_id || "").trim();
+    const requesterUserId = String(booking.requester_user_id || "").trim();
+    const assignedUserId = String(booking.assigned_user_id || "").trim();
+    const startDateKey = getBangkokDateKey_(booking.start_datetime || "");
+    if (status !== "APPROVED" || !bookingId || !requesterUserId || !assignedUserId || !startDateKey || startDateKey !== reminderDate) {
+      return;
+    }
+
+    const requesterReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${requesterUserId}|${reminderDate}`;
+    const driverReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${assignedUserId}|${reminderDate}`;
+    const requesterAlreadySent = hasNotificationReminderKey_(
+      notifications,
+      "BOOKING_REMINDER_TOMORROW",
+      bookingId,
+      requesterUserId,
+      requesterReminderKey
+    );
+    const driverAlreadySent = hasNotificationReminderKey_(
+      notifications,
+      "BOOKING_REMINDER_TOMORROW",
+      bookingId,
+      assignedUserId,
+      driverReminderKey
+    );
+
+    if (requesterAlreadySent && driverAlreadySent) {
+      return;
+    }
+
+    eligibleCount += 1;
+    const message = buildRequesterDestinationLabeledStartMessage_(booking, "พรุ่งนี้มีรายการใช้งานรถ");
+
+    if (!requesterAlreadySent) {
+      appendNotificationRecord_({
+        target_user_id: requesterUserId,
+        target_role: "",
+        category: "Booking",
+        title: "พรุ่งนี้มีรายการใช้งานรถ",
+        message: message,
+        type: "BOOKING_REMINDER_TOMORROW",
+        booking_id: bookingId,
+        url: "/booking",
+        created_by: actor,
+        payload_json: buildNotificationPayloadFromBooking_(booking, {
+          reminder_date: reminderDate,
+          reminder_key: requesterReminderKey,
+          status: status,
+        }),
+      });
+    }
+
+    if (!driverAlreadySent) {
+      appendNotificationRecord_({
+        target_user_id: assignedUserId,
+        target_role: "",
+        category: "Booking",
+        title: "พรุ่งนี้มีรายการใช้งานรถ",
+        message: message,
+        type: "BOOKING_REMINDER_TOMORROW",
+        booking_id: bookingId,
+        url: "/driver-jobs",
+        created_by: actor,
+        payload_json: buildNotificationPayloadFromBooking_(booking, {
+          reminder_date: reminderDate,
+          reminder_key: driverReminderKey,
+          status: status,
+        }),
+      });
+    }
+  });
+
+  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+  logReminderDebug_("checked bookings", {
+    reminder_type: "BOOKING_REMINDER_TOMORROW",
+    checked_count: checkedCount,
+  });
+  logReminderDebug_("eligible bookings", {
+    reminder_type: "BOOKING_REMINDER_TOMORROW",
+    eligible_count: eligibleCount,
+    reminder_date: reminderDate,
+  });
+  logReminderDebug_("created notifications", {
+    reminder_type: "BOOKING_REMINDER_TOMORROW",
+    created_count: createdCount,
+  });
+
+  return {
+    reminder_type: "BOOKING_REMINDER_TOMORROW",
+    checked_count: checkedCount,
+    eligible_count: eligibleCount,
+    created_count: createdCount,
+    reminder_date: reminderDate,
+  };
+}
+
+function sendOpenJobDailyReminders(data) {
+  const bookingsTable = readSheetTable(ensureBookingsSheet());
+  const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
+  const notificationsTable = readSheetTable(ensureNotificationsSheet());
+  const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
+  const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+  const reminderDate = getBangkokRelativeDateKey_(0);
+  const initialCreatedCount = getCreatedNotifications_().length;
+  let checkedCount = 0;
+  let eligibleCount = 0;
+
+  bookings.forEach(function (booking) {
+    checkedCount += 1;
+    if (!isOpenJobReminderEligible_(booking)) return;
+
+    const bookingId = String(booking.booking_id || "").trim();
+    const assignedUserId = String(booking.assigned_user_id || "").trim();
+    if (!bookingId || !assignedUserId) return;
+
+    const reminderKey = `${bookingId}|BOOKING_OPEN_JOB_DAILY|${assignedUserId}|${reminderDate}`;
+    const alreadySent = hasNotificationReminderKey_(
+      notifications,
+      "BOOKING_OPEN_JOB_DAILY",
+      bookingId,
+      assignedUserId,
+      reminderKey
+    );
+    if (alreadySent) return;
+
+    eligibleCount += 1;
+    appendNotificationRecord_({
+      target_user_id: assignedUserId,
+      target_role: "",
+      category: "Driver",
+      title: "กรุณาตรวจสอบการปิดงาน",
+      message: buildRequesterDestinationLabeledStartMessage_(booking, "กรุณาตรวจสอบการปิดงาน"),
+      type: "BOOKING_OPEN_JOB_DAILY",
+      booking_id: bookingId,
+      url: "/driver-jobs",
+      created_by: actor,
+      payload_json: buildNotificationPayloadFromBooking_(booking, {
+        reminder_date: reminderDate,
+        reminder_key: reminderKey,
+        status: String(booking.status || "").trim().toUpperCase(),
+      }),
+    });
+  });
+
+  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+  logReminderDebug_("checked bookings", {
+    reminder_type: "BOOKING_OPEN_JOB_DAILY",
+    checked_count: checkedCount,
+  });
+  logReminderDebug_("eligible bookings", {
+    reminder_type: "BOOKING_OPEN_JOB_DAILY",
+    eligible_count: eligibleCount,
+    reminder_date: reminderDate,
+  });
+  logReminderDebug_("created notifications", {
+    reminder_type: "BOOKING_OPEN_JOB_DAILY",
+    created_count: createdCount,
+  });
+
+  return {
+    reminder_type: "BOOKING_OPEN_JOB_DAILY",
+    checked_count: checkedCount,
+    eligible_count: eligibleCount,
+    created_count: createdCount,
+    reminder_date: reminderDate,
+  };
+}
+
+function runScheduledReminderNotifications(data) {
+  // Run this through the Worker reminder endpoint for scheduled automation so
+  // the returned created_notifications can be dispatched to FCM/Web Push.
+  const payload = data || {};
+  const reminderType = String(payload.reminder_type || "ALL").trim().toUpperCase() || "ALL";
+  const summaries = [];
+  const initialCreatedCount = getCreatedNotifications_().length;
+
+  if (reminderType === "ALL" || reminderType === "BOOKING_REMINDER_TOMORROW") {
+    summaries.push(sendTomorrowBookingReminders(payload));
+  }
+
+  if (reminderType === "ALL" || reminderType === "BOOKING_OPEN_JOB_DAILY") {
+    summaries.push(sendOpenJobDailyReminders(payload));
+  }
+
+  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+
+  return jsonOutput({
+    success: true,
+    message: "Scheduled reminder notification run completed",
+    data: {
+      reminder_type: reminderType,
+      summaries: summaries,
+      created_count: createdCount,
+    },
+    created_notifications: getCreatedNotifications_(),
   });
 }
 

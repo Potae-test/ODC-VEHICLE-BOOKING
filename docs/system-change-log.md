@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-17
+- Updated `docs/domain-rules.md`, `apps-script/code.gs`, `odc-vehicle-api/src/index.ts`, and `odc-vehicle-api/wrangler.jsonc` so scheduled reminder notifications now support `BOOKING_REMINDER_TOMORROW` for approved tomorrow bookings and `BOOKING_OPEN_JOB_DAILY` for still-open driver jobs, keep dedupe in the append-only `Notifications` sheet through stable reminder keys per booking/recipient/date, expose Worker reminder run endpoints for manual testing, require `X-Reminder-Runner-Secret` plus matching Apps Script internal auth instead of browser session auth for the reminder runner, return reminder plus push summaries including `pushed_count`, and dispatch the stored notification rows through the existing Worker `created_notifications` push path so NotificationBell, FCM, and Web Push stay identical.
+
 ## 2026-06-16
 - Updated `src/pages/DriverQueueLogs.jsx` so the mobile queue-log list now uses one-at-a-time accordion cards that keep the collapsed view limited to saved date, booking number, actual selected driver, and selection method, move booking-detail plus delete actions into the expanded section, reset the open card on filter/page changes, and keep the existing Booking-style `5`-row pagination behavior plus desktop table layout unchanged.
 - Updated `src/pages/DriverQueueLogs.jsx` so the `ประวัติคิวคนขับ` page now explains what each queue log row means, uses clearer Thai labels for recommended/actual driver and queue positions, renders assignment modes as readable badges, shows skipped drivers as compact chips, paginates desktop and mobile views at 5 rows per page with `แสดง X - Y จาก Z รายการ` plus `แรก / ก่อนหน้า / ถัดไป / ท้าย` controls, and presents mobile rows as expandable cards without changing queue logic, booking logic, API calls, or stored fields.

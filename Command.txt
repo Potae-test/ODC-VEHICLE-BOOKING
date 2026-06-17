@@ -71,6 +71,7 @@ wrangler --version
 ------------
 Follow AGENTS.md architecture.
 
+npx wrangler secret put REMINDER_RUNNER_SECRET : odc_reminder_9vK8P2xLmQ4rT7sN5wY1cF6uJ3zH8eA
 
 VITE_FIREBASE_API_KEY=AIzaSyAOHfDqaKd8eEbbZYD46AkfBSYuQNfWkac
 VITE_FIREBASE_AUTH_DOMAIN=odc-vehicle-booking.firebaseapp.com

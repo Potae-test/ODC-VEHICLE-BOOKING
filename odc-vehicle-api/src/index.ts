@@ -88,6 +88,8 @@ const postRouteActions: Record<string, string> = {
   "/api/confirmDriverQueueAssignment": "confirmDriverQueueAssignment",
   "/api/push-subscriptions": "savePushSubscription",
   "/api/push-subscriptions/disable": "disablePushSubscription",
+  "/api/reminders/run": "runScheduledReminderNotifications",
+  "/api/run-scheduled-reminders": "runScheduledReminderNotifications",
 };
 
 const protectedPostActions = new Set([
@@ -126,6 +128,7 @@ const protectedPostActions = new Set([
   "resetDriverQueuePointer",
   "setCurrentDriverQueuePointer",
   "confirmDriverQueueAssignment",
+  "runScheduledReminderNotifications",
 ]);
 
 type Env = {
@@ -135,6 +138,7 @@ type Env = {
   VAPID_PRIVATE_KEY?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_SUBJECT?: string;
+  REMINDER_RUNNER_SECRET?: string;
 };
 
 type SheetResponse = {
@@ -260,6 +264,14 @@ function getBearerToken(request: Request): string {
   const header = request.headers.get("Authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
+}
+
+function getReminderRunnerSecretFromRequest(request: Request): string {
+  return String(
+    request.headers.get("X-Reminder-Runner-Secret") ||
+    request.headers.get("x-reminder-runner-secret") ||
+    ""
+  ).trim();
 }
 
 function base64UrlEncode(input: ArrayBuffer | Uint8Array | string) {
@@ -1333,6 +1345,7 @@ async function sendPushNotificationBatch(
 async function deliverNotificationPushes(env: Env, notifications: WorkerNotification[]) {
   const targetUserIds = new Set<string>();
   const sentNotificationKeys = new Set<string>();
+  const deliveries = [];
 
   console.log("[push-debug] push dispatch started", {
     notification_count: Array.isArray(notifications) ? notifications.length : 0,
@@ -1389,10 +1402,11 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
 
     for (const resolvedUserId of resolvedTargetUserIds) {
       try {
-        await sendPushNotificationBatch(env, resolvedUserId, notification, {
+        const delivery = await sendPushNotificationBatch(env, resolvedUserId, notification, {
           logPrefix: "[push]",
           sentNotificationKeys,
         });
+        deliveries.push(delivery);
       } catch (error) {
         console.warn("[push] dispatch failed", {
           user_id: resolvedUserId,
@@ -1406,6 +1420,17 @@ async function deliverNotificationPushes(env: Env, notifications: WorkerNotifica
   }
 
   console.log("[push] target user_id list", Array.from(targetUserIds));
+
+  const pushedCount = deliveries.reduce((sum, item) => sum + Number(item?.success_count || 0), 0);
+  const pushAttemptCount = deliveries.reduce((sum, item) => sum + Number(item?.total_subscription_count || 0), 0);
+
+  return {
+    notification_count: Array.isArray(notifications) ? notifications.length : 0,
+    target_user_count: targetUserIds.size,
+    push_attempt_count: pushAttemptCount,
+    pushed_count: pushedCount,
+    deliveries,
+  };
 }
 
 async function maybeDeliverCreatedNotifications(env: Env, response: SheetResponse) {
@@ -1418,10 +1443,113 @@ async function maybeDeliverCreatedNotifications(env: Env, response: SheetRespons
   );
 
   if (!Array.isArray(response.created_notifications) || response.created_notifications.length === 0) {
-    return;
+    return {
+      notification_count: 0,
+      target_user_count: 0,
+      push_attempt_count: 0,
+      pushed_count: 0,
+      deliveries: [],
+    };
   }
 
-  await deliverNotificationPushes(env, response.created_notifications);
+  const pushSummary = await deliverNotificationPushes(env, response.created_notifications);
+  console.log("[push-debug] dispatched push count", {
+    created_notification_count: response.created_notifications.length,
+    pushed_count: pushSummary.pushed_count,
+  });
+  return pushSummary;
+}
+
+async function runScheduledReminderAction(
+  env: Env,
+  reminderType: string,
+  options?: {
+    sessionToken?: string;
+    runSource?: string;
+    createdBy?: string;
+    internalRunnerSecret?: string;
+  }
+) {
+  const normalizedReminderType = String(reminderType || "ALL").trim().toUpperCase() || "ALL";
+  const reminderRunnerSecret = String(
+    options?.internalRunnerSecret || env.REMINDER_RUNNER_SECRET || ""
+  ).trim();
+  if (!reminderRunnerSecret) {
+    throw new Error("REMINDER_RUNNER_SECRET is not configured");
+  }
+
+  const payload: Record<string, unknown> = {
+    reminder_type: normalizedReminderType,
+    run_source: String(options?.runSource || "WORKER_CRON").trim() || "WORKER_CRON",
+    created_by: String(options?.createdBy || "WORKER_CRON").trim() || "WORKER_CRON",
+    internal_runner_secret: reminderRunnerSecret,
+  };
+
+  const response = await forwardSheetPost("runScheduledReminderNotifications", payload);
+  const pushSummary = await maybeDeliverCreatedNotifications(env, response);
+  const data = (response.data && typeof response.data === "object") ? response.data as Record<string, unknown> : {};
+  const summaries = Array.isArray(data.summaries) ? data.summaries as Array<Record<string, unknown>> : [];
+  const checkedCount = summaries.reduce((sum, item) => sum + Number(item?.checked_count || 0), 0);
+  const eligibleCount = summaries.reduce((sum, item) => sum + Number(item?.eligible_count || 0), 0);
+  const createdCount = Number(data.created_count || response.created_notifications?.length || 0);
+
+  return {
+    ...response,
+    reminder_summary: {
+      checked_count: checkedCount,
+      eligible_count: eligibleCount,
+      created_count: createdCount,
+      pushed_count: Number(pushSummary?.pushed_count || 0),
+    },
+    push_summary: pushSummary,
+  };
+}
+
+async function handleScheduledReminderRun(request: Request, env: Env) {
+  const body = await readRequestBody(request);
+  const requestSecret = getReminderRunnerSecretFromRequest(request);
+  const configuredSecret = String(env.REMINDER_RUNNER_SECRET || "").trim();
+  if (!configuredSecret) {
+    return jsonResponse(
+      {
+        success: false,
+        message: "REMINDER_RUNNER_SECRET is not configured",
+      },
+      request,
+      500
+    );
+  }
+  if (!requestSecret || requestSecret !== configuredSecret) {
+    return jsonResponse(
+      {
+        success: false,
+        message: "Invalid reminder runner secret",
+      },
+      request,
+      401
+    );
+  }
+
+  const reminderType = String(body?.reminder_type || body?.type || "ALL").trim().toUpperCase() || "ALL";
+  const createdBy = String(body?.created_by || "MANUAL_API").trim() || "MANUAL_API";
+  const response = await runScheduledReminderAction(env, reminderType, {
+    runSource: "WORKER_API",
+    createdBy,
+    internalRunnerSecret: configuredSecret,
+  });
+
+  return jsonResponse(response, request);
+}
+
+function getReminderTypeFromCron(cron: string) {
+  const normalizedCron = String(cron || "").trim();
+  if (normalizedCron === "0 11 * * *") {
+    return "BOOKING_REMINDER_TOMORROW";
+  }
+  if (normalizedCron === "0 14 * * *") {
+    return "BOOKING_OPEN_JOB_DAILY";
+  }
+  return "ALL";
 }
 
 async function handlePushTest(request: Request, env: Env) {
@@ -1536,6 +1664,9 @@ export default {
       if (url.pathname === "/push/test") {
         return handlePushTest(request, env);
       }
+      if (url.pathname === "/api/reminders/run" || url.pathname === "/api/run-scheduled-reminders") {
+        return handleScheduledReminderRun(request, env);
+      }
 
       const body = await readRequestBody(request);
       const token = getBearerToken(request);
@@ -1584,6 +1715,22 @@ export default {
       },
       request,
       404
+    );
+  },
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const reminderType = getReminderTypeFromCron(controller.cron);
+
+    ctx.waitUntil(
+      runScheduledReminderAction(env, reminderType, {
+        runSource: "WORKER_CRON",
+        createdBy: "WORKER_CRON",
+      }).catch((error) => {
+        console.warn("[push] scheduled reminder run failed", {
+          cron: controller.cron,
+          reminder_type: reminderType,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
     );
   },
 };
