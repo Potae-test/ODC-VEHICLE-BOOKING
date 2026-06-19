@@ -96,7 +96,7 @@ export default function ThaiDateTimeField({
         )}
 
         <div className="thai-datetime-time-labels" aria-hidden="true">
-          <span>ชั่วโมง</span>
+          <span>เวลา</span>
           <span />
           <span>นาที</span>
         </div>
@@ -117,7 +117,7 @@ export default function ThaiDateTimeField({
 
         <div className="thai-datetime-time-row" aria-label={label || "เวลา"}>
           <label className="sr-only" htmlFor={hourInputId}>
-            ชั่วโมง
+            เวลา
           </label>
           <select
             id={hourInputId}
@@ -126,7 +126,7 @@ export default function ThaiDateTimeField({
             onChange={(e) => handleHourChange(e.target.value)}
             disabled={disabled}
             required={required}
-            aria-label="ชั่วโมง"
+            aria-label="เวลา"
           >
             {hourOptions.map((option) => (
               <option key={option.value} value={option.value}>

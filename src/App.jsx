@@ -15,6 +15,7 @@ import LOGO_ODC from "./assets/LOGO_ODC.png";
 
 
 const Cars = lazy(() => import("./pages/Cars"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Booking = lazy(() => import("./pages/Booking"));
 const BookingCancellationHistory = lazy(() => import("./pages/BookingCancellationHistory"));
 const Staff = lazy(() => import("./pages/Staff"));
@@ -234,6 +235,7 @@ function isPageFeatureEnabled(page) {
 }
 
 function getPathByPage(page) {
+  if (page === "dashboard") return "/dashboard";
   if (page === "admin") return "/admin";
   if (page === "profile") return "/profile";
   if (page === "staff") return "/staff";
@@ -251,7 +253,8 @@ function getPathByPage(page) {
 
 function getPageFromPath(pathname) {
   const path = String(pathname || "").replace(/\/+$/, "") || "/";
-  if (path === "/admin" || path === "/dashboard") return "admin";
+  if (path === "/dashboard") return "dashboard";
+  if (path === "/admin") return "admin";
   if (path === "/profile") return "profile";
   if (path === "/staff") return "staff";
   if (path === "/driver-jobs") return "driver-jobs";
@@ -518,6 +521,12 @@ export default function App() {
   const userAvatarInitial = getUserAvatarInitial(user?.name);
   const userRoleLabel = getUserRoleLabel(user?.role);
   const sidebarItems = [
+    {
+      page: "dashboard",
+      enabled: canAccessPage(user.role, "dashboard", permissionConfig),
+      icon: <BarChartIcon className={navIconClassName} />,
+      label: "Dashboard",
+    },
     {
       page: "cars",
       enabled: FEATURES.vehicleModule && canAccessPage(user.role, "cars", permissionConfig),
@@ -791,6 +800,7 @@ export default function App() {
         <main className="shell-main min-w-0 flex-1 overflow-x-clip overflow-y-auto px-3 py-3 md:min-h-0 md:px-9 md:py-9">
           <Suspense fallback={<PageSkeleton />}>
             {!hasPageAccess && <div className="form-card">คุณไม่มีสิทธิ์เข้าถึง</div>}
+            {hasPageAccess && page === "dashboard" && <Dashboard />}
             {FEATURES.vehicleModule && hasPageAccess && page === "cars" && <Cars />}
             {hasPageAccess && page === "booking" && <Booking />}
             {hasPageAccess && page === "booking-cancellation-history" && <BookingCancellationHistory />}

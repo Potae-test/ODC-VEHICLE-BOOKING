@@ -1,13 +1,14 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
-export const PERMISSION_CONFIG_VERSION = "2026-06-13.1";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-05-26.3";
+export const PERMISSION_CONFIG_VERSION = "2026-06-19.2";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-06-19.1";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
 
 export const PERMISSION_ITEMS = [
   { id: "admin_dashboard", label: "Admin Dashboard", pages: ["admin"] },
+  { id: "dashboard", label: "Dashboard", pages: ["dashboard"] },
   { id: "user-profile", label: "โปรไฟล์ของฉัน", pages: ["profile"] },
   { id: "booking-list", label: "รายการจองทั้งหมด", pages: ["booking"] },
   { id: "calendar", label: "ปฏิทิน", pages: ["calendar"] },
@@ -28,6 +29,7 @@ export const PERMISSION_ITEMS = [
 export const DEFAULT_ROLE_PERMISSIONS = {
   ADMIN: PERMISSION_ITEMS.map((item) => item.id),
   STAFF: [
+    "dashboard",
     "booking-list",
     "user-profile",
     "calendar",
@@ -65,6 +67,7 @@ export const ACTION_PERMISSION_GROUPS = [
       { id: "bookings_create", label: "สร้างรายการจอง" },
       { id: "bookings_create_backdated", label: "เห็น checkbox บันทึกรายการย้อนหลัง" },
       { id: "bookings_backdate_complete", label: "บันทึกงานย้อนหลัง" },
+      { id: "bookings_complete_on_behalf", label: "ปิดงานแทนคนขับ" },
       { id: "bookings_edit", label: "แก้ไขรายการจอง" },
       { id: "bookings_delete", label: "ลบรายการจอง" },
       { id: "bookings_approve", label: "อนุมัติรายการจอง" },
@@ -237,6 +240,7 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
 };
 
 const PAGE_ACTION_REQUIREMENTS = {
+  dashboard: [],
   cars: ["vehicles_view"],
   booking: ["bookings_view", "bookings_create"],
   profile: [],
@@ -503,6 +507,7 @@ export function canAccessPage(role, page, config = loadPermissionConfig()) {
 
 export function getFirstAllowedPage(role, config = loadPermissionConfig()) {
   const preferredOrder = [
+    "dashboard",
     "cars",
     "booking",
     "profile",

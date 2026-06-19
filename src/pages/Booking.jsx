@@ -9,6 +9,7 @@ import {
   assignCentralVehicle,
   cancelBooking,
   backdateCompleteBooking,
+  completeBookingOnBehalf,
   confirmDriverQueueAssignment,
   getDriverUnavailable,
   getBookings,
@@ -205,6 +206,7 @@ const BOOKING_ACTION_BUTTON_BASE_CLASSNAME = "booking-action-button";
 const BOOKING_ACTION_BUTTON_VARIANTS = {
   detail: "info-button",
   process: "success-button",
+  completeOnBehalf: "success-button",
   central: "success-button-2",
   backdate: "warning-button",
   edit: "edit-button",
@@ -1098,6 +1100,14 @@ function canUserManageOwnBookingAction(basePermission, booking, currentUser) {
 }
 
 function getBookingManagePermissionState(booking, currentUser, permissionFlags) {
+  const currentRole = normalizeStatus(currentUser?.role);
+  const canManageCompleteOnBehalf =
+    currentRole === "USER"
+      ? canUserManageOwnBookingAction(permissionFlags.canCompleteOnBehalf, booking, currentUser)
+      : isStaffOrAdmin(currentUser)
+        ? Boolean(permissionFlags.canCompleteOnBehalf)
+        : false;
+
   return {
     canManageProcessBooking: canUserManageOwnBookingAction(
       permissionFlags.canProcessBookings,
@@ -1109,6 +1119,7 @@ function getBookingManagePermissionState(booking, currentUser, permissionFlags) 
       booking,
       currentUser
     ),
+    canManageCompleteOnBehalf,
     canManageEditBooking: canUserManageOwnBookingAction(
       permissionFlags.canEditBookings,
       booking,
@@ -1596,6 +1607,7 @@ function getBookingActionState({
   canViewBookingDetail,
   canManageProcessBooking,
   canManageBackdateComplete,
+  canManageCompleteOnBehalf,
   canManageCancelBooking,
   canManageEditBooking,
   canUnassignBookings,
@@ -1604,6 +1616,7 @@ function getBookingActionState({
   processing,
   onProcess,
   onBackdateComplete,
+  onCompleteOnBehalf,
   onEdit,
   onCancel,
   onUnassign,
@@ -1622,6 +1635,11 @@ function getBookingActionState({
     canManageBackdateComplete &&
     rowBookingId &&
     !isClosedBookingStatus(status);
+  const canShowCompleteOnBehalf =
+    canManageCompleteOnBehalf &&
+    rowBookingId &&
+    status === "IN_USE" &&
+    !hasPendingDriverCancelRequest;
   const canShowProcess =
     canManageProcessBooking && ["PENDING", "APPROVED"].includes(status) && !hasPendingDriverCancelRequest;
   const canShowEdit =
@@ -1644,6 +1662,16 @@ function getBookingActionState({
       color: "blue",
       icon: CalendarIcon,
       onClick: () => onBackdateComplete(booking),
+    });
+  }
+
+  if (canShowCompleteOnBehalf) {
+    actionMenuItems.push({
+      key: "complete-on-behalf",
+      label: processing === "complete-on-behalf" ? "กำลังปิดงาน..." : "ปิดงานแทนคนขับ",
+      color: "green",
+      icon: CheckCircleIcon,
+      onClick: () => onCompleteOnBehalf(booking),
     });
   }
 
@@ -1896,6 +1924,7 @@ const BookingTableRow = memo(function BookingTableRow({
   canViewBookingDetail,
   canManageProcessBooking,
   canManageBackdateComplete,
+  canManageCompleteOnBehalf,
   canManageCancelBooking,
   canManageEditBooking,
   canUnassignBookings,
@@ -1905,6 +1934,7 @@ const BookingTableRow = memo(function BookingTableRow({
   onViewDetail,
   onProcess,
   onBackdateComplete,
+  onCompleteOnBehalf,
   onEdit,
   onCancel,
   onUnassign,
@@ -1925,6 +1955,7 @@ const BookingTableRow = memo(function BookingTableRow({
     canViewBookingDetail,
     canManageProcessBooking,
     canManageBackdateComplete,
+    canManageCompleteOnBehalf,
     canManageCancelBooking,
     canManageEditBooking,
     canUnassignBookings,
@@ -1933,6 +1964,7 @@ const BookingTableRow = memo(function BookingTableRow({
     processing,
     onProcess,
     onBackdateComplete,
+    onCompleteOnBehalf,
     onEdit,
     onCancel,
     onUnassign,
@@ -1995,6 +2027,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     canViewBookingDetail,
     canManageProcessBooking,
     canManageBackdateComplete,
+    canManageCompleteOnBehalf,
     canManageCancelBooking,
     canManageEditBooking,
     canUnassignBookings,
@@ -2004,6 +2037,7 @@ const BookingMobileCard = memo(function BookingMobileCard(props) {
     onViewDetail,
     onProcess,
     onBackdateComplete,
+    onCompleteOnBehalf,
     onEdit,
     onCancel,
     onUnassign,
@@ -2248,6 +2282,7 @@ export default function Booking() {
   const canCancelBookings = hasPermission(null, "bookings_cancel");
   const canEditBookings = hasPermission(null, "bookings_edit");
   const canAssignCentralVehicle = hasPermission(null, "bookings_assign_central_vehicle");
+  const canCompleteOnBehalf = hasPermission(null, "bookings_complete_on_behalf");
   const currentUser = getCurrentUser();
   const canReviewDriverCancelRequests = isStaffOrAdmin(currentUser);
   const canBackdateComplete = hasPermission(null, "bookings_backdate_complete");
@@ -3070,6 +3105,123 @@ export default function Booking() {
       }
     },
     [activeDrivers, backdateCompleteBooking, currentUser?.email, currentUser?.name, getLatestBookingForAction, processingAction, refreshAfterRejectedClosedAction, refreshBookings]
+  );
+
+  const handleCompleteOnBehalf = useCallback(
+    async (booking) => {
+      if (processingAction) return;
+      const latestBooking = getLatestBookingForAction(booking);
+      const latestStatus = normalizeStatus(latestBooking?.status);
+      const latestCancelRequestStatus = getDriverCancelRequestStatus(latestBooking || booking);
+      if (!latestBooking?.booking_id) {
+        showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+        return;
+      }
+      if (isClosedBookingStatus(latestStatus)) {
+        await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+        return;
+      }
+      if (latestStatus !== "IN_USE" || latestCancelRequestStatus === "PENDING") {
+        showError("รายการนี้ไม่สามารถปิดงานแทนคนขับได้ กรุณารีเฟรชข้อมูล");
+        await refreshBookings();
+        return;
+      }
+
+      const result = await Swal.fire({
+        title: "ปิดงานแทนคนขับ",
+        html: `
+          <div class="swal-form booking-backdate-form">
+            <label>หมายเหตุ</label>
+            <textarea
+              id="complete_on_behalf_note"
+              class="swal2-textarea booking-backdate-input"
+              rows="4"
+              placeholder="ระบุหมายเหตุเพิ่มเติม เช่น คนขับแจ้งปิดงานทางโทรศัพท์"
+            ></textarea>
+          </div>
+        `,
+        width: 640,
+        showCancelButton: true,
+        reverseButtons: false,
+        confirmButtonText: "ปิดงานแทนคนขับ",
+        cancelButtonText: "ยกเลิก",
+        confirmButtonColor: "#14532d",
+        cancelButtonColor: "#64748b",
+        customClass: {
+          popup: "booking-backdate-popup",
+          htmlContainer: "booking-backdate-html",
+          actions: "booking-backdate-actions",
+          confirmButton: "booking-backdate-confirm",
+          cancelButton: "booking-backdate-cancel",
+        },
+        text: "ต้องการปิดงานรายการนี้แทนคนขับหรือไม่",
+        preConfirm: () => ({
+          completed_on_behalf_note: document.getElementById("complete_on_behalf_note")?.value?.trim() || "",
+        }),
+      });
+
+      if (!result.isConfirmed) return;
+
+      try {
+        const currentBooking = getLatestBookingForAction(booking) || latestBooking;
+        const currentStatus = normalizeStatus(currentBooking?.status);
+        const currentCancelRequestStatus = getDriverCancelRequestStatus(currentBooking);
+        const bookingId = getBookingId(currentBooking);
+
+        if (!bookingId) {
+          showError("ไม่พบรหัสรายการจอง กรุณารีเฟรชข้อมูลแล้วลองใหม่");
+          return;
+        }
+
+        if (isClosedBookingStatus(currentStatus)) {
+          await refreshAfterRejectedClosedAction("รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล");
+          return;
+        }
+
+        if (currentStatus !== "IN_USE" || currentCancelRequestStatus === "PENDING") {
+          showError("รายการนี้ไม่สามารถปิดงานแทนคนขับได้ กรุณารีเฟรชข้อมูล");
+          await refreshBookings();
+          return;
+        }
+
+        const actorName = currentUser?.name || currentUser?.email || "";
+        const actorUserId = currentUser?.user_id || currentUser?.id || currentUser?.userId || currentUser?.email || "";
+
+        setProcessingAction({ bookingId, type: "complete-on-behalf" });
+        const response = await completeBookingOnBehalf({
+          booking_id: bookingId,
+          booking_no: currentBooking.booking_no || "",
+          completed_by_user_id: actorUserId,
+          completed_by_name: actorName,
+          completed_on_behalf_note: result.value?.completed_on_behalf_note || "",
+          actual_return_datetime: new Date().toISOString(),
+        });
+
+        if (response?.success === false) {
+          const message = response?.message || "ปิดงานแทนคนขับไม่สำเร็จ";
+          if (message === "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล") {
+            await refreshAfterRejectedClosedAction(message);
+          } else {
+            showError(message);
+            await refreshBookings();
+          }
+          return;
+        }
+
+        await refreshBookings();
+        await showSuccess("ปิดงานแทนคนขับสำเร็จ");
+      } catch (err) {
+        if ((err.message || "").trim() === "รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล") {
+          await refreshAfterRejectedClosedAction(err.message);
+        } else {
+          showError(err.message || "ปิดงานแทนคนขับไม่สำเร็จ");
+          await refreshBookings();
+        }
+      } finally {
+        setProcessingAction(null);
+      }
+    },
+    [completeBookingOnBehalf, currentUser?.email, currentUser?.id, currentUser?.name, currentUser?.userId, currentUser?.user_id, getLatestBookingForAction, processingAction, refreshAfterRejectedClosedAction, refreshBookings]
   );
 
   const handleViewBookingDetail = useCallback(
@@ -3912,6 +4064,7 @@ export default function Booking() {
                           const actionPermissions = getBookingManagePermissionState(booking, currentUser, {
                             canProcessBookings,
                             canBackdateComplete,
+                            canCompleteOnBehalf,
                             canEditBookings,
                             canCancelBookings,
                             canAssignCentralVehicle,
@@ -3936,6 +4089,7 @@ export default function Booking() {
                           onViewDetail={handleViewBookingDetail}
                           onProcess={handleProcessBooking}
                           onBackdateComplete={handleBackdateComplete}
+                          onCompleteOnBehalf={handleCompleteOnBehalf}
                           onEdit={handleEditBooking}
                           onCancel={handleCancelBooking}
                           onUnassign={handleUnassignBooking}
@@ -3961,6 +4115,7 @@ export default function Booking() {
                       const actionPermissions = getBookingManagePermissionState(booking, currentUser, {
                         canProcessBookings,
                         canBackdateComplete,
+                        canCompleteOnBehalf,
                         canEditBookings,
                         canCancelBookings,
                         canAssignCentralVehicle,
@@ -3985,6 +4140,7 @@ export default function Booking() {
                       onViewDetail={handleViewBookingDetail}
                       onProcess={handleProcessBooking}
                       onBackdateComplete={handleBackdateComplete}
+                      onCompleteOnBehalf={handleCompleteOnBehalf}
                       onEdit={handleEditBooking}
                       onCancel={handleCancelBooking}
                       onUnassign={handleUnassignBooking}

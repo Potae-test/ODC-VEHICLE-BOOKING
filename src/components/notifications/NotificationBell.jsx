@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteAllNotifications,
+  deleteNotification,
   getNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -29,6 +31,8 @@ const PUSH_TOKEN_USER_ID_STORAGE_KEY = "odc_fcm_token_user_id";
 const PUSH_PROVIDER_STORAGE_KEY = "odc_push_provider";
 const PUSH_LAST_SYNC_STORAGE_KEY = "odc_fcm_token_last_sync_at";
 const PUSH_SYNC_THROTTLE_MS = 5 * 60 * 1000;
+const SWIPE_DELETE_THRESHOLD_PX = 92;
+const SWIPE_ACTIVATION_PX = 14;
 const NOTIFICATION_CATEGORY_META = {
   Booking: {
     label: "Booking",
@@ -160,9 +164,13 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [activeNotificationId, setActiveNotificationId] = useState("");
+  const [deletingNotificationId, setDeletingNotificationId] = useState("");
+  const [deletingAll, setDeletingAll] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [pushStatus, setPushStatus] = useState("loading");
   const [page, setPage] = useState(1);
+  const [swipingNotificationId, setSwipingNotificationId] = useState("");
+  const [swipeOffsetById, setSwipeOffsetById] = useState({});
   const [debugPushOpen, setDebugPushOpen] = useState(false);
   const [debugPushLoading, setDebugPushLoading] = useState(false);
   const [debugPushInfo, setDebugPushInfo] = useState({
@@ -176,6 +184,16 @@ export default function NotificationBell({ currentUser, onNavigate }) {
     error: null,
   });
   const rootRef = useRef(null);
+  const swipeSessionRef = useRef({
+    notificationId: "",
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    isActive: false,
+    isHorizontalSwipe: false,
+  });
+  const suppressClickNotificationIdRef = useRef("");
 
   const userId = String(currentUser?.user_id || "").trim();
   const role = String(currentUser?.role || "").trim().toUpperCase();
@@ -401,6 +419,11 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   }, [notifications.length]);
 
   useEffect(() => {
+    setSwipeOffsetById({});
+    setSwipingNotificationId("");
+  }, [notifications.length]);
+
+  useEffect(() => {
     if (page > totalPages) {
       setPage(totalPages);
     }
@@ -485,9 +508,14 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   };
 
   const handleItemClick = async (notification) => {
+    if (deletingAll) return;
     if (!notification) return;
 
     const notificationId = String(notification.notification_id || "").trim();
+    if (suppressClickNotificationIdRef.current === notificationId) {
+      suppressClickNotificationIdRef.current = "";
+      return;
+    }
     const notificationUrl = String(notification.url || "").trim();
 
     if (notificationId && !notification.is_read) {
@@ -521,7 +549,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
   };
 
   const handleMarkAll = async () => {
-    if (!unreadCount || markingAll) return;
+    if (!unreadCount || markingAll || deletingAll) return;
 
     setMarkingAll(true);
 
@@ -543,6 +571,227 @@ export default function NotificationBell({ currentUser, onNavigate }) {
       console.warn("markAllNotificationsRead failed", err);
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const isMobileViewport = () => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
+  };
+
+  const resetSwipeState = useCallback((notificationId = "") => {
+    if (notificationId) {
+      setSwipeOffsetById((current) => {
+        if (!(notificationId in current)) {
+          return current;
+        }
+
+        const next = { ...current };
+        delete next[notificationId];
+        return next;
+      });
+    } else {
+      setSwipeOffsetById({});
+    }
+
+    setSwipingNotificationId((currentId) => (notificationId && currentId !== notificationId ? currentId : ""));
+    swipeSessionRef.current = {
+      notificationId: "",
+      pointerId: null,
+      startX: 0,
+      startY: 0,
+      offsetX: 0,
+      isActive: false,
+      isHorizontalSwipe: false,
+    };
+  }, []);
+
+  const performDeleteNotification = useCallback(async (notification) => {
+    if (!notification) return;
+
+    const notificationId = String(notification.notification_id || "").trim();
+    if (!notificationId || deletingNotificationId === notificationId || deletingAll) {
+      return;
+    }
+
+    setDeletingNotificationId(notificationId);
+
+    try {
+      await deleteNotification(notificationId);
+      setItems((currentItems) =>
+        currentItems.filter((item) => String(item.notification_id || "").trim() !== notificationId)
+      );
+      if (!notification.is_read) {
+        setUnreadCount((currentCount) => Math.max(0, currentCount - 1));
+      }
+    } catch (err) {
+      console.warn("deleteNotification failed", err);
+      await showError(err?.message || "ไม่สามารถลบการแจ้งเตือนได้");
+      resetSwipeState(notificationId);
+    } finally {
+      setDeletingNotificationId("");
+    }
+  }, [deletingAll, deletingNotificationId, resetSwipeState]);
+
+  const handleDeleteNotification = async (event, notification) => {
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
+
+    if (!notification) return;
+
+    const notificationId = String(notification.notification_id || "").trim();
+    if (!notificationId || deletingNotificationId === notificationId || deletingAll) {
+      return;
+    }
+
+    const confirmed = await showConfirm("ลบการแจ้งเตือนนี้หรือไม่?");
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingNotificationId(notificationId);
+
+    try {
+      await deleteNotification(notificationId);
+      setItems((currentItems) =>
+        currentItems.filter((item) => String(item.notification_id || "").trim() !== notificationId)
+      );
+      if (!notification.is_read) {
+        setUnreadCount((currentCount) => Math.max(0, currentCount - 1));
+      }
+    } catch (err) {
+      console.warn("deleteNotification failed", err);
+      await showError(err?.message || "ไม่สามารถลบการแจ้งเตือนได้");
+    } finally {
+      setDeletingNotificationId("");
+    }
+  };
+
+  const handleNotificationKeyDown = (event, notification) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    handleItemClick(notification);
+  };
+
+  const handleDeleteNotificationImmediate = async (event, notification) => {
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
+    await performDeleteNotification(notification);
+  };
+
+  const handleDeleteAllNotifications = useCallback(async () => {
+    if (deletingAll || deletingNotificationId || notifications.length === 0) {
+      return;
+    }
+
+    const notificationIds = notifications
+      .map((notification) => String(notification?.notification_id || "").trim())
+      .filter(Boolean);
+
+    if (notificationIds.length === 0) {
+      setItems([]);
+      setUnreadCount(0);
+      setPage(1);
+      resetSwipeState();
+      return;
+    }
+
+    setDeletingAll(true);
+
+    try {
+      await deleteAllNotifications(notificationIds);
+      setItems([]);
+      setUnreadCount(0);
+      setPage(1);
+      setDebugPushOpen(false);
+      resetSwipeState();
+    } catch (err) {
+      console.warn("deleteAllNotifications failed", err);
+      await showError(err?.message || "ไม่สามารถลบการแจ้งเตือนทั้งหมดได้");
+    } finally {
+      setDeletingAll(false);
+    }
+  }, [deletingAll, deletingNotificationId, notifications, resetSwipeState]);
+
+  const handleNotificationPointerDown = (event, notification) => {
+    if (!notification || deletingNotificationId || deletingAll) return;
+    if (!isMobileViewport()) return;
+    if (event.pointerType === "mouse") return;
+
+    const notificationId = String(notification.notification_id || "").trim();
+    if (!notificationId) return;
+
+    swipeSessionRef.current = {
+      notificationId,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: 0,
+      isActive: true,
+      isHorizontalSwipe: false,
+    };
+  };
+
+  const handleNotificationPointerMove = (event, notification) => {
+    const swipe = swipeSessionRef.current;
+    const notificationId = String(notification?.notification_id || "").trim();
+    if (!swipe.isActive || swipe.pointerId !== event.pointerId || swipe.notificationId !== notificationId) {
+      return;
+    }
+
+    const deltaX = event.clientX - swipe.startX;
+    const deltaY = event.clientY - swipe.startY;
+
+    if (!swipe.isHorizontalSwipe) {
+      if (Math.abs(deltaX) < SWIPE_ACTIVATION_PX) {
+        return;
+      }
+
+      if (Math.abs(deltaX) <= Math.abs(deltaY) || deltaX >= 0) {
+        swipe.isActive = false;
+        return;
+      }
+
+      swipe.isHorizontalSwipe = true;
+    }
+
+    event.preventDefault();
+    const nextOffset = Math.max(deltaX, -140);
+    swipe.offsetX = nextOffset;
+    suppressClickNotificationIdRef.current = notificationId;
+    setSwipingNotificationId(notificationId);
+    setSwipeOffsetById((current) => ({
+      ...current,
+      [notificationId]: nextOffset,
+    }));
+  };
+
+  const handleNotificationPointerEnd = async (event, notification) => {
+    const swipe = swipeSessionRef.current;
+    const notificationId = String(notification?.notification_id || "").trim();
+    if (swipe.pointerId !== event.pointerId || swipe.notificationId !== notificationId) {
+      return;
+    }
+
+    const shouldDelete = swipe.isHorizontalSwipe && Math.abs(swipe.offsetX) >= SWIPE_DELETE_THRESHOLD_PX;
+    resetSwipeState(notificationId);
+
+    if (shouldDelete) {
+      suppressClickNotificationIdRef.current = notificationId;
+      await performDeleteNotification(notification);
+      return;
+    }
+
+    if (swipe.isHorizontalSwipe) {
+      suppressClickNotificationIdRef.current = notificationId;
+      window.setTimeout(() => {
+        if (suppressClickNotificationIdRef.current === notificationId) {
+          suppressClickNotificationIdRef.current = "";
+        }
+      }, 180);
     }
   };
 
@@ -736,6 +985,10 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   {pagedNotifications.map((notification) => {
                   const notificationId = String(notification.notification_id || "").trim();
                   const isUnread = !notification.is_read;
+                  const isBusy =
+                    activeNotificationId === notificationId || deletingNotificationId === notificationId;
+                  const swipeOffset = Number(swipeOffsetById[notificationId] || 0);
+                  const swipeProgress = Math.min(1, Math.abs(swipeOffset) / SWIPE_DELETE_THRESHOLD_PX);
                   const category = getNotificationCategory(notification);
                   const categoryMeta = NOTIFICATION_CATEGORY_META[category] || NOTIFICATION_CATEGORY_META.Booking;
                   const driverStartedPayload = null;
@@ -743,13 +996,64 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                   const driverUnavailableMessage = parseDriverUnavailableMessage(notification);
 
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={notificationId || `${notification.title}-${notification.created_at}`}
-                      className={`notification-item notification-mobile-card${isUnread ? " is-unread" : ""}`}
-                      onClick={() => handleItemClick(notification)}
-                      disabled={activeNotificationId === notificationId}
+                      className={`notification-item notification-mobile-card${isUnread ? " is-unread" : ""}${swipeOffset < 0 ? " is-swipe-active" : ""}`}
+                      role="button"
+                      tabIndex={isBusy || deletingAll ? -1 : 0}
+                      aria-disabled={isBusy || deletingAll}
+                      onClick={isBusy || deletingAll ? undefined : () => handleItemClick(notification)}
+                      onKeyDown={(event) => handleNotificationKeyDown(event, notification)}
+                      onPointerDown={(event) => handleNotificationPointerDown(event, notification)}
+                      onPointerMove={(event) => handleNotificationPointerMove(event, notification)}
+                      onPointerUp={(event) => {
+                        handleNotificationPointerEnd(event, notification).catch((err) => {
+                          console.warn("notification swipe delete failed", err);
+                        });
+                      }}
+                      onPointerCancel={(event) => {
+                        handleNotificationPointerEnd(event, notification).catch((err) => {
+                          console.warn("notification swipe cancel failed", err);
+                        });
+                      }}
                     >
+                      <div
+                        className="notification-item-swipe-delete"
+                        aria-hidden="true"
+                        style={{
+                          opacity: swipeOffset < 0 ? Math.min(1, Math.max(0.18, swipeProgress)) : 0,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" focusable="false">
+                          <path
+                            d="M9 3.75h6a1.5 1.5 0 0 1 1.5 1.5V6H21v1.5h-1.23l-.73 10.22A2.25 2.25 0 0 1 16.8 19.8H7.2a2.25 2.25 0 0 1-2.24-2.08L4.23 7.5H3V6h4.5v-.75A1.5 1.5 0 0 1 9 3.75Zm0 2.25V6h6v-.75a.75.75 0 0 0-.75-.75h-4.5A.75.75 0 0 0 9 5.25ZM7.46 7.5l.71 9.96a.75.75 0 0 0 .75.69h6.16a.75.75 0 0 0 .75-.69l.71-9.96H7.46Zm2.29 2.1h1.5v6h-1.5v-6Zm3 0h1.5v6h-1.5v-6Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                        <span>ลบ</span>
+                      </div>
+                      <div
+                        className="notification-item-content"
+                        style={{
+                          transform: swipeOffset ? `translateX(${swipeOffset}px)` : undefined,
+                          transition: swipingNotificationId === notificationId ? "none" : "transform 0.18s ease",
+                        }}
+                      >
+                      <button
+                        type="button"
+                        className="notification-item-delete"
+                        aria-label="ลบการแจ้งเตือน"
+                        onClick={(event) => handleDeleteNotificationImmediate(event, notification)}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        disabled={deletingAll || deletingNotificationId === notificationId}
+                      >
+                        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                          <path
+                            d="M9 3.75h6a1.5 1.5 0 0 1 1.5 1.5V6H21v1.5h-1.23l-.73 10.22A2.25 2.25 0 0 1 16.8 19.8H7.2a2.25 2.25 0 0 1-2.24-2.08L4.23 7.5H3V6h4.5v-.75A1.5 1.5 0 0 1 9 3.75Zm0 2.25V6h6v-.75a.75.75 0 0 0-.75-.75h-4.5A.75.75 0 0 0 9 5.25ZM7.46 7.5l.71 9.96a.75.75 0 0 0 .75.69h6.16a.75.75 0 0 0 .75-.69l.71-9.96H7.46Zm2.29 2.1h1.5v6h-1.5v-6Zm3 0h1.5v6h-1.5v-6Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      </button>
                       <div className="notification-item-head">
                         <div className="notification-item-title-group">
                           <span className={`notification-category-badge notification-category-${categoryMeta.className}`}>
@@ -795,7 +1099,8 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                           </div>
                         </div>
                       )}
-                    </button>
+                      </div>
+                    </div>
                   );
                   })}
                 </div>
@@ -836,14 +1141,22 @@ export default function NotificationBell({ currentUser, onNavigate }) {
           </div>
 
           <div className="notification-panel-footer">
-            <button type="button" className="notification-text-button notification-text-button-full" onClick={handleMarkAll} disabled={!unreadCount || markingAll}>
+            <button type="button" className="notification-text-button notification-text-button-full" onClick={handleMarkAll} disabled={!unreadCount || markingAll || deletingAll}>
               อ่านทั้งหมด
+            </button>
+            <button
+              type="button"
+              className="notification-text-button notification-text-button-danger notification-text-button-full"
+              onClick={handleDeleteAllNotifications}
+              disabled={deletingAll || Boolean(deletingNotificationId) || items.length === 0}
+            >
+              {deletingAll ? "กำลังลบทั้งหมด..." : "ลบทั้งหมด"}
             </button>
             <button
               type="button"
               className="notification-text-button notification-text-button-full"
               onClick={handleEnablePush}
-              disabled={!userId || pushStatus === "enabled" || pushStatus === "unsupported" || pushStatus === "blocked"}
+              disabled={!userId || deletingAll || pushStatus === "enabled" || pushStatus === "unsupported" || pushStatus === "blocked"}
             >
               {pushStatus === "loading" ? "เปิดแจ้งเตือนบนเครื่องนี้" : getPushStatusLabel(pushStatus)}
             </button>
@@ -852,7 +1165,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                 type="button"
                 className="notification-text-button notification-text-button-half"
                 onClick={handleDebugPush}
-                disabled={debugPushLoading}
+                disabled={deletingAll || debugPushLoading}
               >
                 {debugPushLoading ? "Checking..." : "Debug Push"}
               </button>
@@ -860,7 +1173,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
                 type="button"
                 className="notification-text-button notification-text-button-danger notification-text-button-half"
                 onClick={handleRecoverPush}
-                disabled={!userId}
+                disabled={!userId || deletingAll}
               >
                 Recover Push
               </button>
@@ -869,7 +1182,7 @@ export default function NotificationBell({ currentUser, onNavigate }) {
               type="button"
               className="notification-text-button notification-text-button-full"
               onClick={() => setIsExpanded((currentValue) => !currentValue)}
-              disabled={items.length === 0}
+              disabled={deletingAll || items.length === 0}
             >
               {isExpanded ? "ย่อรายการ" : "ดูทั้งหมด"}
             </button>

@@ -14,6 +14,7 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Booking and calendar visibility stay global across users; do not filter shared lists by `requester_user_id`.
 - Do not overwrite `start_datetime` or `end_datetime`.
 - Use `actual_start_datetime` and `actual_return_datetime` for real usage timestamps.
+- `bookings_complete_on_behalf` is a separate closing action for `IN_USE` bookings only; it must re-read the latest row before writing, reject rows that are no longer `IN_USE` or that have a pending driver-cancel request, mark `completed_on_behalf = TRUE`, keep existing driver-complete and backdated-complete flows unchanged, and leave `actual_start_datetime` unchanged unless it already exists.
 - Before destructive or closing actions such as backdated completion, central-office completion, and cancellation, the backend must re-read the latest booking row and reject the action with `รายการนี้ถูกปิดงานแล้ว กรุณารีเฟรชข้อมูล` when the latest status is already `COMPLETED` or `CANCELLED`, without writing logs, notifications, or row updates.
 - The `CENTRAL_VEHICLE` flow is a direct `PENDING` -> `COMPLETED` transition for central office usage, must assign driver `U007`, must not create active driver work, and must not move the queue pointer.
 - New bookings created by a logged-in `USER` must write the real owner into `requester_user_id`, `requester_name`, `department`, and `phone`, and user-specific notifications must target that owner id.
@@ -34,17 +35,20 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 
 ## Google Sheets Rules
 - Important sheets: `Users`, `Bookings`, `Vehicles`, `DriverUnavailable`, `DriverUnavailableLogs`, `DriverQueue`, `DriverQueueLogs`, `DriverQueueState`, `DriverJobLogs`, `BookingCancellationHistory`, `BookingActivityLogs`.
+- Notification visibility hides must use a separate `NotificationDeletes` sheet with columns `delete_id`, `notification_id`, `user_id`, `deleted_at`, and `created_by`; do not immediately delete shared `Notifications` rows when one user removes a notification from NotificationBell.
 - Never rename sheet headers without migration handling.
 
 ## Logging and Cache Rules
 - Important actions must create append-only logs.
-- Log at minimum: booking create/update/cancel, booking approval and reassignment, driver assignment recall, central-vehicle completion, driver cancel request/withdraw/review, backdated completion, unavailable create/update/cancel, and queue movement.
+- Log at minimum: booking create/update/cancel, booking approval and reassignment, driver assignment recall, central-vehicle completion, driver cancel request/withdraw/review, backdated completion, on-behalf completion, unavailable create/update/cancel, and queue movement.
 - After mutations, invalidate related caches such as `bookings`, `users`, `vehicles`, `driver_queue`, and `driver_unavailable`.
 
 ## Push Notification Rules
 - Keep non-FCM push subscriptions matched by `endpoint`.
 - Keep FCM push subscriptions idempotent per device session by matching `user_id + provider + user_agent` first and falling back to `fcm_token` only when needed.
 - When an FCM token is saved, preserve `subscription_id` and `created_at` on update, refresh `fcm_token`, `endpoint`, `p256dh`, `auth`, `provider`, `user_agent`, `status`, and `updated_at`, and keep only the latest row `ACTIVE` for that device session.
+- Per-user notification delete/hide must only hide NotificationBell rows for the current session user by writing `NotificationDeletes` markers keyed by `notification_id + user_id`; do not change notification creation, stored title/message/category, or FCM/Web Push dispatch behavior when a user hides a notification.
+- NotificationBell `ลบทั้งหมด` must also stay per-user only by upserting `NotificationDeletes` markers for the current session user's currently visible notifications instead of deleting shared `Notifications` rows, and must not change notification creation or FCM/Web Push dispatch behavior.
 - Scheduled booking reminders must keep NotificationBell, FCM, and Web Push title/message/category identical by dispatching the stored notification record through the Worker `created_notifications` path.
 - Scheduled reminder dedupe must stay append-only in `Notifications` by using stable per-recipient reminder keys, not by mutating or deleting older rows.
 - Current scheduled reminder types are `BOOKING_REMINDER_1H`, `BOOKING_REMINDER_TOMORROW`, and `BOOKING_OPEN_JOB_DAILY`.
@@ -58,6 +62,7 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Check permissions before rendering actions.
 - `bookings_assign_central_vehicle` defaults to `ADMIN` and `STAFF` only.
 - `bookings_assign_central_vehicle` and `bookings_backdate_complete` are action permissions and must not be hard-coded to UI roles.
+- `bookings_complete_on_behalf` is an action permission managed in the admin permission UI; `USER` may use it only on bookings they own, while `STAFF` and `ADMIN` follow the configured action-permission grants.
 - `USER` may view all bookings and calendar entries, but may edit or cancel only their own booking.
 - `DRIVER` can access only their own records.
 - `ADMIN` and `STAFF` have full access.
@@ -73,6 +78,11 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Avoid cramped tables, tiny buttons, and overly complex layouts.
 - Tables must support empty states and readable mobile overflow.
 - Use SweetAlert2 for modal flows.
+- NotificationBell delete controls must stay compact, preserve the unread dot and category badge, and avoid crowding the mobile card layout.
+
+## Cleanup Rules
+- `clearOldNotifications()` should run daily around `02:00` Asia/Bangkok, remove `Notifications` rows older than 14 days, and clean `NotificationDeletes` rows that are older than 14 days or point to missing notifications.
+- Notification cleanup must use `LockService` plus batched sheet operations where possible so concurrent cleanup runs do not delete overlapping rows.
 
 ## Loading Rules
 - Prefer shared skeleton components from `src/components/skeletons/`.

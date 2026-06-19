@@ -185,6 +185,19 @@ function doPost(e) {
       if (denied) return denied;
       return backdateCompleteBooking(body.data);
     }
+    if (action === "completeBookingOnBehalf") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
+      var denied = requireActionPermission_(body.data, "bookings_complete_on_behalf");
+      if (denied) return denied;
+      return completeBookingOnBehalf(body.data);
+    }
     if (action === "driverCancelJob") {
       var trusted = applyTrustedSession_(body.data);
       if (!trusted.ok) {
@@ -535,6 +548,28 @@ function doPost(e) {
     }
     if (action === "markNotificationRead") return markNotificationRead(body.data);
     if (action === "markAllNotificationsRead") return markAllNotificationsRead(body.data);
+    if (action === "deleteNotification") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
+      return deleteNotification(body.data);
+    }
+    if (action === "deleteAllNotificationsForCurrentUser") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
+      return deleteAllNotificationsForCurrentUser(body.data);
+    }
     if (action === "savePushSubscription") return savePushSubscription(body.data);
     if (action === "disablePushSubscription") return disablePushSubscription(body.data);
     if (action === "getPushSubscriptionsByUserId") return getPushSubscriptionsByUserId(body.data || body);
@@ -1086,6 +1121,45 @@ function setRowValues(sheet, row, values) {
   invalidateSheetCache_(sheet);
 }
 
+function deleteSheetRowsBatch_(sheet, rowNumbers) {
+  const normalizedRows = Array.from(new Set((rowNumbers || [])
+    .map(function (value) {
+      return Number(value || 0);
+    })
+    .filter(function (value) {
+      return Number.isFinite(value) && value >= 2;
+    })))
+    .sort(function (left, right) {
+      return right - left;
+    });
+
+  if (normalizedRows.length === 0) {
+    return 0;
+  }
+
+  let deletedCount = 0;
+  let startRow = normalizedRows[0];
+  let count = 1;
+
+  for (let index = 1; index < normalizedRows.length; index += 1) {
+    const rowNumber = normalizedRows[index];
+    if (rowNumber === startRow - count) {
+      count += 1;
+      continue;
+    }
+
+    sheet.deleteRows(startRow - count + 1, count);
+    deletedCount += count;
+    startRow = rowNumber;
+    count = 1;
+  }
+
+  sheet.deleteRows(startRow - count + 1, count);
+  deletedCount += count;
+  invalidateSheetCache_(sheet);
+  return deletedCount;
+}
+
 var REQUEST_CACHE_ = null;
 
 function resetRequestCache_() {
@@ -1228,6 +1302,10 @@ function ensureBookingsSheet() {
     "is_backdated",
     "backdated_completed_at",
     "backdated_completed_by",
+    "completed_on_behalf",
+    "completed_on_behalf_note",
+    "completed_by_user_id",
+    "completed_by_name",
   ];
   const headers = [
     ...baseHeaders,
@@ -1302,6 +1380,25 @@ function ensureNotificationsSheet() {
 
   if (!sheet) {
     sheet = ss.insertSheet("Notifications");
+  }
+
+  ensureSheetColumns_(sheet, headers);
+  return sheet;
+}
+
+function ensureNotificationDeletesSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName("NotificationDeletes");
+  const headers = [
+    "delete_id",
+    "notification_id",
+    "user_id",
+    "deleted_at",
+    "created_by",
+  ];
+
+  if (!sheet) {
+    sheet = ss.insertSheet("NotificationDeletes");
   }
 
   ensureSheetColumns_(sheet, headers);
@@ -2177,13 +2274,192 @@ function isNotificationVisibleToUser_(notification, userId, role) {
   return Boolean(targetRole && normalizedRole && targetRole === normalizedRole);
 }
 
+function getDeletedNotificationIdsByUser_(userId) {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) return new Set();
+
+  const sheet = ensureNotificationDeletesSheet();
+  const table = readSheetTable(sheet);
+  const columnMap = table.columnMap || {};
+  const notificationIdCol = columnMap.notification_id;
+  const userIdCol = columnMap.user_id;
+  const deletedIds = new Set();
+
+  if (notificationIdCol === undefined || userIdCol === undefined) {
+    return deletedIds;
+  }
+
+  for (let index = 0; index < table.rows.length; index += 1) {
+    const rowValues = table.rows[index];
+    if (String(rowValues[userIdCol] || "").trim() !== normalizedUserId) {
+      continue;
+    }
+
+    const notificationId = String(rowValues[notificationIdCol] || "").trim();
+    if (notificationId) {
+      deletedIds.add(notificationId);
+    }
+  }
+
+  return deletedIds;
+}
+
+function findVisibleNotificationById_(notificationId, userId, role) {
+  const normalizedNotificationId = String(notificationId || "").trim();
+  if (!normalizedNotificationId) return null;
+
+  const sheet = ensureNotificationsSheet();
+  const table = readSheetTable(sheet);
+
+  for (let index = 0; index < table.rows.length; index += 1) {
+    const notification = rowsToObjects(table.headers, [table.rows[index]])[0] || {};
+    if (String(notification.notification_id || "").trim() !== normalizedNotificationId) {
+      continue;
+    }
+
+    if (!isNotificationVisibleToUser_(notification, userId, role)) {
+      return null;
+    }
+
+    return {
+      ...notification,
+      notification_id: String(notification.notification_id || "").trim(),
+      target_user_id: String(notification.target_user_id || "").trim(),
+      target_role: normalizeRoleValue_(notification.target_role || ""),
+    };
+  }
+
+  return null;
+}
+
+function getVisibleNotificationsByIds_(notificationIds, userId, role) {
+  const requestedIds = Array.from(new Set((notificationIds || [])
+    .map(function (value) {
+      return String(value || "").trim();
+    })
+    .filter(Boolean)));
+
+  if (requestedIds.length === 0) {
+    return [];
+  }
+
+  const requestedIdSet = new Set(requestedIds);
+  const sheet = ensureNotificationsSheet();
+  const table = readSheetTable(sheet);
+  const matchedNotifications = [];
+
+  for (let index = 0; index < table.rows.length; index += 1) {
+    const notification = rowsToObjects(table.headers, [table.rows[index]])[0] || {};
+    const notificationId = String(notification.notification_id || "").trim();
+    if (!notificationId || !requestedIdSet.has(notificationId)) {
+      continue;
+    }
+
+    if (!isNotificationVisibleToUser_(notification, userId, role)) {
+      continue;
+    }
+
+    matchedNotifications.push({
+      ...notification,
+      notification_id: notificationId,
+      target_user_id: String(notification.target_user_id || "").trim(),
+      target_role: normalizeRoleValue_(notification.target_role || ""),
+    });
+  }
+
+  return matchedNotifications;
+}
+
+function upsertNotificationDeleteMarkers_(notificationIds, trustedUserId, createdBy) {
+  const normalizedNotificationIds = Array.from(new Set((notificationIds || [])
+    .map(function (value) {
+      return String(value || "").trim();
+    })
+    .filter(Boolean)));
+
+  if (!trustedUserId) {
+    throw new Error("user_id is required");
+  }
+
+  if (normalizedNotificationIds.length === 0) {
+    return {
+      upserted_count: 0,
+      affected_notification_ids: [],
+    };
+  }
+
+  const sheet = ensureNotificationDeletesSheet();
+  const table = readSheetTable(sheet);
+  const headers = table.headers;
+  const columnMap = table.columnMap || {};
+  const notificationIdCol = columnMap.notification_id;
+  const userIdCol = columnMap.user_id;
+  const deletedAtCol = columnMap.deleted_at;
+  const createdByCol = columnMap.created_by;
+  const deleteIdCol = columnMap.delete_id;
+  const nowIso = new Date().toISOString();
+  const requestedIdSet = new Set(normalizedNotificationIds);
+  let upsertedCount = 0;
+
+  if (
+    notificationIdCol === undefined ||
+    userIdCol === undefined ||
+    deletedAtCol === undefined ||
+    createdByCol === undefined ||
+    deleteIdCol === undefined
+  ) {
+    throw new Error("NotificationDeletes sheet columns are invalid");
+  }
+
+  for (let index = 0; index < table.rows.length; index += 1) {
+    const rowValues = table.rows[index];
+    const existingNotificationId = String(rowValues[notificationIdCol] || "").trim();
+    if (!requestedIdSet.has(existingNotificationId)) {
+      continue;
+    }
+    if (String(rowValues[userIdCol] || "").trim() !== trustedUserId) {
+      continue;
+    }
+
+    const nextValues = rowValues.slice();
+    nextValues[deletedAtCol] = nowIso;
+    nextValues[createdByCol] = createdBy;
+    if (!String(nextValues[deleteIdCol] || "").trim()) {
+      nextValues[deleteIdCol] = "NDL-" + Utilities.getUuid();
+    }
+    setRowValues(sheet, index + 2, nextValues);
+    requestedIdSet.delete(existingNotificationId);
+    upsertedCount += 1;
+  }
+
+  requestedIdSet.forEach(function (notificationId) {
+    const row = Array(headers.length).fill("");
+    row[deleteIdCol] = "NDL-" + Utilities.getUuid();
+    row[notificationIdCol] = notificationId;
+    row[userIdCol] = trustedUserId;
+    row[deletedAtCol] = nowIso;
+    row[createdByCol] = createdBy;
+    appendSheetRow(sheet, row);
+    upsertedCount += 1;
+  });
+
+  return {
+    upserted_count: upsertedCount,
+    affected_notification_ids: normalizedNotificationIds,
+    deleted_at: nowIso,
+  };
+}
+
 function getVisibleNotificationEntries_(userId, role) {
+  const hiddenNotificationIds = getDeletedNotificationIdsByUser_(userId);
   const sheet = ensureNotificationsSheet();
   const table = readSheetTable(sheet);
   const notifications = rowsToObjects(table.headers, table.rows)
     .filter((notification) => isNotificationVisibleToUser_(notification, userId, role))
+    .filter((notification) => !hiddenNotificationIds.has(String(notification.notification_id || "").trim()))
     .map((notification) => ({
       ...notification,
+      notification_id: String(notification.notification_id || "").trim(),
       target_user_id: String(notification.target_user_id || "").trim(),
       target_role: normalizeRoleValue_(notification.target_role || ""),
       category: String(notification.category || "").trim(),
@@ -2874,6 +3150,118 @@ function markAllNotificationsRead(data) {
       message: "Mark all notifications read success",
       data: {
         updated_count: updatedCount,
+      },
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function deleteNotification(data) {
+  try {
+    const payload = data || {};
+    const notificationId = String(payload.notification_id || "").trim();
+    const trustedUserId = getTrustedCurrentUserId_(payload);
+    const trustedRole = normalizeRoleValue_(payload && payload.trusted_role || payload && payload.current_user_role || "");
+    const createdBy = String(
+      payload.current_user_name ||
+      payload.created_by ||
+      trustedUserId
+    ).trim() || trustedUserId;
+
+    if (!notificationId) {
+      return jsonOutput({
+        success: false,
+        message: "notification_id is required",
+      });
+    }
+
+    if (!trustedUserId) {
+      return jsonOutput({
+        success: false,
+        message: "user_id is required",
+      });
+    }
+
+    const matchedNotification = findVisibleNotificationById_(notificationId, trustedUserId, trustedRole);
+
+    if (!matchedNotification) {
+      return jsonOutput({
+        success: false,
+        message: "Notification not found",
+      });
+    }
+    const result = upsertNotificationDeleteMarkers_([notificationId], trustedUserId, createdBy);
+
+    return jsonOutput({
+      success: true,
+      message: "Delete notification success",
+      data: result,
+    });
+  } catch (err) {
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+    });
+  }
+}
+
+function deleteAllNotificationsForCurrentUser(data) {
+  try {
+    const payload = data || {};
+    const trustedUserId = getTrustedCurrentUserId_(payload);
+    const trustedRole = normalizeRoleValue_(payload && payload.trusted_role || payload && payload.current_user_role || "");
+    const createdBy = String(
+      payload.current_user_name ||
+      payload.created_by ||
+      trustedUserId
+    ).trim() || trustedUserId;
+    const requestedNotificationIds = Array.isArray(payload.notification_ids)
+      ? payload.notification_ids
+      : [];
+
+    if (!trustedUserId) {
+      return jsonOutput({
+        success: false,
+        message: "user_id is required",
+      });
+    }
+
+    const visibleNotifications = getVisibleNotificationsByIds_(
+      requestedNotificationIds,
+      trustedUserId,
+      trustedRole
+    );
+
+    if (visibleNotifications.length === 0) {
+      return jsonOutput({
+        success: true,
+        message: "Delete all notifications success",
+        data: {
+          upserted_count: 0,
+          visible_count: 0,
+          affected_notification_ids: [],
+        },
+      });
+    }
+
+    const result = upsertNotificationDeleteMarkers_(
+      visibleNotifications.map(function (notification) {
+        return notification.notification_id;
+      }),
+      trustedUserId,
+      createdBy
+    );
+
+    return jsonOutput({
+      success: true,
+      message: "Delete all notifications success",
+      data: {
+        ...result,
+        visible_count: visibleNotifications.length,
       },
     });
   } catch (err) {
@@ -4397,6 +4785,219 @@ function backdateCompleteBooking(data) {
   });
 }
 
+function completeBookingOnBehalf(data) {
+  const bookingSheet = ensureBookingsSheet();
+
+  if (!data.booking_id) {
+    return jsonOutput({ success: false, message: "booking_id is required" });
+  }
+
+  const actionContext = getLatestBookingActionContext_(bookingSheet, data.booking_id);
+  if (actionContext.denied) {
+    return actionContext.denied;
+  }
+
+  if (actionContext.status !== "IN_USE") {
+    return jsonOutput({
+      success: false,
+      message: "รายการนี้ไม่สามารถปิดงานแทนคนขับได้ กรุณารีเฟรชข้อมูล",
+    });
+  }
+
+  const table = actionContext.table;
+  const headers = table.headers;
+  const columnMap = table.columnMap;
+  const userLookup = buildUserLookup();
+  const now = new Date();
+  const actorUserId = getTrustedCurrentUserId_(data);
+  const actorRole = normalizeRoleValue_(data && (data.trusted_role || data.current_user_role || ""));
+  const actorName = String(
+    (actorUserId ? userLookup.byId.get(actorUserId)?.name : "") ||
+    data.completed_by_name ||
+    data.current_user_name ||
+    data.updated_by ||
+    actorUserId
+  ).trim();
+  const row = actionContext.row;
+  const rowValues = actionContext.rowValues.slice();
+  const requesterUserIdCol = ensureColumn(bookingSheet, headers, "requester_user_id");
+  const statusCol = ensureColumn(bookingSheet, headers, "status");
+  const assignedUserIdCol = ensureColumn(bookingSheet, headers, "assigned_user_id");
+  const assignedUserNameCol = ensureColumn(bookingSheet, headers, "assigned_user_name");
+  const destinationCol = ensureColumn(bookingSheet, headers, "destination");
+  const actualReturnDatetimeCol = ensureColumn(bookingSheet, headers, "actual_return_datetime");
+  const actualReturnByCol = ensureColumn(bookingSheet, headers, "actual_return_by");
+  const completedOnBehalfCol = ensureColumn(bookingSheet, headers, "completed_on_behalf");
+  const completedOnBehalfNoteCol = ensureColumn(bookingSheet, headers, "completed_on_behalf_note");
+  const completedByUserIdCol = ensureColumn(bookingSheet, headers, "completed_by_user_id");
+  const completedByNameCol = ensureColumn(bookingSheet, headers, "completed_by_name");
+  const updatedAtCol = ensureColumn(bookingSheet, headers, "updated_at");
+  const updatedByCol = ensureColumn(bookingSheet, headers, "updated_by");
+  const driverCancelRequestStatusCol = ensureColumn(bookingSheet, headers, "driver_cancel_request_status");
+  const note = normalizeNoteParts([
+    data.completed_on_behalf_note || data.completed_on_behalf_reason || data.note || ""
+  ]).join("\n");
+  const requesterUserId = String(rowValues[requesterUserIdCol] || "").trim();
+
+  if (actorRole !== "ADMIN" && actorRole !== "STAFF" && actorRole !== "USER") {
+    return jsonOutput({
+      success: false,
+      message: "คุณไม่มีสิทธิ์ดำเนินการนี้",
+    });
+  }
+
+  if (actorRole === "USER" && requesterUserId !== actorUserId) {
+    return jsonOutput({
+      success: false,
+      message: "คุณไม่มีสิทธิ์ดำเนินการนี้",
+    });
+  }
+
+  if (normalizeRoleValue_(rowValues[driverCancelRequestStatusCol]) === "PENDING") {
+    return jsonOutput({
+      success: false,
+      message: "รายการนี้ไม่สามารถปิดงานแทนคนขับได้ กรุณารีเฟรชข้อมูล",
+    });
+  }
+
+  logBookingAction("completeBookingOnBehalf", data.booking_id, row);
+
+  const actualReturnDatetime = data.actual_return_datetime || now.toISOString();
+  rowValues[statusCol] = "COMPLETED";
+  rowValues[actualReturnDatetimeCol] = actualReturnDatetime;
+  rowValues[actualReturnByCol] = actorName || actorUserId;
+  rowValues[completedOnBehalfCol] = "TRUE";
+  rowValues[completedOnBehalfNoteCol] = note;
+  rowValues[completedByUserIdCol] = actorUserId || String(data.completed_by_user_id || "").trim();
+  rowValues[completedByNameCol] = actorName || String(data.completed_by_name || "").trim();
+  rowValues[updatedAtCol] = now;
+  rowValues[updatedByCol] = actorName || actorUserId;
+  setRowValues(bookingSheet, row, rowValues);
+
+  const updatedBooking = applyAssignedUserFallback(rowsToObjects(headers, [rowValues])[0] || {}, userLookup);
+  const assignedUserId = String(updatedBooking.assigned_user_id || "").trim();
+  const assignedUserName = String(updatedBooking.assigned_user_name || updatedBooking.driver_name || "").trim();
+  const destination = String(updatedBooking.destination || rowValues[destinationCol] || "").trim() || "-";
+  const activityDetail = [
+    `${actorName || actorUserId || "-"} ปิดงานแทนคนขับ ${assignedUserName || "-"}`,
+    note ? `หมายเหตุ: ${note}` : "",
+  ].filter(Boolean).join(" | ");
+
+  appendDriverJobLog_(
+    createDriverJobLogPayload_({
+      booking_id: updatedBooking.booking_id || data.booking_id,
+      booking_no: updatedBooking.booking_no || "",
+      driver_user_id: assignedUserId,
+      driver_name: assignedUserName,
+      vehicle_id: updatedBooking.vehicle_id || "",
+      action: "COMPLETE_ON_BEHALF",
+      reason: note,
+      requester_name: updatedBooking.requester_name || "",
+      start_datetime: updatedBooking.start_datetime || "",
+      end_datetime: updatedBooking.end_datetime || "",
+      destination,
+      purpose: updatedBooking.purpose || "",
+      created_by: actorName || actorUserId || "",
+    })
+  );
+
+  appendBookingActivityLog(data.booking_id, "COMPLETE_ON_BEHALF", {
+    event_title: "ปิดงานแทนคนขับ",
+    actor_name: actorName || actorUserId,
+    actor_user_id: actorUserId,
+    detail: activityDetail,
+    new_driver_user_id: assignedUserId,
+    new_driver_name: assignedUserName,
+    new_vehicle_id: updatedBooking.vehicle_id || "",
+    created_at: rowValues[updatedAtCol],
+    completed_on_behalf_note: note,
+  });
+
+  try {
+    const logSheet = ensureVehicleLogsSheet();
+    const logTable = readSheetTable(logSheet);
+    const logColumnMap = logTable.columnMap;
+    const logBookingIdCol = logColumnMap.booking_id;
+    const inTimeCol = ensureColumn(logSheet, logTable.headers, "in_time");
+    const remarkCol = ensureColumn(logSheet, logTable.headers, "remark");
+    const logUpdatedAtCol = ensureColumn(logSheet, logTable.headers, "updated_at");
+
+    for (let i = logTable.rows.length - 1; i >= 0; i--) {
+      if (String(logTable.rows[i][logBookingIdCol] || "").trim() !== String(data.booking_id || "").trim()) {
+        continue;
+      }
+
+      const logRowValues = logTable.rows[i].slice();
+      logRowValues[inTimeCol] = actualReturnDatetime;
+      logRowValues[remarkCol] = note || logRowValues[remarkCol] || "";
+      logRowValues[logUpdatedAtCol] = now;
+      setRowValues(logSheet, i + 2, logRowValues);
+      break;
+    }
+  } catch (vehicleLogErr) {
+    console.warn("completeBookingOnBehalf vehicle log update failed", vehicleLogErr);
+  }
+
+  try {
+    if (assignedUserId) {
+      createDriverNotification_(assignedUserId, {
+        title: "มีการปิดงานแทนคนขับ",
+        message: `${actorName || "-"} ปิดงานรายการ ${destination} แทนคุณแล้ว`,
+        type: "BOOKING_COMPLETED_ON_BEHALF",
+        booking_id: updatedBooking.booking_id || data.booking_id,
+        url: "/driver-jobs",
+        created_by: actorName || actorUserId || "",
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          driver_name: assignedUserName,
+          actual_return_datetime: actualReturnDatetime,
+          status: "COMPLETED",
+          completed_on_behalf: "TRUE",
+          completed_by_name: actorName || actorUserId || "",
+        }),
+      });
+    }
+
+    const requesterNotificationUserId = resolveRequesterNotificationUserId_(updatedBooking);
+    if (requesterNotificationUserId && requesterNotificationUserId !== actorUserId) {
+      createDriverNotification_(requesterNotificationUserId, {
+        title: "รายการจองถูกปิดงานแล้ว",
+        message: `${destination} | ปิดงานโดย ${actorName || "-"}`,
+        type: "BOOKING_COMPLETED_ON_BEHALF_REQUESTER",
+        booking_id: updatedBooking.booking_id || data.booking_id,
+        url: "/booking",
+        created_by: actorName || actorUserId || "",
+        payload_json: buildNotificationPayloadFromBooking_(updatedBooking, {
+          driver_name: assignedUserName,
+          actual_return_datetime: actualReturnDatetime,
+          status: "COMPLETED",
+          completed_on_behalf: "TRUE",
+          completed_by_name: actorName || actorUserId || "",
+        }),
+      });
+    }
+  } catch (notificationErr) {
+    console.warn("completeBookingOnBehalf notification failed", notificationErr);
+  }
+
+  return jsonOutput({
+    success: true,
+    message: "Complete booking on behalf success",
+    data: buildBookingResponseWithActivityData_({
+      ...updatedBooking,
+      status: "COMPLETED",
+      actual_return_datetime: actualReturnDatetime,
+      actual_return_by: rowValues[actualReturnByCol] || actorName || actorUserId,
+      completed_on_behalf: "TRUE",
+      completed_on_behalf_note: note,
+      completed_by_user_id: rowValues[completedByUserIdCol] || actorUserId,
+      completed_by_name: rowValues[completedByNameCol] || actorName || actorUserId,
+      updated_at: now.toISOString(),
+      updated_by: rowValues[updatedByCol] || actorName || actorUserId,
+    }, userLookup),
+    created_notifications: getCreatedNotifications_(),
+  });
+}
+
 function driverCancelJob(data) {
   const sheet = ensureBookingsSheet();
   const logSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("VehicleLogs");
@@ -5298,6 +5899,125 @@ function clearBookingCancellationHistoryMonthly() {
     message: "Cancellation history cleanup completed",
     deleted: deletedCount
   });
+}
+
+function clearOldNotifications() {
+  const lock = LockService.getScriptLock();
+  const cutoffMs = Date.now() - (14 * 24 * 60 * 60 * 1000);
+  let notificationsDeleted = 0;
+  let notificationDeletesDeleted = 0;
+
+  try {
+    lock.waitLock(30000);
+
+    const notificationsSheet = ensureNotificationsSheet();
+    const notificationsTable = readSheetTable(notificationsSheet);
+    const notificationHeaders = notificationsTable.headers || [];
+    const notificationRows = notificationsTable.rows || [];
+    const notificationColumnMap = notificationsTable.columnMap || {};
+    const notificationIdCol = notificationColumnMap.notification_id;
+    const createdAtCol = notificationColumnMap.created_at;
+
+    if (notificationIdCol === undefined || createdAtCol === undefined) {
+      throw new Error("Notifications sheet columns are invalid");
+    }
+
+    const notificationRowsToDelete = [];
+    const survivingNotificationIds = new Set();
+
+    for (let index = 0; index < notificationRows.length; index += 1) {
+      const rowValues = notificationRows[index];
+      const notificationId = String(rowValues[notificationIdCol] || "").trim();
+      const createdAt = new Date(rowValues[createdAtCol] || "").getTime();
+      const isOld = Boolean(createdAt) && !Number.isNaN(createdAt) && createdAt < cutoffMs;
+
+      if (isOld) {
+        notificationRowsToDelete.push(index + 2);
+        continue;
+      }
+
+      if (notificationId) {
+        survivingNotificationIds.add(notificationId);
+      }
+    }
+
+    notificationsDeleted = deleteSheetRowsBatch_(notificationsSheet, notificationRowsToDelete);
+
+    const deletesSheet = ensureNotificationDeletesSheet();
+    const deletesTable = readSheetTable(deletesSheet);
+    const deleteColumnMap = deletesTable.columnMap || {};
+    const deleteNotificationIdCol = deleteColumnMap.notification_id;
+    const deletedAtCol = deleteColumnMap.deleted_at;
+
+    if (deleteNotificationIdCol === undefined || deletedAtCol === undefined) {
+      throw new Error("NotificationDeletes sheet columns are invalid");
+    }
+
+    const deleteRowsToDelete = [];
+
+    for (let index = 0; index < deletesTable.rows.length; index += 1) {
+      const rowValues = deletesTable.rows[index];
+      const notificationId = String(rowValues[deleteNotificationIdCol] || "").trim();
+      const deletedAt = new Date(rowValues[deletedAtCol] || "").getTime();
+      const isOldDelete = Boolean(deletedAt) && !Number.isNaN(deletedAt) && deletedAt < cutoffMs;
+      const isMissingNotification = !notificationId || !survivingNotificationIds.has(notificationId);
+
+      if (isMissingNotification || isOldDelete) {
+        deleteRowsToDelete.push(index + 2);
+      }
+    }
+
+    notificationDeletesDeleted = deleteSheetRowsBatch_(deletesSheet, deleteRowsToDelete);
+
+    return jsonOutput({
+      success: true,
+      message: "Notification cleanup completed",
+      data: {
+        notifications_deleted: notificationsDeleted,
+        notification_deletes_deleted: notificationDeletesDeleted,
+      },
+    });
+  } catch (err) {
+    console.error("[notification-cleanup] clearOldNotifications failed", {
+      message: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : "",
+    });
+
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+      data: {
+        notifications_deleted: notificationsDeleted,
+        notification_deletes_deleted: notificationDeletesDeleted,
+      },
+    });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (releaseErr) {
+      console.warn("[notification-cleanup] release lock failed", releaseErr);
+    }
+  }
+}
+
+function ensureClearOldNotificationsDailyTrigger() {
+  const handlerName = "clearOldNotifications";
+  const existingTriggers = ScriptApp.getProjectTriggers().filter(function (trigger) {
+    return trigger.getHandlerFunction() === handlerName;
+  });
+
+  if (existingTriggers.length > 0) {
+    return existingTriggers.length;
+  }
+
+  ScriptApp.newTrigger(handlerName)
+    .timeBased()
+    .everyDays(1)
+    .atHour(2)
+    .inTimezone("Asia/Bangkok")
+    .create();
+
+  return 1;
 }
 
 function sendBookingReminderNotifications1Hour(data) {

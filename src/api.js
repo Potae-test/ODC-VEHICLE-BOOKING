@@ -288,6 +288,34 @@ export async function markAllNotificationsRead(data) {
   return json.data || json;
 }
 
+export async function deleteNotification(notification_id) {
+  const json = await fetchJson(`${API_BASE_URL}/api/notifications/delete`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withCurrentUserMeta({ notification_id })),
+  });
+
+  invalidateApiCache(["notifications"]);
+  emitNotificationsRefresh();
+  return json.data || json;
+}
+
+export async function deleteAllNotifications(notificationIds = []) {
+  const json = await fetchJson(`${API_BASE_URL}/api/notifications/delete-all`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(withCurrentUserMeta({ notification_ids: notificationIds })),
+  });
+
+  invalidateApiCache(["notifications"]);
+  emitNotificationsRefresh();
+  return json.data || json;
+}
+
 export async function savePushSubscription(data) {
   const fcmToken = String(data?.fcm_token ?? "").trim();
   const endpoint = String(data?.endpoint ?? data?.subscription?.endpoint ?? "").trim();
@@ -452,6 +480,18 @@ export async function completeTrip(data) {
   invalidateApiCache(["bookings", "driver_job_logs"]);
   emitNotificationsRefresh();
   return json.data;
+}
+
+export async function completeBookingOnBehalf(payload) {
+  const json = await fetchJson(`${API_BASE_URL}/api/bookings/complete-on-behalf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(withCurrentUserMeta(payload || {})),
+  });
+
+  invalidateApiCache(["bookings", "driver_job_logs"]);
+  emitNotificationsRefresh();
+  return json;
 }
 
 export async function driverCancelJob(data) {
