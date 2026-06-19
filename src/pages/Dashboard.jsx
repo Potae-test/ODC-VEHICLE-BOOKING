@@ -6,6 +6,10 @@ import useMinimumLoading from "../hooks/useMinimumLoading";
 
 const MONTH_LABELS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 const LATEST_BOOKINGS_LIMIT = 8;
+const PIE_CHART_SIZE = 220;
+const PIE_CHART_STROKE = 30;
+const PIE_CHART_RADIUS = (PIE_CHART_SIZE - PIE_CHART_STROKE) / 2;
+const PIE_CHART_CIRCUMFERENCE = 2 * Math.PI * PIE_CHART_RADIUS;
 
 function normalizeStatus(status) {
   return String(status || "").trim().toUpperCase();
@@ -55,12 +59,23 @@ function formatDashboardDateTime(value) {
   return formatThaiDateTime(value);
 }
 
-function SummaryCard({ title, value, tone, description }) {
+function formatMonthLabel(date) {
+  return `${MONTH_LABELS[date.getMonth()]} ${date.getFullYear() + 543}`;
+}
+
+function formatDeltaText(value, unit = "รายการ") {
+  if (value === 0) return `คงที่จากเดือนก่อน`;
+  if (value > 0) return `มากกว่าเดือนก่อน +${value} ${unit}`;
+  return `น้อยกว่าเดือนก่อน ${value} ${unit}`;
+}
+
+function SummaryCard({ title, value, tone, description, accent }) {
   return (
     <div className={`summary-card dashboard-summary-card dashboard-summary-card--${tone}`}>
       <h3>{title}</h3>
       <strong>{value}</strong>
       <span>{description}</span>
+      {accent ? <small>{accent}</small> : null}
     </div>
   );
 }
@@ -77,6 +92,72 @@ function MetricBar({ label, value, total, tone = "blue" }) {
       </div>
       <div className="dashboard-metric-bar-track">
         <div className={`dashboard-metric-bar-fill dashboard-metric-bar-fill--${tone}`} style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function PieChart({ items, total }) {
+  let runningOffset = 0;
+  const safeTotal = total > 0 ? total : 1;
+
+  return (
+    <div className="dashboard-pie-card">
+      <div className="dashboard-pie-chart-wrap" aria-hidden="true">
+        <svg
+          className="dashboard-pie-chart"
+          viewBox={`0 0 ${PIE_CHART_SIZE} ${PIE_CHART_SIZE}`}
+          role="img"
+          aria-label="สัดส่วนสถานะรายการจอง"
+        >
+          <circle
+            cx={PIE_CHART_SIZE / 2}
+            cy={PIE_CHART_SIZE / 2}
+            r={PIE_CHART_RADIUS}
+            className="dashboard-pie-chart-track"
+          />
+          {items.map((item) => {
+            const fraction = item.value / safeTotal;
+            const dashLength = PIE_CHART_CIRCUMFERENCE * fraction;
+            const dashArray = `${dashLength} ${PIE_CHART_CIRCUMFERENCE - dashLength}`;
+            const dashOffset = -runningOffset;
+            runningOffset += dashLength;
+
+            return (
+              <circle
+                key={item.key}
+                cx={PIE_CHART_SIZE / 2}
+                cy={PIE_CHART_SIZE / 2}
+                r={PIE_CHART_RADIUS}
+                className={`dashboard-pie-chart-segment dashboard-pie-chart-segment--${item.tone}`}
+                strokeDasharray={dashArray}
+                strokeDashoffset={dashOffset}
+              />
+            );
+          })}
+        </svg>
+        <div className="dashboard-pie-chart-center">
+          <strong>{total}</strong>
+          <span>รายการรวม</span>
+        </div>
+      </div>
+
+      <div className="dashboard-pie-legend">
+        {items.map((item) => {
+          const percent = total > 0 ? Math.round((item.value / total) * 100) : 0;
+          return (
+            <div className="dashboard-pie-legend-row" key={item.key}>
+              <div className="dashboard-pie-legend-copy">
+                <span className={`dashboard-pie-legend-dot dashboard-pie-legend-dot--${item.tone}`} />
+                <b>{item.label}</b>
+              </div>
+              <div className="dashboard-pie-legend-metric">
+                <strong>{item.value}</strong>
+                <span>{percent}%</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -159,6 +240,31 @@ export default function Dashboard() {
 
     const inUseDrivers = inUseDriverKeys.size;
     const readyDrivers = Math.max(0, activeDrivers - activeUnavailableDrivers - inUseDrivers);
+    const closedJobs = completedCount + cancelledOrPendingCancelCount;
+    const successRate = closedJobs > 0 ? Math.round((completedCount / closedJobs) * 100) : 0;
+
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousMonthEnd = currentMonthStart;
+
+    let currentMonthBookings = 0;
+    let previousMonthBookings = 0;
+
+    bookings.forEach((booking) => {
+      const bookingDate = parseDate(booking.start_datetime || booking.created_at || booking.updated_at);
+      if (!bookingDate) return;
+      if (bookingDate >= currentMonthStart && bookingDate < currentMonthEnd) {
+        currentMonthBookings += 1;
+      } else if (bookingDate >= previousMonthStart && bookingDate < previousMonthEnd) {
+        previousMonthBookings += 1;
+      }
+    });
+
+    const monthOverMonthDiff = currentMonthBookings - previousMonthBookings;
+    const monthOverMonthPercent =
+      previousMonthBookings > 0 ? Math.round((monthOverMonthDiff / previousMonthBookings) * 100) : currentMonthBookings > 0 ? 100 : 0;
 
     return {
       totalBookings,
@@ -171,6 +277,14 @@ export default function Dashboard() {
       activeUnavailableDrivers,
       inUseDrivers,
       readyDrivers,
+      closedJobs,
+      successRate,
+      currentMonthBookings,
+      previousMonthBookings,
+      monthOverMonthDiff,
+      monthOverMonthPercent,
+      currentMonthLabel: formatMonthLabel(currentMonthStart),
+      previousMonthLabel: formatMonthLabel(previousMonthStart),
     };
   }, [bookings, driverUnavailableRecords, users]);
 
@@ -275,6 +389,33 @@ export default function Dashboard() {
     }));
   }, [bookings, users]);
 
+  const topDestinationRows = useMemo(() => {
+    const counts = new Map();
+
+    bookings.forEach((booking) => {
+      const destination = String(booking.destination || "").trim();
+      if (!destination) return;
+      counts.set(destination, (counts.get(destination) || 0) + 1);
+    });
+
+    const rows = [...counts.entries()]
+      .map(([destination, count]) => ({ destination, count }))
+      .sort((left, right) => {
+        if (right.count !== left.count) return right.count - left.count;
+        return left.destination.localeCompare(right.destination, "th");
+      })
+      .slice(0, 5);
+
+    const maxCount = Math.max(1, ...rows.map((row) => row.count), 1);
+    return rows.map((row) => ({
+      ...row,
+      percent: Math.max(12, Math.round((row.count / maxCount) * 100)),
+    }));
+  }, [bookings]);
+
+  const championDriver = topDrivers[0] || null;
+  const assignedBookingTotal = useMemo(() => topDrivers.reduce((sum, driver) => sum + driver.count, 0), [topDrivers]);
+
   const latestBookings = useMemo(() => {
     return sortLatestFirst(bookings).slice(0, LATEST_BOOKINGS_LIMIT);
   }, [bookings]);
@@ -310,6 +451,14 @@ export default function Dashboard() {
         <SummaryCard title="อนุมัติแล้ว" value={dashboardStats.approvedCount} tone="sky" description="พร้อมใช้งานตามแผน" />
         <SummaryCard title="กำลังใช้งาน" value={dashboardStats.inUseCount} tone="green" description="งานที่กำลังปฏิบัติงาน" />
         <SummaryCard title="เสร็จสิ้น" value={dashboardStats.completedCount} tone="slate" description="ปิดงานเรียบร้อยแล้ว" />
+        <SummaryCard title="Success Rate" value={`${dashboardStats.successRate}%`} tone="emerald" description={`สำเร็จจากงานปิดแล้ว ${dashboardStats.closedJobs} รายการ`} />
+        <SummaryCard
+          title="งานเดือนนี้"
+          value={dashboardStats.currentMonthBookings}
+          tone="blue"
+          description={dashboardStats.currentMonthLabel}
+          accent={`${formatDeltaText(dashboardStats.monthOverMonthDiff)} (${dashboardStats.monthOverMonthPercent > 0 ? "+" : ""}${dashboardStats.monthOverMonthPercent}%)`}
+        />
         <SummaryCard title="ยกเลิก/รอยกเลิก" value={dashboardStats.cancelledOrPendingCancelCount} tone="red" description="รวมคำขอยกเลิกที่รอพิจารณา" />
         <SummaryCard title="คนขับพร้อมรับงาน" value={dashboardStats.readyDrivers} tone="emerald" description={`จากคนขับ Active ${dashboardStats.activeDrivers} คน`} />
         <SummaryCard title="คนขับ Active" value={dashboardStats.activeDrivers} tone="purple" description={`ไม่พร้อมรับงาน ${dashboardStats.activeUnavailableDrivers} รายการ`} />
@@ -321,11 +470,7 @@ export default function Dashboard() {
             <h3>สัดส่วนสถานะรายการจอง</h3>
             <span>{dashboardStats.totalBookings} รายการ</span>
           </div>
-          <div className="dashboard-metric-list">
-            {statusDistribution.map((item) => (
-              <MetricBar key={item.key} label={item.label} value={item.value} total={item.total} tone={item.tone} />
-            ))}
-          </div>
+          <PieChart items={statusDistribution} total={dashboardStats.totalBookings} />
         </div>
 
         <div className="form-card dashboard-panel">
@@ -355,6 +500,57 @@ export default function Dashboard() {
             {driverStatusBars.map((item) => (
               <MetricBar key={item.key} label={item.label} value={item.value} total={item.total} tone={item.tone} />
             ))}
+          </div>
+        </div>
+
+        <div className="form-card dashboard-panel dashboard-champion-panel">
+          <div className="dashboard-panel-head">
+            <h3>Top Driver Champion</h3>
+            <span>ผู้ขับที่รับงานสูงสุด</span>
+          </div>
+          {championDriver ? (
+            <div className="dashboard-champion-card">
+              <div className="dashboard-champion-badge">#1</div>
+              <strong>{championDriver.name}</strong>
+              <div className="dashboard-champion-metrics">
+                <div>
+                  <span>จำนวนงาน</span>
+                  <b>{championDriver.count}</b>
+                </div>
+                <div>
+                  <span>สัดส่วน</span>
+                  <b>{assignedBookingTotal > 0 ? Math.round((championDriver.count / assignedBookingTotal) * 100) : 0}%</b>
+                </div>
+              </div>
+              <p>ผลงานเด่นจากรายการที่มีการมอบหมายคนขับในระบบ</p>
+            </div>
+          ) : (
+            <div className="dashboard-empty-state">ยังไม่มีข้อมูลคนขับที่ได้รับมอบหมายงาน</div>
+          )}
+        </div>
+
+        <div className="form-card dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h3>Top Destination</h3>
+            <span>ปลายทางยอดนิยม</span>
+          </div>
+          <div className="dashboard-top-driver-list">
+            {topDestinationRows.length === 0 ? (
+              <div className="dashboard-empty-state">ยังไม่มีข้อมูลปลายทาง</div>
+            ) : (
+              topDestinationRows.map((destination, index) => (
+                <div className="dashboard-top-driver-row" key={`${destination.destination}-${index}`}>
+                  <div className="dashboard-top-driver-rank">{index + 1}</div>
+                  <div className="dashboard-top-driver-copy">
+                    <strong>{destination.destination}</strong>
+                    <span>{destination.count} งาน</span>
+                  </div>
+                  <div className="dashboard-top-driver-bar">
+                    <div className="dashboard-top-driver-bar-fill" style={{ width: `${destination.percent}%` }} />
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
