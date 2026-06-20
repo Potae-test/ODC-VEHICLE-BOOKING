@@ -2392,9 +2392,15 @@ label {
   color: #073b8e;
 }
 
+@media (min-width: 769px) {
+  .booking-detail-section-title {
+    font-size: 25px !important;
+  }
+}
+
 .booking-detail-row {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   padding: 5px 0;
@@ -2402,14 +2408,14 @@ label {
 
 .booking-detail-label {
   display: block;
-  font-size: 15px;
+  font-size: 20px;
   font-weight: 700;
   color: #64748b;
 }
 
 .booking-detail-value {
   display: block;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.45;
@@ -3998,7 +4004,7 @@ label {
   align-items: center;
   justify-content: center;
   min-height: 34px;
-  padding: 4px 14px;
+  padding: 4px 14.px;
   border-radius: 999px;
   font-size: 24px;
   font-weight: 800;
@@ -4234,25 +4240,55 @@ label {
 .driver-unavailable-compact-title-row {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
 }
 
 .driver-unavailable-compact-title {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.25;
+  font-size: 16px;
+  line-height: 1.3;
   color: #0f172a;
-  font-weight: 700;
+  font-weight: 800;
+}
+
+.driver-unavailable-compact-reason {
+  font-size: 14px;
+  line-height: 1.45;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.driver-unavailable-compact-reason span {
+  display: block;
 }
 
 .driver-unavailable-compact-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 8px;
+  align-items: center;
+}
+
+.driver-unavailable-compact-time-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.driver-unavailable-compact-time-label {
   font-size: 12px;
+  font-weight: 700;
   line-height: 1.35;
   color: #64748b;
+}
+
+.driver-unavailable-compact-time-value {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #334155;
+  word-break: break-word;
 }
 
 .driver-unavailable-compact-chevron {
@@ -4317,6 +4353,142 @@ label {
   font-size: var(--mobile-button-font-size);
 }
 
+@media (max-width: 767.98px) {
+  .driver-unavailable-mobile-page .driver-unavailable-compact-card {
+    border: 1px solid #bfdbfe !important;
+    border-left-width: 4px;
+    border-radius: 18px;
+    background: #ffffff !important;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    color: #0f172a !important;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main {
+    padding: 13px 14px;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #bfdbfe !important;
+    border-left: 0 !important;
+    border-radius: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main[aria-expanded="true"] {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-bottom: 1px solid #bfdbfe;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main:hover,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main:active,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main:focus-visible,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main[aria-expanded="false"],
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main[aria-expanded="true"] {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-copy,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-title,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-reason,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-reason span,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-time-label,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-time-value,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-main .driver-unavailable-compact-chevron {
+    color: #0f172a !important;
+  }
+
+  .driver-unavailable-compact-title {
+    color: #0f172a;
+  }
+
+  .driver-unavailable-compact-reason {
+    color: #0f172a;
+  }
+
+  .driver-unavailable-compact-meta {
+    gap: 8px;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 24px;
+    padding: 0 8px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
+    box-shadow: none;
+    color: #0f172a;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.blue,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.green,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.amber,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.red,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.gray,
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge.status.purple {
+    color: #0f172a !important;
+    box-shadow: none;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge--type {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-badge--status {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+
+  .driver-unavailable-mobile-page .driver-unavailable-compact-expanded {
+    gap: 10px;
+    padding: 10px 14px 12px;
+    border-top: 0;
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .driver-unavailable-compact-time-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .driver-unavailable-compact-time-value {
+    color: #0f172a;
+  }
+
+  .driver-unavailable-compact-grid {
+    gap: 8px;
+  }
+
+  .driver-unavailable-compact-grid > div {
+    border-color: #dbe6f3;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    gap: 3px;
+    padding: 8px 10px;
+  }
+
+  .driver-unavailable-compact-grid span {
+    color: #64748b;
+  }
+
+  .driver-unavailable-compact-grid b {
+    color: #0f172a;
+    line-height: 1.4;
+  }
+
+  .driver-unavailable-compact-actions button {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+}
+
 @media (max-width: 900px) {
   .driver-unavailable-filters {
     grid-template-columns: 1fr;
@@ -4343,6 +4515,114 @@ label {
   .driver-unavailable-mobile-page .mobile-page-section-body {
     display: grid;
     gap: 10px;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .driver-jobs-mobile-page .driver-job-compact-card,
+  .driver-jobs-mobile-page .driver-job-compact-card--current,
+  .driver-jobs-mobile-page .driver-job-compact-card--approved,
+  .driver-jobs-mobile-page .driver-job-compact-card--pending {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #bfdbfe !important;
+    border-left-width: 4px !important;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-card--current {
+    border-left-color: #10b981 !important;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-card--approved {
+    border-left-color: #3b82f6 !important;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-card--pending {
+    border-left-color: #f59e0b !important;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-main,
+  .driver-jobs-mobile-page .driver-job-compact-main:hover,
+  .driver-jobs-mobile-page .driver-job-compact-main:active,
+  .driver-jobs-mobile-page .driver-job-compact-main:focus-visible,
+  .driver-jobs-mobile-page .driver-job-compact-main[aria-expanded="false"],
+  .driver-jobs-mobile-page .driver-job-compact-main[aria-expanded="true"] {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-time,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-copy,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-destination,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-destination span,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-meta,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-meta span,
+  .driver-jobs-mobile-page .driver-job-compact-main .driver-job-compact-chevron {
+    color: #0f172a !important;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-time {
+    min-width: 58px;
+    color: #475569 !important;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-destination {
+    color: #0f172a !important;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-meta {
+    gap: 4px;
+    color: #334155 !important;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-right .status {
+    min-height: 24px;
+    /* padding: 0 8px; */
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1.1;
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-expanded {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-top: 1px solid #dbe6f3;
+    gap: 10px;
+    padding: 10px 12px 12px;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-detail-grid > div,
+  .driver-jobs-mobile-page .driver-job-compact-note {
+    background: #ffffff;
+    border-color: #dbe6f3;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    gap: 3px;
+    padding: 8px 10px;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-detail-grid label,
+  .driver-jobs-mobile-page .driver-job-compact-note label {
+    color: #64748b;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-detail-grid b,
+  .driver-jobs-mobile-page .driver-job-compact-note b {
+    color: #0f172a;
+    line-height: 1.4;
+  }
+
+  .driver-jobs-mobile-page .driver-job-compact-action {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   }
 }
 

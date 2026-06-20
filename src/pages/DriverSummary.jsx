@@ -201,6 +201,15 @@ function getStatusCategory(status) {
   return null;
 }
 
+function getStatusBadgeClass(status) {
+  const category = getStatusCategory(status);
+  if (category === "completed") return "status gray";
+  if (category === "approved") return "status blue";
+  if (category === "in_use") return "status green";
+  if (category === "cancelled") return "status red";
+  return "status";
+}
+
 function normalizeDriverName(name) {
   return String(name || "").trim();
 }
@@ -328,20 +337,7 @@ function DetailIcon({ className = "" }) {
 }
 
 function formatThaiDateTimeFull(value) {
-  const date = new Date(value);
-
-  return date.toLocaleDateString("th-TH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })
-  + " เวลา "
-  + date.toLocaleTimeString("th-TH", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).replace(":", ".")
-  + " น.";
+  return formatThaiDateTime(value);
 }
 
 function SummaryPagination({ page, total, onChange, compact = false }) {
@@ -541,6 +537,7 @@ export default function DriverSummary() {
   const [selectedDriver, setSelectedDriver] = useState("ALL");
   const [detailDriver, setDetailDriver] = useState(null);
   const [expandedDetailKey, setExpandedDetailKey] = useState("");
+  const [detailModalPage, setDetailModalPage] = useState(1);
   const [expandedSummaryKey, setExpandedSummaryKey] = useState("");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [tablePage, setTablePage] = useState(1);
@@ -585,6 +582,11 @@ export default function DriverSummary() {
     setExpandedSummaryKey("");
     setIsMobileFilterOpen(false);
   }, [tablePage]);
+
+  useEffect(() => {
+    setDetailModalPage(1);
+    setExpandedDetailKey("");
+  }, [detailDriver]);
 
   const todayRange = useMemo(() => getRange("today"), []);
   const weekRange = useMemo(() => getRange("week"), []);
@@ -764,6 +766,21 @@ export default function DriverSummary() {
     () => (detailDriver ? visibleDriverRows.find((row) => row.key === detailDriver) : null),
     [detailDriver, visibleDriverRows]
   );
+  const detailModalTotalPages = useMemo(
+    () => Math.max(1, Math.ceil((detailRow?.allDetailBookings.length || 0) / TABLE_PAGE_SIZE)),
+    [detailRow]
+  );
+  const paginatedDetailBookings = useMemo(() => {
+    if (!detailRow) return [];
+    const startIndex = (detailModalPage - 1) * TABLE_PAGE_SIZE;
+    return detailRow.allDetailBookings.slice(startIndex, startIndex + TABLE_PAGE_SIZE);
+  }, [detailModalPage, detailRow]);
+  const detailModalStart = detailRow?.allDetailBookings.length
+    ? (detailModalPage - 1) * TABLE_PAGE_SIZE + 1
+    : 0;
+  const detailModalEnd = detailRow?.allDetailBookings.length
+    ? Math.min(detailModalPage * TABLE_PAGE_SIZE, detailRow.allDetailBookings.length)
+    : 0;
 
   const totalTablePages = useMemo(() => Math.max(1, Math.ceil(visibleDriverRows.length / TABLE_PAGE_SIZE)), [visibleDriverRows.length]);
   const paginatedDriverRows = useMemo(
@@ -1172,15 +1189,20 @@ justify-center">
             setDetailDriver(null);
           }}
         >
-          <div className="driver-summary-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="driver-summary-modal-header">
-              <div>
-                <h3>รายละเอียดงาน: {detailRow.name}</h3>
-                <p>รวมทั้งหมด {detailRow.allDetailBookings.length} งาน</p>
+          <div
+            className="driver-summary-modal w-[92vw] max-w-[92vw] overflow-x-hidden p-4 sm:p-5 md:w-full md:max-w-[1200px] md:p-7"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="driver-summary-modal-header mb-4 gap-3 md:mb-5 md:gap-5">
+              <div className="min-w-0 flex-1">
+                <h3 className="text-[22px] leading-tight break-words md:text-[38px]">รายละเอียดงาน: {detailRow.name}</h3>
+                <p className="mt-1 text-[15px] leading-6 md:mt-2 md:text-base">
+                  รวมทั้งหมด {detailRow.allDetailBookings.length} งาน
+                </p>
               </div>
               <button
                 type="button"
-                className="small-button"
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-[16px] font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                 onClick={() => {
                   setExpandedDetailKey("");
                   setDetailDriver(null);
@@ -1190,81 +1212,147 @@ justify-center">
               </button>
             </div>
 
-            <div className="table-wrap rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ลำดับ</th>
-                    <th>ผู้จอง</th>
-                    <th>เวลาไป</th>
-                    <th>เวลากลับ</th>
-                    <th>ปลายทาง</th>
-                    <th>รายละเอียด</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detailRow.allDetailBookings.map((booking, index) => {
-                    const detailKey = getDetailKey(booking, index);
-                    const expanded = expandedDetailKey === detailKey;
+            {detailRow.allDetailBookings.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-[15px] font-medium text-slate-600 md:px-5 md:py-6 md:text-base">
+                ไม่พบงานของคนขับคนนี้
+              </div>
+            ) : (
+              <>
+                <div className="table-wrap hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ลำดับ</th>
+                        <th>ผู้จอง</th>
+                        <th>เวลาไป</th>
+                        <th>เวลากลับ</th>
+                        <th>ปลายทาง</th>
+                        <th>รายละเอียด</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailRow.allDetailBookings.map((booking, index) => {
+                        const detailKey = getDetailKey(booking, index);
+                        const expanded = expandedDetailKey === detailKey;
+
+                        return (
+                          <Fragment key={detailKey}>
+                            <tr>
+                              <td>{index + 1}</td>
+                              <td>{booking.requester_name || "-"}</td>
+                              <td>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</td>
+                              <td>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</td>
+                              <td>{booking.destination || "-"}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="small-button"
+                                  onClick={() => setExpandedDetailKey(expanded ? "" : detailKey)}
+                                >
+                                  {expanded ? "ย่อรายละเอียด" : "ขยายรายละเอียด"}
+                                </button>
+                              </td>
+                            </tr>
+                            {expanded && (
+                              <tr className="driver-summary-detail-row">
+                                <td colSpan="5">
+                                  <div className="driver-summary-log-detail-table-wrap">
+                                    <table className="driver-summary-log-detail-table">
+                                      <thead>
+                                        <tr>
+                                          <th>สถานะ</th>
+                                          <th>หมายเหตุ</th>
+                                          <th>ผู้บันทึก</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        <tr>
+                                          <td>
+                                            <span className={getDriverJobActionClassV2(booking)}>
+                                              {getDriverJobActionLabelV2(booking)}
+                                            </span>
+                                          </td>
+                                          <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescriptionV2(booking)}</td>
+                                          <td>{getDriverSummaryCreatedBy(booking)}</td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="block md:hidden">
+                  <div className="mb-3 text-center text-[15px] font-medium text-slate-600">
+                    แสดง {detailModalStart} - {detailModalEnd} จาก {detailRow.allDetailBookings.length} งาน
+                  </div>
+                  <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
+                  {paginatedDetailBookings.map((booking, index) => {
+                    const absoluteIndex = detailModalStart + index;
+                    const detailIndex = (detailModalPage - 1) * TABLE_PAGE_SIZE + index;
+                    const noteText = String(getDriverJobActionDescriptionV2(booking) || "").trim();
+                    const hasNote = noteText && noteText !== "-";
 
                     return (
-                      <Fragment key={detailKey}>
-                        <tr>
-                          <td>{index + 1}</td>
-                          <td>{booking.requester_name || "-"}</td>
-                          <td>{booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}</td>
-                          <td>{booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}</td>
-                          <td>{booking.destination || "-"}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="small-button"
-                              onClick={() => setExpandedDetailKey(expanded ? "" : detailKey)}
-                            >
-                              {expanded ? "ย่อรายละเอียด" : "ขยายรายละเอียด"}
-                            </button>
-                          </td>
-                        </tr>
-                        {expanded && (
-                          <tr className="driver-summary-detail-row">
-                            <td colSpan="5">
-                              <div className="driver-summary-log-detail-table-wrap">
-                                <table className="driver-summary-log-detail-table">
-                                  <thead>
-                                    <tr>
-                                      <th>สถานะ</th>
-                                      <th>หมายเหตุ</th>
-                                      <th>ผู้บันทึก</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr>
-                                      <td>
-                                        <span className={getDriverJobActionClassV2(booking)}>
-                                          {getDriverJobActionLabelV2(booking)}
-                                        </span>
-                                      </td>
-                                      <td style={{ whiteSpace: "pre-line" }}>{getDriverJobActionDescriptionV2(booking)}</td>
-                                      <td>{getDriverSummaryCreatedBy(booking)}</td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
+                      <div
+                        key={getDetailKey(booking, detailIndex)}
+                        className="rounded-2xl border border-blue-200 bg-white p-3 shadow-sm"
+                      >
+                        <div className="mb-3 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[15px] font-semibold text-slate-500">ลำดับ {absoluteIndex}</div>
+                            <div className="mt-1 break-words text-[16px] font-semibold leading-6 text-slate-900">
+                              {booking.requester_name || "-"}
+                            </div>
+                          </div>
+                          <span className={`${getStatusBadgeClass(booking.status)} text-[15px]`}>
+                            {getStatusLabel(booking.status)}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-2 text-[15px] leading-6 text-slate-800">
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <div className="text-[15px] font-medium text-slate-500">เวลาไป</div>
+                            <div className="break-words font-semibold text-slate-900">
+                              {booking.start_datetime ? formatThaiDateTime(booking.start_datetime) : "-"}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <div className="text-[15px] font-medium text-slate-500">เวลากลับ</div>
+                            <div className="break-words font-semibold text-slate-900">
+                              {booking.end_datetime ? formatThaiDateTime(booking.end_datetime) : "-"}
+                            </div>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                            <div className="text-[15px] font-medium text-slate-500">ปลายทาง</div>
+                            <div className="break-words font-semibold text-slate-900">{booking.destination || "-"}</div>
+                          </div>
+                          {hasNote ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                              <div className="text-[15px] font-medium text-slate-500">หมายเหตุ</div>
+                              <div className="whitespace-pre-line break-words font-semibold text-slate-900">{noteText}</div>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     );
                   })}
-
-                  {detailRow.allDetailBookings.length === 0 && (
-                    <tr>
-                      <td colSpan="5">ไม่พบงานของคนขับคนนี้</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </div>
+                  <SummaryPagination
+                    page={detailModalPage}
+                    total={detailModalTotalPages}
+                    onChange={setDetailModalPage}
+                    compact
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

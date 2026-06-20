@@ -1,49 +1,48 @@
+import { parseAppDateTime, pad2 } from "./datetime";
+
+const THAI_SHORT_MONTH_LABELS = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
+function getSafeDate(value) {
+  return parseAppDateTime(value);
+}
+
+export function formatThaiDate(value) {
+  const date = getSafeDate(value);
+  if (!date) return "-";
+
+  return `${date.getDate()} ${THAI_SHORT_MONTH_LABELS[date.getMonth()]} ${date.getFullYear() + 543}`;
+}
+
+export function formatThaiTime(value) {
+  const date = getSafeDate(value);
+  if (!date) return "-";
+
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())} น.`;
+}
+
 export function formatThaiDateTime(value) {
-  if (!value) return "-";
+  const date = getSafeDate(value);
+  if (!date) return "-";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Bangkok",
-  }).format(date);
+  return `${formatThaiDate(date)} เวลา ${pad2(date.getHours())}:${pad2(date.getMinutes())} น.`;
 }
 
 export function formatThaiNotificationDateTime(value) {
   if (!value) return "";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value || "").trim();
-  }
-
-  const formatter = new Intl.DateTimeFormat("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Bangkok",
-  });
-  const parts = formatter.formatToParts(date);
-  const partMap = parts.reduce((acc, part) => {
-    if (part.type !== "literal") {
-      acc[part.type] = part.value;
-    }
-    return acc;
-  }, {});
-
-  const day = partMap.day || "";
-  const month = partMap.month || "";
-  const year = partMap.year || "";
-  const hour = partMap.hour || "00";
-  const minute = partMap.minute || "00";
-
-  return `${day} ${month} ${year} เวลา ${hour}:${minute} น.`;
+  const formatted = formatThaiDateTime(value);
+  return formatted === "-" ? "" : formatted;
 }

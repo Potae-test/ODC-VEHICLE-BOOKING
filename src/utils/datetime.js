@@ -3,6 +3,21 @@ function toInteger(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const THAI_SHORT_MONTH_LABELS = [
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
+];
+
 export function pad2(value) {
   return String(toInteger(value)).padStart(2, "0");
 }
@@ -49,16 +64,16 @@ export function parseAppDateTime(value) {
 
 export function formatThaiDate(date) {
   const parsed = parseAppDateTime(date);
-  if (!parsed) return "";
+  if (!parsed) return "-";
 
-  return `${pad2(parsed.getDate())}/${pad2(parsed.getMonth() + 1)}/${parsed.getFullYear() + 543}`;
+  return `${parsed.getDate()} ${THAI_SHORT_MONTH_LABELS[parsed.getMonth()]} ${parsed.getFullYear() + 543}`;
 }
 
 export function formatThaiTime(date) {
   const parsed = parseAppDateTime(date);
-  if (!parsed) return "";
+  if (!parsed) return "-";
 
-  return `${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
+  return `${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())} น.`;
 }
 
 export function toLocalDateTimeString(date, time) {

@@ -208,6 +208,7 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_queue_logs_view",
     "driver_queue_reset",
     "booking_manual_driver_override",
+    "bookings_complete_on_behalf",
   ],
   USER: [
     "bookings_view",

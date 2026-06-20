@@ -3,6 +3,9 @@
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
 ## 2026-06-20
+- Updated `src/pages/DriverUnavailable.jsx` and `src/App.css` again so the mobile-only `รายการแจ้งไม่รับงาน` accordion rows now read more like the DriverJobs mobile cards by prioritizing driver name plus reason, moving start/end datetime into their own readable rows, and keeping compact type/status badges with the same expand/collapse behavior and desktop layout unchanged.
+- Updated `src/pages/DriverUnavailable.jsx` and `src/App.css` so the mobile-only DriverUnavailable accordion cards keep the same expand/collapse structure and content but now use a lighter high-contrast card surface, clearer compact type/status badges, and a more readable expanded detail area without affecting desktop layout or unavailable business logic.
+- Updated `src/utils/date.js`, `src/utils/datetime.js`, and the main booking/calendar/driver/admin pages so Thai display date/time now consistently uses the shared short-month Buddhist format `20 มิ.ย. 2569 เวลา 12:07 น.` with `-` for empty or invalid values, while leaving booking, calendar, queue, and permission logic unchanged.
 - Updated `docs/domain-rules.md` and `apps-script/code.gs` so mostly static Apps Script master-data reads now use `CacheService` with targeted TTLs for `getUsers`, `getDrivers`, `getVehicles`, and `getThaiHolidays`, support `fresh=true` cache bypass-and-refresh behavior, and clear the related cache keys after user/driver/vehicle mutations without caching bookings, notifications, driver queue state, or sessions and without changing existing response shapes.
 
 ## 2026-06-19

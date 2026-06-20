@@ -178,25 +178,6 @@ function normalizeBookingNote(note) {
     .trim();
 }
 
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
-
-const THAI_SHORT_MONTHS = [
-  "ม.ค.",
-  "ก.พ.",
-  "มี.ค.",
-  "เม.ย.",
-  "พ.ค.",
-  "มิ.ย.",
-  "ก.ค.",
-  "ส.ค.",
-  "ก.ย.",
-  "ต.ค.",
-  "พ.ย.",
-  "ธ.ค.",
-];
-
 const ALL_DETAIL_ROLES = ["USER", "DRIVER", "STAFF", "ADMIN"];
 const STAFF_DETAIL_ROLES = ["STAFF", "ADMIN"];
 const ADMIN_DETAIL_ROLES = ["ADMIN"];
@@ -853,7 +834,7 @@ function getBookingDetailDefaultExpanded(groupName, isMobile) {
 function BookingDetailSectionHeader({ title, collapsible, expanded, onToggle }) {
   if (!collapsible) {
     return (
-      <h3 className="booking-detail-group-title text-[20px] md:text-base font-semibold leading-tight">
+      <h3 className="booking-detail-group-title booking-detail-section-title text-[20px] md:text-base font-semibold leading-tight">
         {title}
       </h3>
     );
@@ -866,7 +847,7 @@ function BookingDetailSectionHeader({ title, collapsible, expanded, onToggle }) 
       onClick={onToggle}
       className="booking-detail-group-title flex w-full items-center justify-between gap-3 rounded-xl !bg-transparent !px-0 !py-0 text-left !text-slate-900 shadow-none transition-colors hover:!bg-slate-50 focus-visible:!bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300 !min-h-0"
     >
-      <span className="text-[20px] md:text-base font-semibold leading-tight text-[#073b8e]">
+      <span className="booking-detail-section-title text-[20px] md:text-base font-semibold leading-tight text-[#073b8e]">
         {title}
       </span>
       <ChevronDownIcon
@@ -1027,14 +1008,7 @@ function BookingDetailModalContent({ sections, isMobile }) {
 }
 
 function formatBookingDateTimeDisplay(value) {
-  if (!value) return "-";
-
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  return `${date.getDate()} ${THAI_SHORT_MONTHS[date.getMonth()]} ${date.getFullYear() + 543} เวลา ${pad2(
-    date.getHours()
-  )}:${pad2(date.getMinutes())} น.`;
+  return formatThaiDateTime(value);
 }
 
 function getVehicleTypeText(type) {

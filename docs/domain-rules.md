@@ -7,6 +7,7 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Backend: Google Apps Script, Google Sheets, Cloudflare Worker proxy.
 - Language and encoding: Thai UI, UTF-8 only.
 - Timezone: `Asia/Bangkok`.
+- Shared Thai display date/time format: `20 มิ.ย. 2569 เวลา 12:07 น.` for full datetime, `20 มิ.ย. 2569` for date-only, and `12:07 น.` for time-only.
 
 ## Booking Rules
 - Valid statuses: `PENDING`, `APPROVED`, `IN_USE`, `COMPLETED`, `CANCELLED`, `DRIVER_CANCELLED`.

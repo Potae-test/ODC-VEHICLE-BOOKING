@@ -12,7 +12,7 @@ import AppLayout from "../layouts/AppLayout";
 import MobileGrid from "../layouts/MobileGrid";
 import MobilePageHeader from "../layouts/MobilePageHeader";
 import MobilePageSection from "../layouts/MobilePageSection";
-import { formatThaiDateTime } from "../utils/date";
+import { formatThaiDate, formatThaiDateTime, formatThaiTime } from "../utils/date";
 import { hasPermission, normalizeRole } from "../permissions";
 import { showError, showSuccess } from "../utils/alert";
 import { FEATURES } from "../config/features";
@@ -368,16 +368,8 @@ function DriverJobCompactCard({
         : status === "PENDING"
           ? "driver-job-compact-card--pending"
           : "";
-const startDate = booking.start_datetime
-  ? new Date(booking.start_datetime).toLocaleDateString("th-TH")
-  : "-";
-
-const startTime = booking.start_datetime
-  ? new Date(booking.start_datetime).toLocaleTimeString("th-TH", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  : "-";
+const startDate = formatThaiDate(booking.start_datetime);
+const startTime = formatThaiTime(booking.start_datetime);
   return (
     <article
       className={`driver-job-compact-card ${cardStateClass}`.trim()}
@@ -390,7 +382,7 @@ const startTime = booking.start_datetime
       >
       <div className="driver-job-compact-time">
         <span>
-          วันที่: {startDate} เวลา: {startTime} น.
+          วันที่: {startDate} เวลา: {startTime}
         </span>
       </div>
         <div className="driver-job-compact-copy">

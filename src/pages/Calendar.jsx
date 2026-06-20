@@ -12,7 +12,7 @@ import { hasPermission } from "../permissions";
 import BookingFormModal from "../components/booking/BookingFormModal";
 import CalendarSkeleton from "../components/skeletons/CalendarSkeleton";
 import useMinimumLoading from "../hooks/useMinimumLoading";
-import { formatThaiDateTime } from "../utils/date";
+import { formatThaiDate, formatThaiDateTime } from "../utils/date";
 import { FEATURES } from "../config/features";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -317,18 +317,7 @@ function getThaiHolidayKey(date) {
 }
 
 function formatCalendarDateTimeWithTimeText(value) {
-  if (!value) return "-";
-
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-
-  const day = date.getDate();
-  const monthLabel = THAI_SHORT_MONTH_LABELS[date.getMonth()];
-  const year = date.getFullYear() + 543;
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  return `${day} ${monthLabel} ${year} เวลา ${hours}:${minutes} น.`;
+  return formatThaiDateTime(value);
 }
 
 function captureCalendarScrollPosition() {
@@ -1233,7 +1222,7 @@ export default function CalendarPage() {
   }, [activeQueueRows, currentQueueIndex]);
 
   const handleShowMoreEvents = useCallback(async (events, date) => {
-    const titleDate = formatThaiDateTime(date).split(" ")[0];
+    const titleDate = formatThaiDate(date);
 
     const rows = [...events]
       .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())

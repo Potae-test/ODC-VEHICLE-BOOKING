@@ -45,6 +45,7 @@ function getStatusLabel(status) {
   const normalized = normalizeStatus(status);
   if (normalized === "ACTIVE") return "กำลังทำงาน";
   if (normalized === "CANCELLED") return "ยกเลิก";
+  if (normalized === "EXPIRED") return "สิ้นสุดแล้ว";
   return normalized || "-";
 }
 
@@ -164,11 +165,29 @@ function DriverUnavailableCompactCard({
         <div className="driver-unavailable-compact-copy">
           <div className="driver-unavailable-compact-title-row">
             <h3 className="driver-unavailable-compact-title">{record.driver_name || "-"}</h3>
-            <span className={`status ${typeClassName}`}>{typeLabel}</span>
+          </div>
+          <div className="driver-unavailable-compact-reason" title={record.reason || "-"}>
+            <span>{record.reason || "-"}</span>
           </div>
           <div className="driver-unavailable-compact-meta">
-            <span className={`status ${statusClassName}`}>{getStatusLabel(record.status)}</span>
-            <span title={rangeLabel}>{rangeLabel}</span>
+            <span className={`status driver-unavailable-compact-badge driver-unavailable-compact-badge--type ${typeClassName}`}>
+              {typeLabel}
+            </span>
+            <span className={`status driver-unavailable-compact-badge driver-unavailable-compact-badge--status ${statusClassName}`}>
+              {getStatusLabel(record.status)}
+            </span>
+          </div>
+          <div className="driver-unavailable-compact-time-row">
+            <span className="driver-unavailable-compact-time-label">เริ่ม</span>
+            <span className="driver-unavailable-compact-time-value" title={formatThaiDateTime(record.start_datetime)}>
+              {formatThaiDateTime(record.start_datetime)}
+            </span>
+          </div>
+          <div className="driver-unavailable-compact-time-row">
+            <span className="driver-unavailable-compact-time-label">สิ้นสุด</span>
+            <span className="driver-unavailable-compact-time-value" title={formatThaiDateTime(record.end_datetime)}>
+              {formatThaiDateTime(record.end_datetime)}
+            </span>
           </div>
         </div>
         <span className={`driver-unavailable-compact-chevron ${expanded ? "is-open" : ""}`} aria-hidden="true">
