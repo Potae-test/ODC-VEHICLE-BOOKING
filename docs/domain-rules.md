@@ -42,6 +42,8 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Important actions must create append-only logs.
 - Log at minimum: booking create/update/cancel, booking approval and reassignment, driver assignment recall, central-vehicle completion, driver cancel request/withdraw/review, backdated completion, on-behalf completion, unavailable create/update/cancel, and queue movement.
 - After mutations, invalidate related caches such as `bookings`, `users`, `vehicles`, `driver_queue`, and `driver_unavailable`.
+- Apps Script may use `CacheService` only for mostly static master-data reads such as `users`, `drivers`, `vehicles`, and `thai_holidays`; do not cache frequently changing data such as bookings, notifications, driver queue state, or sessions.
+- Master-data read APIs that support `fresh=true` must bypass `CacheService`, read from Sheets directly, and then refresh the cached value without changing the API response shape.
 
 ## Push Notification Rules
 - Keep non-FCM push subscriptions matched by `endpoint`.

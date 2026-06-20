@@ -63,6 +63,28 @@ function formatMonthLabel(date) {
   return `${MONTH_LABELS[date.getMonth()]} ${date.getFullYear() + 543}`;
 }
 
+function isSameDay(left, right) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function getDriverKey(userId, userName) {
+  const trimmedUserId = String(userId || "").trim();
+  const trimmedUserName = String(userName || "").trim();
+  if (trimmedUserId) return `id:${trimmedUserId}`;
+  if (trimmedUserName) return `name:${trimmedUserName.toLowerCase()}`;
+  return "";
+}
+
+function isOutProvinceRecord(record) {
+  const typeText = String(record?.unavailable_type || record?.type || "").trim();
+  const reasonText = String(record?.reason || "").trim();
+  return `${typeText} ${reasonText}`.includes("ปฏิบัติงานต่างจังหวัด");
+}
+
 function formatDeltaText(value, unit = "รายการ") {
   if (value === 0) return `คงที่จากเดือนก่อน`;
   if (value > 0) return `มากกว่าเดือนก่อน +${value} ${unit}`;
@@ -232,7 +254,7 @@ export default function Dashboard() {
       if (normalizeStatus(booking.status) !== "IN_USE") return;
       const assignedUserId = String(booking.assigned_user_id || "").trim();
       const assignedUserName = String(booking.assigned_user_name || booking.driver_name || "").trim();
-      const driverKey = assignedUserId ? `id:${assignedUserId}` : assignedUserName ? `name:${assignedUserName.toLowerCase()}` : "";
+      const driverKey = getDriverKey(assignedUserId, assignedUserName);
       if (driverKey) {
         inUseDriverKeys.add(driverKey);
       }
@@ -337,11 +359,104 @@ export default function Dashboard() {
   const driverStatusBars = useMemo(() => {
     const total = dashboardStats.activeDrivers;
     return [
-      { key: "ready", label: "พร้อมรับงาน", value: dashboardStats.readyDrivers, tone: "green", total },
+      { key: "ready", label: "พร้อมปฏิบัติงาน", value: dashboardStats.readyDrivers, tone: "green", total },
       { key: "in_use", label: "กำลังปฏิบัติงาน", value: dashboardStats.inUseDrivers, tone: "blue", total },
-      { key: "unavailable", label: "ไม่พร้อมรับงาน", value: dashboardStats.activeUnavailableDrivers, tone: "red", total },
+      { key: "unavailable", label: "ไม่พร้อมปฏิบัติงาน", value: dashboardStats.activeUnavailableDrivers, tone: "red", total },
     ];
   }, [dashboardStats]);
+
+  const todayBookingStats = useMemo(() => {
+    const today = new Date();
+    let total = 0;
+    let approved = 0;
+    let inUse = 0;
+    let completed = 0;
+
+    bookings.forEach((booking) => {
+      const bookingDate = parseDate(booking.start_datetime);
+      if (!bookingDate || !isSameDay(bookingDate, today)) return;
+
+      total += 1;
+      const status = normalizeStatus(booking.status);
+      if (status === "APPROVED") approved += 1;
+      if (status === "IN_USE") inUse += 1;
+      if (status === "COMPLETED") completed += 1;
+    });
+
+    return {
+      total,
+      items: [
+        { key: "today-total", label: "งานวันนี้ทั้งหมด", value: total, tone: "purple", total },
+        { key: "today-approved", label: "รอเริ่มงาน", value: approved, tone: "blue", total },
+        { key: "today-in-use", label: "กำลังปฏิบัติงาน", value: inUse, tone: "green", total },
+        { key: "today-completed", label: "เสร็จสิ้น", value: completed, tone: "slate", total },
+      ],
+    };
+  }, [bookings]);
+
+  const operationalActionStats = useMemo(() => {
+    const now = new Date();
+    const next24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    let pendingApproval = 0;
+    let pendingDriverCancel = 0;
+    let startingSoon = 0;
+
+    bookings.forEach((booking) => {
+      const status = normalizeStatus(booking.status);
+      const startDate = parseDate(booking.start_datetime);
+
+      if (status === "PENDING") {
+        pendingApproval += 1;
+      }
+      if (normalizeStatus(booking.driver_cancel_request_status) === "PENDING") {
+        pendingDriverCancel += 1;
+      }
+      if (status === "APPROVED" && startDate && startDate >= now && startDate <= next24Hours) {
+        startingSoon += 1;
+      }
+    });
+
+    const total = pendingApproval + pendingDriverCancel + startingSoon;
+    return {
+      total,
+      items: [
+        { key: "action-pending", label: "รออนุมัติ", value: pendingApproval, tone: "amber", total },
+        { key: "action-cancel", label: "รอพิจารณายกเลิก", value: pendingDriverCancel, tone: "red", total },
+        { key: "action-soon", label: "งานใกล้เริ่มใน 24 ชม.", value: startingSoon, tone: "blue", total },
+      ],
+    };
+  }, [bookings]);
+
+  const activeInUseDriverRows = useMemo(() => {
+    const seen = new Set();
+    const rows = [];
+
+    sortLatestFirst(bookings).forEach((booking) => {
+      if (normalizeStatus(booking.status) !== "IN_USE") return;
+
+      const driverName = String(booking.assigned_user_name || booking.driver_name || "").trim();
+      const driverKey = getDriverKey(booking.assigned_user_id, driverName);
+      if (!driverKey || seen.has(driverKey)) return;
+
+      seen.add(driverKey);
+      rows.push({
+        key: driverKey,
+        driverName: driverName || "-",
+        bookingLabel: String(booking.booking_no || "").trim() || "-",
+        destination: String(booking.destination || "").trim() || "-",
+      });
+    });
+
+    return rows;
+  }, [bookings]);
+
+  const outProvinceDriverRows = useMemo(() => {
+    return sortLatestFirst(
+      driverUnavailableRecords.filter((record) => {
+        return normalizeStatus(record.status) === "ACTIVE" && isOutProvinceRecord(record);
+      })
+    );
+  }, [driverUnavailableRecords]);
 
   const topDrivers = useMemo(() => {
     const driverLookup = new Map();
@@ -361,7 +476,7 @@ export default function Dashboard() {
     bookings.forEach((booking) => {
       const assignedUserId = String(booking.assigned_user_id || "").trim();
       const assignedUserName = String(booking.assigned_user_name || booking.driver_name || "").trim();
-      const key = assignedUserId ? `id:${assignedUserId}` : assignedUserName ? `name:${assignedUserName.toLowerCase()}` : "";
+      const key = getDriverKey(assignedUserId, assignedUserName);
       if (!key) return;
 
       const matched = driverLookup.get(key);
@@ -460,8 +575,8 @@ export default function Dashboard() {
           accent={`${formatDeltaText(dashboardStats.monthOverMonthDiff)} (${dashboardStats.monthOverMonthPercent > 0 ? "+" : ""}${dashboardStats.monthOverMonthPercent}%)`}
         />
         <SummaryCard title="ยกเลิก/รอยกเลิก" value={dashboardStats.cancelledOrPendingCancelCount} tone="red" description="รวมคำขอยกเลิกที่รอพิจารณา" />
-        <SummaryCard title="คนขับพร้อมรับงาน" value={dashboardStats.readyDrivers} tone="emerald" description={`จากคนขับ Active ${dashboardStats.activeDrivers} คน`} />
-        <SummaryCard title="คนขับ Active" value={dashboardStats.activeDrivers} tone="purple" description={`ไม่พร้อมรับงาน ${dashboardStats.activeUnavailableDrivers} รายการ`} />
+        <SummaryCard title="คนขับพร้อมปฏิบัติงาน" value={dashboardStats.readyDrivers} tone="emerald" description={`จากคนขับ Active ${dashboardStats.activeDrivers} คน`} />
+        <SummaryCard title="คนขับ Active" value={dashboardStats.activeDrivers} tone="purple" description={`ไม่พร้อมปฏิบัติงาน ${dashboardStats.activeUnavailableDrivers} รายการ`} />
       </section>
 
       <section className="dashboard-visual-grid">
@@ -493,11 +608,35 @@ export default function Dashboard() {
 
         <div className="form-card dashboard-panel">
           <div className="dashboard-panel-head">
-            <h3>สถานะคนขับ</h3>
+            <h3>สถานะการปฏิบัติงานของคนขับ</h3>
             <span>{dashboardStats.activeDrivers} คน</span>
           </div>
           <div className="dashboard-metric-list">
             {driverStatusBars.map((item) => (
+              <MetricBar key={item.key} label={item.label} value={item.value} total={item.total} tone={item.tone} />
+            ))}
+          </div>
+        </div>
+
+        <div className="form-card dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h3>งานวันนี้</h3>
+            <span>{todayBookingStats.total} รายการ</span>
+          </div>
+          <div className="dashboard-metric-list">
+            {todayBookingStats.items.map((item) => (
+              <MetricBar key={item.key} label={item.label} value={item.value} total={item.total} tone={item.tone} />
+            ))}
+          </div>
+        </div>
+
+        <div className="form-card dashboard-panel">
+          <div className="dashboard-panel-head">
+            <h3>งานที่ต้องดำเนินการ</h3>
+            <span>{operationalActionStats.total} รายการ</span>
+          </div>
+          <div className="dashboard-metric-list">
+            {operationalActionStats.items.map((item) => (
               <MetricBar key={item.key} label={item.label} value={item.value} total={item.total} tone={item.tone} />
             ))}
           </div>
@@ -531,7 +670,7 @@ export default function Dashboard() {
 
         <div className="form-card dashboard-panel">
           <div className="dashboard-panel-head">
-            <h3>Top Destination</h3>
+            <h3>Top 5 ปลายทาง</h3>
             <span>ปลายทางยอดนิยม</span>
           </div>
           <div className="dashboard-top-driver-list">
@@ -659,10 +798,55 @@ export default function Dashboard() {
 
       <section className="dashboard-footnote-grid">
         <div className="form-card dashboard-footnote-card">
-          <h3>คนขับไม่พร้อมรับงานล่าสุด</h3>
+          <h3>คนขับกำลังปฏิบัติงาน</h3>
+          <div className="dashboard-top-driver-list">
+            {activeInUseDriverRows.length === 0 ? (
+              <div className="dashboard-empty-state">ไม่มีคนขับที่กำลังปฏิบัติงาน</div>
+            ) : (
+              activeInUseDriverRows.map((row) => (
+                <div className="dashboard-top-driver-row" key={row.key}>
+                  <div className="dashboard-top-driver-copy">
+                    <strong>{row.driverName}</strong>
+                    <span>{row.bookingLabel !== "-" ? row.bookingLabel : row.destination}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="form-card dashboard-footnote-card">
+          <h3>คนขับปฏิบัติงานต่างจังหวัด</h3>
+          <div className="dashboard-vehicle-chip-list">
+            {outProvinceDriverRows.length === 0 ? (
+              <div className="dashboard-empty-state">ไม่มีคนขับปฏิบัติงานต่างจังหวัด</div>
+            ) : (
+              outProvinceDriverRows.map((record, index) => {
+                const recordKey = String(record.record_id || record.unavailable_id || `${record.driver_name || "driver"}-${index}`);
+                const reasonText =
+                  String(record.reason || record.unavailable_type || record.type || "-").trim() || "-";
+                return (
+                  <div className="dashboard-vehicle-chip" key={recordKey}>
+                    <div>
+                      <strong>{record.driver_name || "-"}</strong>
+                      <span>{reasonText}</span>
+                      <span>
+                        {formatDashboardDateTime(record.start_datetime)} - {formatDashboardDateTime(record.end_datetime)}
+                      </span>
+                    </div>
+                    <span className="status blue">ACTIVE</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="form-card dashboard-footnote-card">
+          <h3>คนขับไม่พร้อมปฏิบัติงานล่าสุด</h3>
           <div className="dashboard-vehicle-chip-list">
             {latestUnavailableDrivers.length === 0 ? (
-              <div className="dashboard-empty-state">ไม่มีคนขับที่ไม่พร้อมรับงาน</div>
+              <div className="dashboard-empty-state">ไม่มีคนขับที่ไม่พร้อมปฏิบัติงาน</div>
             ) : (
               latestUnavailableDrivers.map((record, index) => {
                 const recordKey = String(record.record_id || record.unavailable_id || `${record.driver_name || "driver"}-${index}`);

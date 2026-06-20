@@ -4,9 +4,10 @@
     const action = e && e.parameter
       ? e.parameter.action || "vehicles"
       : "vehicles";
+    const fresh = isFreshRequest_(e && e.parameter);
 
   if (action === "vehicles") {
-    return getVehicles();
+    return getVehicles({ fresh: fresh });
   }
 
   if (action === "bookings") {
@@ -19,10 +20,10 @@
     });
   }
   if (action === "drivers") {
-    return getDrivers();
+    return getDrivers({ fresh: fresh });
   }
   if (action === "users") {
-    return getUsers();
+    return getUsers({ fresh: fresh });
   }
 
   if (action === "bookingCancellations") {
@@ -38,7 +39,7 @@
   if (action === "thai_holidays" || action === "getThaiHolidays") {
     return jsonOutput({
       success: true,
-      data: getThaiHolidays(),
+      data: getThaiHolidays({ fresh: fresh }),
     });
   }
   if (action === "getDriverUnavailableLogs") {
@@ -79,6 +80,7 @@ function doPost(e) {
     resetRequestCache_();
     const body = JSON.parse(e && e.postData ? e.postData.contents || "{}" : "{}");
     const action = body.action;
+    const fresh = isFreshRequest_(body && (body.data || body));
 
     if (action === "createVehicle") {
       var trusted = applyTrustedSession_(body.data);
@@ -451,7 +453,7 @@ function doPost(e) {
     if (action === "thai_holidays" || action === "getThaiHolidays") {
       return jsonOutput({
         success: true,
-        data: getThaiHolidays(),
+        data: getThaiHolidays({ fresh: fresh }),
       });
     }
     if (action === "updateDriverQueue") {
@@ -614,7 +616,7 @@ function doPost(e) {
     });
   }
 }
-function getVehicles() {
+function buildVehiclesResponse_() {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName("Vehicles");
@@ -622,11 +624,11 @@ function getVehicles() {
   const { headers, rows } = readSheetTable(sheet);
 
   if (rows.length === 0) {
-    return jsonOutput({
+    return {
       success: true,
       total: 0,
       data: []
-    });
+    };
   }
 
   const data = rowsToObjects(headers, rows).map((vehicle) => ({
@@ -636,11 +638,26 @@ function getVehicles() {
     status: normalizeVehicleStatus(vehicle.status),
   }));
 
-  return jsonOutput({
+  return {
     success: true,
     total: data.length,
     data: data
-  });
+  };
+}
+
+function getVehicles(options) {
+  const cacheKey = MASTER_DATA_CACHE_KEYS_.vehicles;
+  const fresh = isFreshRequest_(options);
+
+  if (!fresh) {
+    const cached = getJsonCache(cacheKey);
+    if (cached !== null) {
+      return jsonOutput(cached);
+    }
+  }
+
+  console.log("CACHE MISS", cacheKey);
+  return jsonOutput(setJsonCache(cacheKey, buildVehiclesResponse_(), 300));
 }
 
 function normalizeVehicleStatus(status) {
@@ -673,6 +690,8 @@ function createVehicle(data) {
     data.next_booking || "-",
   ]);
 
+  removeCache(MASTER_DATA_CACHE_KEYS_.vehicles);
+
   return jsonOutput({
     success: true,
     message: "Create vehicle success",
@@ -688,6 +707,66 @@ function jsonOutput(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+var MASTER_DATA_CACHE_KEYS_ = {
+  users: "master:users:v1",
+  drivers: "master:drivers:v1",
+  vehicles: "master:vehicles:v1",
+  thaiHolidays: "master:thai_holidays:v1",
+  permissionsConfig: "master:permissions_config:v1",
+};
+
+function isFreshRequest_(source) {
+  const raw = source && source.fresh;
+  if (typeof raw === "boolean") return raw;
+  const value = String(raw || "").trim().toLowerCase();
+  return value === "true" || value === "1" || value === "yes";
+}
+
+function getJsonCache(key) {
+  if (!key) return null;
+
+  try {
+    const value = CacheService.getScriptCache().get(String(key));
+    if (!value) return null;
+    console.log("CACHE HIT", key);
+    return JSON.parse(value);
+  } catch (err) {
+    console.log("CACHE MISS", key);
+    return null;
+  }
+}
+
+function setJsonCache(key, value, ttlSeconds) {
+  if (!key) return value;
+
+  try {
+    CacheService.getScriptCache().put(
+      String(key),
+      JSON.stringify(value),
+      Math.max(1, Number(ttlSeconds || 0) || 1)
+    );
+  } catch (err) {
+    console.log("CACHE MISS", key);
+  }
+
+  return value;
+}
+
+function removeCache(key) {
+  if (!key) return;
+
+  try {
+    CacheService.getScriptCache().remove(String(key));
+    console.log("CACHE CLEAR", key);
+  } catch (err) {}
+}
+
+function clearMasterDataCache() {
+  Object.keys(MASTER_DATA_CACHE_KEYS_).forEach(function (name) {
+    removeCache(MASTER_DATA_CACHE_KEYS_[name]);
+  });
 }
 
 function bytesToHex_(bytes) {
@@ -6830,7 +6909,7 @@ function getDriverUnavailableLogs() {
   });
 }
 
-function getThaiHolidays() {
+function buildThaiHolidaysResponse_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("ThaiHolidays");
 
   if (!sheet) {
@@ -6875,6 +6954,21 @@ function getThaiHolidays() {
     .filter(Boolean);
 
   return data;
+}
+
+function getThaiHolidays(options) {
+  const cacheKey = MASTER_DATA_CACHE_KEYS_.thaiHolidays;
+  const fresh = isFreshRequest_(options);
+
+  if (!fresh) {
+    const cached = getJsonCache(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+  }
+
+  console.log("CACHE MISS", cacheKey);
+  return setJsonCache(cacheKey, buildThaiHolidaysResponse_(), 21600);
 }
 
 function createDriverUnavailable(data) {
@@ -7967,7 +8061,7 @@ function confirmDriverQueueAssignment(data) {
   });
 }
 
-function getDrivers() {
+function buildDriversResponse_() {
   const sheet = SpreadsheetApp
     .getActiveSpreadsheet()
     .getSheetByName("Drivers");
@@ -7975,20 +8069,35 @@ function getDrivers() {
   const { headers, rows } = readSheetTable(sheet);
 
   if (rows.length === 0) {
-    return jsonOutput({
+    return {
       success: true,
       total: 0,
       data: []
-    });
+    };
   }
 
   const data = rowsToObjects(headers, rows);
 
-  return jsonOutput({
+  return {
     success: true,
     total: data.length,
     data: data
-  });
+  };
+}
+
+function getDrivers(options) {
+  const cacheKey = MASTER_DATA_CACHE_KEYS_.drivers;
+  const fresh = isFreshRequest_(options);
+
+  if (!fresh) {
+    const cached = getJsonCache(cacheKey);
+    if (cached !== null) {
+      return jsonOutput(cached);
+    }
+  }
+
+  console.log("CACHE MISS", cacheKey);
+  return jsonOutput(setJsonCache(cacheKey, buildDriversResponse_(), 300));
 }
 function createDriver(data) {
   const sheet = SpreadsheetApp
@@ -8009,6 +8118,8 @@ function createDriver(data) {
     now,
     now
   ]);
+
+  removeCache(MASTER_DATA_CACHE_KEYS_.drivers);
 
   return jsonOutput({
     success: true,
@@ -8044,6 +8155,7 @@ function updateDriverStatus(data) {
       rowValues[updatedAtCol] = new Date();
 
       setRowValues(sheet, row, rowValues);
+      removeCache(MASTER_DATA_CACHE_KEYS_.drivers);
 
       return jsonOutput({
         success: true,
@@ -8057,12 +8169,12 @@ function updateDriverStatus(data) {
     message: "Driver not found"
   });
 }
-function getUsers() {
+function buildUsersResponse_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
   const { headers, rows } = readSheetTable(sheet);
 
   if (rows.length === 0) {
-    return jsonOutput({ success: true, total: 0, data: [] });
+    return { success: true, total: 0, data: [] };
   }
 
   const data = rowsToObjects(headers, rows).map((obj) => {
@@ -8073,7 +8185,22 @@ function getUsers() {
     return next;
   });
 
-  return jsonOutput({ success: true, total: data.length, data });
+  return { success: true, total: data.length, data };
+}
+
+function getUsers(options) {
+  const cacheKey = MASTER_DATA_CACHE_KEYS_.users;
+  const fresh = isFreshRequest_(options);
+
+  if (!fresh) {
+    const cached = getJsonCache(cacheKey);
+    if (cached !== null) {
+      return jsonOutput(cached);
+    }
+  }
+
+  console.log("CACHE MISS", cacheKey);
+  return jsonOutput(setJsonCache(cacheKey, buildUsersResponse_(), 300));
 }
 
 function createUser(data) {
@@ -8104,6 +8231,8 @@ function createUser(data) {
   }
 
   appendSheetRow(sheet, row);
+
+  removeCache(MASTER_DATA_CACHE_KEYS_.users);
 
   return jsonOutput({
     success: true,
@@ -8136,6 +8265,7 @@ function updateUser(data) {
       sheet.getRange(row, roleCol + 1).setValue(data.role || "USER");
       sheet.getRange(row, statusCol + 1).setValue(data.status || "ACTIVE");
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+      removeCache(MASTER_DATA_CACHE_KEYS_.users);
 
       return jsonOutput({ success: true, message: "Update user success" });
     }
@@ -8161,6 +8291,7 @@ function resetUserPassword(data) {
       sheet.getRange(row, passwordCol + 1).setValue("HASHED");
       sheet.getRange(row, passwordHashCol + 1).setValue(hashedPassword);
       sheet.getRange(row, updatedAtCol + 1).setValue(new Date());
+      removeCache(MASTER_DATA_CACHE_KEYS_.users);
 
       return jsonOutput({ success: true, message: "Reset password success" });
     }
@@ -8183,6 +8314,7 @@ function updateVehicle(data) {
           sheet.getRange(row, index + 1).setValue(header === "status" ? normalizeVehicleStatus(data[header]) : data[header]);
         }
       });
+      removeCache(MASTER_DATA_CACHE_KEYS_.vehicles);
 
       return jsonOutput({
         success: true,
@@ -8210,6 +8342,7 @@ function deleteVehicle(data) {
     if (rows[i][vehicleIdCol] === data.vehicle_id) {
 
       sheet.deleteRow(i + 2);
+      removeCache(MASTER_DATA_CACHE_KEYS_.vehicles);
 
       return jsonOutput({
         success: true,
@@ -8234,6 +8367,7 @@ function disableUser(data) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
       sheet.getRange(i + 2, statusCol + 1).setValue("INACTIVE");
+      removeCache(MASTER_DATA_CACHE_KEYS_.users);
 
       return jsonOutput({
         success: true,
@@ -8257,6 +8391,7 @@ function deleteUser(data) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][userIdCol] === data.user_id) {
       sheet.deleteRow(i + 2);
+      removeCache(MASTER_DATA_CACHE_KEYS_.users);
 
       return jsonOutput({
         success: true,
@@ -8284,6 +8419,7 @@ function updateDriver(data) {
           sheet.getRange(row, index + 1).setValue(data[header]);
         }
       });
+      removeCache(MASTER_DATA_CACHE_KEYS_.drivers);
 
       return jsonOutput({
         success: true,
@@ -8307,6 +8443,7 @@ function deleteDriver(data) {
   for (let i = 0; i < rows.length; i++) {
     if (rows[i][driverIdCol] === data.driver_id) {
       sheet.deleteRow(i + 2);
+      removeCache(MASTER_DATA_CACHE_KEYS_.drivers);
 
       return jsonOutput({
         success: true,

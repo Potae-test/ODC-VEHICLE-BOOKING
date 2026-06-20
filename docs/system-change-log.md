@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-20
+- Updated `docs/domain-rules.md` and `apps-script/code.gs` so mostly static Apps Script master-data reads now use `CacheService` with targeted TTLs for `getUsers`, `getDrivers`, `getVehicles`, and `getThaiHolidays`, support `fresh=true` cache bypass-and-refresh behavior, and clear the related cache keys after user/driver/vehicle mutations without caching bookings, notifications, driver queue state, or sessions and without changing existing response shapes.
+
 ## 2026-06-19
 - Updated `src/pages/Dashboard.jsx` and `src/App.css` so Dashboard now has an executive v2 reporting layout with a success-rate KPI, current-month booking KPI plus month-over-month comparison, SVG pie-chart status breakdown, top-destination ranking, a top-driver champion card, and responsive styling for the expanded management dashboard without changing permissions or routing.
 - Updated `src/pages/Dashboard.jsx` so the `/dashboard` page no longer shows vehicle-module widgets while that module is disabled, replacing vehicle availability/status sections with driver-operation summaries based on active drivers, unique in-use drivers, active unavailability records, and the latest active unavailable-driver list without changing booking APIs or dashboard layout structure.
