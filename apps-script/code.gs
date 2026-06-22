@@ -884,7 +884,7 @@ function getTrustedCurrentUserId_(data) {
   )).trim();
 }
 
-function cleanupExpiredSessions_() {
+function cleanupExpiredSessionsCore_() {
   const sheet = ensureSessionsSheet_();
   const table = readSheetTable(sheet);
   const headers = table.headers || [];
@@ -925,49 +925,52 @@ function getActiveSessionByToken_(token) {
   const normalizedToken = String(token || "").trim();
   if (!normalizedToken) return null;
 
-  cleanupExpiredSessions_();
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sessions");
-  if (!sheet) return null;
+  return withSessionsLock_(function () {
+    cleanupExpiredSessionsCore_();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sessions");
+    if (!sheet) return null;
 
-  const table = readSheetTable(sheet);
-  const headers = table.headers || [];
-  const rows = table.rows || [];
-  const tokenCol = headers.indexOf("session_token");
-  const userIdCol = headers.indexOf("user_id");
-  const roleCol = headers.indexOf("role");
-  const statusCol = headers.indexOf("status");
-  const expiresAtCol = headers.indexOf("expires_at");
-  const lastSeenAtCol = headers.indexOf("last_seen_at");
+    const table = readSheetTable(sheet);
+    const headers = table.headers || [];
+    const rows = table.rows || [];
+    const tokenCol = headers.indexOf("session_token");
+    const userIdCol = headers.indexOf("user_id");
+    const roleCol = headers.indexOf("role");
+    const statusCol = headers.indexOf("status");
+    const expiresAtCol = headers.indexOf("expires_at");
+    const lastSeenAtCol = headers.indexOf("last_seen_at");
 
-  if (tokenCol === -1 || userIdCol === -1 || roleCol === -1 || statusCol === -1 || expiresAtCol === -1) {
-    return null;
-  }
-
-  const now = Date.now();
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const tokenMatches = String(row[tokenCol] || "").trim() === normalizedToken;
-    if (!tokenMatches) continue;
-
-    const status = String(row[statusCol] || "").trim().toUpperCase();
-    if (status !== "ACTIVE") return null;
-
-    const expiresAt = new Date(row[expiresAtCol]).getTime();
-    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt < now) return null;
-
-    if (lastSeenAtCol !== -1) {
-      sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(new Date().toISOString());
+    if (tokenCol === -1 || userIdCol === -1 || roleCol === -1 || statusCol === -1 || expiresAtCol === -1) {
+      return null;
     }
 
-    return {
-      user_id: String(row[userIdCol] || "").trim(),
-      role: normalizeRole_(row[roleCol]),
-      row_number: i + 2
-    };
-  }
+    const now = Date.now();
 
-  return null;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const tokenMatches = String(row[tokenCol] || "").trim() === normalizedToken;
+      if (!tokenMatches) continue;
+
+      const status = String(row[statusCol] || "").trim().toUpperCase();
+      if (status !== "ACTIVE") return null;
+
+      const expiresAt = new Date(row[expiresAtCol]).getTime();
+      if (!expiresAt || Number.isNaN(expiresAt) || expiresAt < now) return null;
+
+      if (lastSeenAtCol !== -1) {
+        sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(new Date().toISOString());
+        invalidateSheetCache_(sheet);
+      }
+
+      return {
+        user_id: String(row[userIdCol] || "").trim(),
+        role: normalizeRole_(row[roleCol]),
+        row_number: i + 2
+      };
+    }
+
+    return null;
+  }, { label: "getActiveSessionByToken_" });
 }
 
 function applyTrustedSession_(data) {
@@ -1278,6 +1281,76 @@ function getCreatedNotifications_() {
   return (cache.createdNotifications || []).slice();
 }
 
+function withSessionsLock_(callback, options) {
+  const settings = options || {};
+  const waitMs = Math.max(1, Number(settings.wait_ms || settings.waitMs || 30000) || 30000);
+  const label = String(settings.label || "sessions").trim() || "sessions";
+  const lock = LockService.getScriptLock();
+  let acquired = false;
+
+  try {
+    console.log("[lock] waiting", { scope: "sessions", label: label, wait_ms: waitMs });
+    lock.waitLock(waitMs);
+    acquired = true;
+    console.log("[lock] acquired", { scope: "sessions", label: label });
+    return callback();
+  } catch (err) {
+    console.warn("[lock] failed", {
+      scope: "sessions",
+      label: label,
+      message: String(err && err.message ? err.message : err),
+    });
+    throw err;
+  } finally {
+    if (acquired) {
+      try {
+        lock.releaseLock();
+      } catch (releaseErr) {
+        console.warn("[lock] release failed", {
+          scope: "sessions",
+          label: label,
+          message: String(releaseErr && releaseErr.message ? releaseErr.message : releaseErr),
+        });
+      }
+    }
+  }
+}
+
+function withNotificationsLock_(callback, options) {
+  const settings = options || {};
+  const waitMs = Math.max(1, Number(settings.wait_ms || settings.waitMs || 30000) || 30000);
+  const label = String(settings.label || "notifications").trim() || "notifications";
+  const lock = LockService.getScriptLock();
+  let acquired = false;
+
+  try {
+    console.log("[lock] waiting", { scope: "notifications", label: label, wait_ms: waitMs });
+    lock.waitLock(waitMs);
+    acquired = true;
+    console.log("[lock] acquired", { scope: "notifications", label: label });
+    return callback();
+  } catch (err) {
+    console.warn("[lock] failed", {
+      scope: "notifications",
+      label: label,
+      message: String(err && err.message ? err.message : err),
+    });
+    throw err;
+  } finally {
+    if (acquired) {
+      try {
+        lock.releaseLock();
+      } catch (releaseErr) {
+        console.warn("[lock] release failed", {
+          scope: "notifications",
+          label: label,
+          message: String(releaseErr && releaseErr.message ? releaseErr.message : releaseErr),
+        });
+      }
+    }
+  }
+}
+
 function invalidateSheetCache_(sheetOrName) {
   const cache = getRequestCache_();
 
@@ -1535,8 +1608,14 @@ function normalizeSessionDate_(date) {
   return date instanceof Date ? date.toISOString() : new Date(date || new Date()).toISOString();
 }
 
-function createSessionForUser_(userObj) {
-  cleanupExpiredSessions_();
+function cleanupExpiredSessions_() {
+  return withSessionsLock_(function () {
+    return cleanupExpiredSessionsCore_();
+  }, { label: "cleanupExpiredSessions_" });
+}
+
+function createSessionForUserCore_(userObj) {
+  cleanupExpiredSessionsCore_();
   const sessionSheet = ensureSessionsSheet_();
   const table = readSheetTable(sessionSheet);
   const now = new Date();
@@ -1562,47 +1641,67 @@ function createSessionForUser_(userObj) {
   };
 }
 
-function clearOldSessions() {
-  const sheet = ensureSessionsSheet_();
-  const table = readSheetTable(sheet);
-  const headers = table.headers || [];
-  const rows = table.rows || [];
-  const statusCol = headers.indexOf("status");
-  const expiresAtCol = headers.indexOf("expires_at");
+function createSessionForUser_(userObj) {
+  return withSessionsLock_(function () {
+    return createSessionForUserCore_(userObj);
+  }, { label: "createSessionForUser_" });
+}
 
-  if (statusCol === -1 || expiresAtCol === -1) {
+function clearOldSessions() {
+  try {
+    return withSessionsLock_(function () {
+      const sheet = ensureSessionsSheet_();
+      const table = readSheetTable(sheet);
+      const headers = table.headers || [];
+      const rows = table.rows || [];
+      const statusCol = headers.indexOf("status");
+      const expiresAtCol = headers.indexOf("expires_at");
+
+      if (statusCol === -1 || expiresAtCol === -1) {
+        return jsonOutput({
+          success: true,
+          deleted: 0
+        });
+      }
+
+      const cutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
+      const rowsToDelete = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const status = String(row[statusCol] || "").trim().toUpperCase();
+        const expiresAt = new Date(row[expiresAtCol]).getTime();
+
+        if (status !== "EXPIRED" && status !== "INACTIVE") continue;
+        if (!expiresAt || Number.isNaN(expiresAt) || expiresAt >= cutoff) continue;
+
+        rowsToDelete.push(i + 2);
+      }
+
+      for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+        sheet.deleteRow(rowsToDelete[i]);
+      }
+
+      if (rowsToDelete.length > 0) {
+        invalidateSheetCache_(sheet);
+      }
+
+      return jsonOutput({
+        success: true,
+        deleted: rowsToDelete.length
+      });
+    }, { label: "clearOldSessions" });
+  } catch (err) {
+    console.error("[trigger] clearOldSessions failed", {
+      message: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : "",
+    });
     return jsonOutput({
-      success: true,
+      success: false,
+      message: String(err && err.message ? err.message : err),
       deleted: 0
     });
   }
-
-  const cutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
-  const rowsToDelete = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const status = String(row[statusCol] || "").trim().toUpperCase();
-    const expiresAt = new Date(row[expiresAtCol]).getTime();
-
-    if (status !== "EXPIRED" && status !== "INACTIVE") continue;
-    if (!expiresAt || Number.isNaN(expiresAt) || expiresAt >= cutoff) continue;
-
-    rowsToDelete.push(i + 2);
-  }
-
-  for (let i = rowsToDelete.length - 1; i >= 0; i--) {
-    sheet.deleteRow(rowsToDelete[i]);
-  }
-
-  if (rowsToDelete.length > 0) {
-    invalidateSheetCache_(sheet);
-  }
-
-  return jsonOutput({
-    success: true,
-    deleted: rowsToDelete.length
-  });
 }
 
 function logoutSession(data) {
@@ -1616,44 +1715,46 @@ function logoutSession(data) {
     });
   }
 
-  cleanupExpiredSessions_();
-  const sheet = ensureSessionsSheet_();
-  const table = readSheetTable(sheet);
-  const headers = table.headers || [];
-  const rows = table.rows || [];
-  const tokenCol = headers.indexOf("session_token");
-  const statusCol = headers.indexOf("status");
-  const lastSeenAtCol = headers.indexOf("last_seen_at");
+  return withSessionsLock_(function () {
+    cleanupExpiredSessionsCore_();
+    const sheet = ensureSessionsSheet_();
+    const table = readSheetTable(sheet);
+    const headers = table.headers || [];
+    const rows = table.rows || [];
+    const tokenCol = headers.indexOf("session_token");
+    const statusCol = headers.indexOf("status");
+    const lastSeenAtCol = headers.indexOf("last_seen_at");
 
-  if (tokenCol === -1 || statusCol === -1) {
+    if (tokenCol === -1 || statusCol === -1) {
+      return jsonOutput({
+        success: true,
+        message: "Session already inactive"
+      });
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowToken = String(row[tokenCol] || "").trim();
+      const rowStatus = String(row[statusCol] || "").trim().toUpperCase();
+
+      if (rowToken !== token || rowStatus !== "ACTIVE") continue;
+
+      sheet.getRange(i + 2, statusCol + 1).setValue("INACTIVE");
+      if (lastSeenAtCol !== -1) {
+        sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(normalizeSessionDate_(new Date()));
+      }
+      invalidateSheetCache_(sheet);
+
+      return jsonOutput({
+        success: true
+      });
+    }
+
     return jsonOutput({
       success: true,
       message: "Session already inactive"
     });
-  }
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowToken = String(row[tokenCol] || "").trim();
-    const rowStatus = String(row[statusCol] || "").trim().toUpperCase();
-
-    if (rowToken !== token || rowStatus !== "ACTIVE") continue;
-
-    sheet.getRange(i + 2, statusCol + 1).setValue("INACTIVE");
-    if (lastSeenAtCol !== -1) {
-      sheet.getRange(i + 2, lastSeenAtCol + 1).setValue(normalizeSessionDate_(new Date()));
-    }
-    invalidateSheetCache_(sheet);
-
-    return jsonOutput({
-      success: true
-    });
-  }
-
-  return jsonOutput({
-    success: true,
-    message: "Session already inactive"
-  });
+  }, { label: "logoutSession" });
 }
 
 function ensureVehicleLogsSheet() {
@@ -2126,7 +2227,7 @@ function getNotificationStableReminderKey_(record) {
   return "";
 }
 
-function appendNotificationRecord_(data) {
+function appendNotificationRecordCore_(data) {
   const record = buildNotificationRecord_(data);
 
   if (!record.target_user_id && !record.target_role) {
@@ -2210,6 +2311,12 @@ function appendNotificationRecord_(data) {
     created_at: record.created_at,
   });
   return record;
+}
+
+function appendNotificationRecord_(data) {
+  return withNotificationsLock_(function () {
+    return appendNotificationRecordCore_(data);
+  }, { label: "appendNotificationRecord_" });
 }
 
 function buildNotificationMessageForBooking_(booking, fallbackMessage) {
@@ -2449,7 +2556,7 @@ function getVisibleNotificationsByIds_(notificationIds, userId, role) {
   return matchedNotifications;
 }
 
-function upsertNotificationDeleteMarkers_(notificationIds, trustedUserId, createdBy) {
+function upsertNotificationDeleteMarkersCore_(notificationIds, trustedUserId, createdBy) {
   const normalizedNotificationIds = Array.from(new Set((notificationIds || [])
     .map(function (value) {
       return String(value || "").trim();
@@ -2527,6 +2634,12 @@ function upsertNotificationDeleteMarkers_(notificationIds, trustedUserId, create
     affected_notification_ids: normalizedNotificationIds,
     deleted_at: nowIso,
   };
+}
+
+function upsertNotificationDeleteMarkers_(notificationIds, trustedUserId, createdBy) {
+  return withNotificationsLock_(function () {
+    return upsertNotificationDeleteMarkersCore_(notificationIds, trustedUserId, createdBy);
+  }, { label: "upsertNotificationDeleteMarkers_" });
 }
 
 function getVisibleNotificationEntries_(userId, role) {
@@ -3138,47 +3251,49 @@ function getNotifications(data) {
 
 function markNotificationRead(data) {
   try {
-    const notificationId = String(data && data.notification_id || "").trim();
-    if (!notificationId) {
-      return jsonOutput({
-        success: false,
-        message: "notification_id is required",
-      });
-    }
-
-    const sheet = ensureNotificationsSheet();
-    const table = readSheetTable(sheet);
-    const columnMap = table.columnMap;
-    const notificationIdCol = columnMap.notification_id;
-    const isReadCol = columnMap.is_read;
-    const readAtCol = columnMap.read_at;
-
-    if (notificationIdCol === undefined || isReadCol === undefined || readAtCol === undefined) {
-      throw new Error("Notifications sheet columns are invalid");
-    }
-
-    for (let index = 0; index < table.rows.length; index += 1) {
-      const rowValues = table.rows[index];
-      if (String(rowValues[notificationIdCol] || "").trim() !== notificationId) {
-        continue;
+    return withNotificationsLock_(function () {
+      const notificationId = String(data && data.notification_id || "").trim();
+      if (!notificationId) {
+        return jsonOutput({
+          success: false,
+          message: "notification_id is required",
+        });
       }
 
-      const nextValues = rowValues.slice();
-      nextValues[isReadCol] = true;
-      nextValues[readAtCol] = new Date().toISOString();
-      setRowValues(sheet, index + 2, nextValues);
+      const sheet = ensureNotificationsSheet();
+      const table = readSheetTable(sheet);
+      const columnMap = table.columnMap;
+      const notificationIdCol = columnMap.notification_id;
+      const isReadCol = columnMap.is_read;
+      const readAtCol = columnMap.read_at;
+
+      if (notificationIdCol === undefined || isReadCol === undefined || readAtCol === undefined) {
+        throw new Error("Notifications sheet columns are invalid");
+      }
+
+      for (let index = 0; index < table.rows.length; index += 1) {
+        const rowValues = table.rows[index];
+        if (String(rowValues[notificationIdCol] || "").trim() !== notificationId) {
+          continue;
+        }
+
+        const nextValues = rowValues.slice();
+        nextValues[isReadCol] = true;
+        nextValues[readAtCol] = new Date().toISOString();
+        setRowValues(sheet, index + 2, nextValues);
+
+        return jsonOutput({
+          success: true,
+          message: "Mark notification read success",
+          data: rowsToObjects(table.headers, [nextValues])[0] || {},
+        });
+      }
 
       return jsonOutput({
-        success: true,
-        message: "Mark notification read success",
-        data: rowsToObjects(table.headers, [nextValues])[0] || {},
+        success: false,
+        message: "Notification not found",
       });
-    }
-
-    return jsonOutput({
-      success: false,
-      message: "Notification not found",
-    });
+    }, { label: "markNotificationRead" });
   } catch (err) {
     return jsonOutput({
       success: false,
@@ -3189,48 +3304,50 @@ function markNotificationRead(data) {
 
 function markAllNotificationsRead(data) {
   try {
-    const userId = String(data && data.user_id || "").trim();
-    const role = normalizeRoleValue_(data && data.role || "");
+    return withNotificationsLock_(function () {
+      const userId = String(data && data.user_id || "").trim();
+      const role = normalizeRoleValue_(data && data.role || "");
 
-    if (!userId && !role) {
+      if (!userId && !role) {
+        return jsonOutput({
+          success: false,
+          message: "user_id or role is required",
+        });
+      }
+
+      const sheet = ensureNotificationsSheet();
+      const table = readSheetTable(sheet);
+      const columnMap = table.columnMap;
+      const isReadCol = columnMap.is_read;
+      const readAtCol = columnMap.read_at;
+      const nowIso = new Date().toISOString();
+      let updatedCount = 0;
+
+      for (let index = 0; index < table.rows.length; index += 1) {
+        const notification = rowsToObjects(table.headers, [table.rows[index]])[0] || {};
+        if (!isNotificationVisibleToUser_(notification, userId, role)) {
+          continue;
+        }
+
+        if (normalizeNotificationReadValue_(notification.is_read)) {
+          continue;
+        }
+
+        const nextValues = table.rows[index].slice();
+        nextValues[isReadCol] = true;
+        nextValues[readAtCol] = nowIso;
+        setRowValues(sheet, index + 2, nextValues);
+        updatedCount += 1;
+      }
+
       return jsonOutput({
-        success: false,
-        message: "user_id or role is required",
+        success: true,
+        message: "Mark all notifications read success",
+        data: {
+          updated_count: updatedCount,
+        },
       });
-    }
-
-    const sheet = ensureNotificationsSheet();
-    const table = readSheetTable(sheet);
-    const columnMap = table.columnMap;
-    const isReadCol = columnMap.is_read;
-    const readAtCol = columnMap.read_at;
-    const nowIso = new Date().toISOString();
-    let updatedCount = 0;
-
-    for (let index = 0; index < table.rows.length; index += 1) {
-      const notification = rowsToObjects(table.headers, [table.rows[index]])[0] || {};
-      if (!isNotificationVisibleToUser_(notification, userId, role)) {
-        continue;
-      }
-
-      if (normalizeNotificationReadValue_(notification.is_read)) {
-        continue;
-      }
-
-      const nextValues = table.rows[index].slice();
-      nextValues[isReadCol] = true;
-      nextValues[readAtCol] = nowIso;
-      setRowValues(sheet, index + 2, nextValues);
-      updatedCount += 1;
-    }
-
-    return jsonOutput({
-      success: true,
-      message: "Mark all notifications read success",
-      data: {
-        updated_count: updatedCount,
-      },
-    });
+    }, { label: "markAllNotificationsRead" });
   } catch (err) {
     return jsonOutput({
       success: false,
@@ -5981,82 +6098,83 @@ function clearBookingCancellationHistoryMonthly() {
 }
 
 function clearOldNotifications() {
-  const lock = LockService.getScriptLock();
-  const cutoffMs = Date.now() - (14 * 24 * 60 * 60 * 1000);
-  let notificationsDeleted = 0;
-  let notificationDeletesDeleted = 0;
-
   try {
-    lock.waitLock(30000);
+    const cutoffMs = Date.now() - (14 * 24 * 60 * 60 * 1000);
+    let notificationsDeleted = 0;
+    let notificationDeletesDeleted = 0;
 
-    const notificationsSheet = ensureNotificationsSheet();
-    const notificationsTable = readSheetTable(notificationsSheet);
-    const notificationHeaders = notificationsTable.headers || [];
-    const notificationRows = notificationsTable.rows || [];
-    const notificationColumnMap = notificationsTable.columnMap || {};
-    const notificationIdCol = notificationColumnMap.notification_id;
-    const createdAtCol = notificationColumnMap.created_at;
+    return withNotificationsLock_(function () {
+      const notificationsSheet = ensureNotificationsSheet();
+      const notificationsTable = readSheetTable(notificationsSheet);
+      const notificationRows = notificationsTable.rows || [];
+      const notificationColumnMap = notificationsTable.columnMap || {};
+      const notificationIdCol = notificationColumnMap.notification_id;
+      const createdAtCol = notificationColumnMap.created_at;
 
-    if (notificationIdCol === undefined || createdAtCol === undefined) {
-      throw new Error("Notifications sheet columns are invalid");
-    }
-
-    const notificationRowsToDelete = [];
-    const survivingNotificationIds = new Set();
-
-    for (let index = 0; index < notificationRows.length; index += 1) {
-      const rowValues = notificationRows[index];
-      const notificationId = String(rowValues[notificationIdCol] || "").trim();
-      const createdAt = new Date(rowValues[createdAtCol] || "").getTime();
-      const isOld = Boolean(createdAt) && !Number.isNaN(createdAt) && createdAt < cutoffMs;
-
-      if (isOld) {
-        notificationRowsToDelete.push(index + 2);
-        continue;
+      if (notificationIdCol === undefined || createdAtCol === undefined) {
+        throw new Error("Notifications sheet columns are invalid");
       }
 
-      if (notificationId) {
-        survivingNotificationIds.add(notificationId);
+      const notificationRowsToDelete = [];
+      const survivingNotificationIds = new Set();
+
+      for (let index = 0; index < notificationRows.length; index += 1) {
+        const rowValues = notificationRows[index];
+        const notificationId = String(rowValues[notificationIdCol] || "").trim();
+        const createdAt = new Date(rowValues[createdAtCol] || "").getTime();
+        const isOld = Boolean(createdAt) && !Number.isNaN(createdAt) && createdAt < cutoffMs;
+
+        if (isOld) {
+          notificationRowsToDelete.push(index + 2);
+          continue;
+        }
+
+        if (notificationId) {
+          survivingNotificationIds.add(notificationId);
+        }
       }
-    }
 
-    notificationsDeleted = deleteSheetRowsBatch_(notificationsSheet, notificationRowsToDelete);
+      notificationsDeleted = deleteSheetRowsBatch_(notificationsSheet, notificationRowsToDelete);
 
-    const deletesSheet = ensureNotificationDeletesSheet();
-    const deletesTable = readSheetTable(deletesSheet);
-    const deleteColumnMap = deletesTable.columnMap || {};
-    const deleteNotificationIdCol = deleteColumnMap.notification_id;
-    const deletedAtCol = deleteColumnMap.deleted_at;
+      const deletesSheet = ensureNotificationDeletesSheet();
+      const deletesTable = readSheetTable(deletesSheet);
+      const deleteColumnMap = deletesTable.columnMap || {};
+      const deleteNotificationIdCol = deleteColumnMap.notification_id;
+      const deletedAtCol = deleteColumnMap.deleted_at;
 
-    if (deleteNotificationIdCol === undefined || deletedAtCol === undefined) {
-      throw new Error("NotificationDeletes sheet columns are invalid");
-    }
-
-    const deleteRowsToDelete = [];
-
-    for (let index = 0; index < deletesTable.rows.length; index += 1) {
-      const rowValues = deletesTable.rows[index];
-      const notificationId = String(rowValues[deleteNotificationIdCol] || "").trim();
-      const deletedAt = new Date(rowValues[deletedAtCol] || "").getTime();
-      const isOldDelete = Boolean(deletedAt) && !Number.isNaN(deletedAt) && deletedAt < cutoffMs;
-      const isMissingNotification = !notificationId || !survivingNotificationIds.has(notificationId);
-
-      if (isMissingNotification || isOldDelete) {
-        deleteRowsToDelete.push(index + 2);
+      if (deleteNotificationIdCol === undefined || deletedAtCol === undefined) {
+        throw new Error("NotificationDeletes sheet columns are invalid");
       }
-    }
 
-    notificationDeletesDeleted = deleteSheetRowsBatch_(deletesSheet, deleteRowsToDelete);
+      const deleteRowsToDelete = [];
 
-    return jsonOutput({
-      success: true,
-      message: "Notification cleanup completed",
-      data: {
-        notifications_deleted: notificationsDeleted,
-        notification_deletes_deleted: notificationDeletesDeleted,
-      },
-    });
+      for (let index = 0; index < deletesTable.rows.length; index += 1) {
+        const rowValues = deletesTable.rows[index];
+        const notificationId = String(rowValues[deleteNotificationIdCol] || "").trim();
+        const deletedAt = new Date(rowValues[deletedAtCol] || "").getTime();
+        const isOldDelete = Boolean(deletedAt) && !Number.isNaN(deletedAt) && deletedAt < cutoffMs;
+        const isMissingNotification = !notificationId || !survivingNotificationIds.has(notificationId);
+
+        if (isMissingNotification || isOldDelete) {
+          deleteRowsToDelete.push(index + 2);
+        }
+      }
+
+      notificationDeletesDeleted = deleteSheetRowsBatch_(deletesSheet, deleteRowsToDelete);
+
+      return jsonOutput({
+        success: true,
+        message: "Notification cleanup completed",
+        data: {
+          notifications_deleted: notificationsDeleted,
+          notification_deletes_deleted: notificationDeletesDeleted,
+        },
+      });
+    }, { label: "clearOldNotifications" });
   } catch (err) {
+    const cutoffMs = Date.now() - (14 * 24 * 60 * 60 * 1000);
+    let notificationsDeleted = 0;
+    let notificationDeletesDeleted = 0;
     console.error("[notification-cleanup] clearOldNotifications failed", {
       message: String(err && err.message ? err.message : err),
       stack: err && err.stack ? String(err.stack) : "",
@@ -6070,12 +6188,6 @@ function clearOldNotifications() {
         notification_deletes_deleted: notificationDeletesDeleted,
       },
     });
-  } finally {
-    try {
-      lock.releaseLock();
-    } catch (releaseErr) {
-      console.warn("[notification-cleanup] release lock failed", releaseErr);
-    }
   }
 }
 
@@ -6100,77 +6212,92 @@ function ensureClearOldNotificationsDailyTrigger() {
 }
 
 function sendBookingReminderNotifications1Hour(data) {
-  const sheet = ensureBookingsSheet();
-  const table = readSheetTable(sheet);
-  const headers = table.headers;
-  const bookings = rowsToObjects(headers, table.rows);
-  const now = new Date();
-  const actor = String(data && (data.created_by || data.updated_by || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
-  const initialCreatedCount = getCreatedNotifications_().length;
+  try {
+    return withNotificationsLock_(function () {
+      const sheet = ensureBookingsSheet();
+      const table = readSheetTable(sheet);
+      const headers = table.headers;
+      const bookings = rowsToObjects(headers, table.rows);
+      const now = new Date();
+      const actor = String(data && (data.created_by || data.updated_by || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+      const initialCreatedCount = getCreatedNotifications_().length;
 
-  bookings.forEach((booking) => {
-    const status = String(booking.status || "").trim().toUpperCase();
-    if (status !== "APPROVED") return;
+      bookings.forEach((booking) => {
+        const status = String(booking.status || "").trim().toUpperCase();
+        if (status !== "APPROVED") return;
 
-    const bookingId = String(booking.booking_id || "").trim();
-    const destination = String(booking.destination || "").trim();
-    const startDatetime = booking.start_datetime ? new Date(booking.start_datetime) : null;
-    if (!bookingId || !destination || !startDatetime || Number.isNaN(startDatetime.getTime())) {
-      return;
-    }
+        const bookingId = String(booking.booking_id || "").trim();
+        const destination = String(booking.destination || "").trim();
+        const startDatetime = booking.start_datetime ? new Date(booking.start_datetime) : null;
+        if (!bookingId || !destination || !startDatetime || Number.isNaN(startDatetime.getTime())) {
+          return;
+        }
 
-    const diffMs = startDatetime.getTime() - now.getTime();
-    if (diffMs <= 0 || diffMs > 60 * 60 * 1000) {
-      return;
-    }
+        const diffMs = startDatetime.getTime() - now.getTime();
+        if (diffMs <= 0 || diffMs > 60 * 60 * 1000) {
+          return;
+        }
 
-    const message = `ปลายทาง: ${destination} | เวลาไป: ${formatThaiNotificationDateTime_(booking.start_datetime || "") || "-"}`;
-    const payload = buildNotificationPayloadFromBooking_(booking, {
-      reminder_key: `${bookingId}|BOOKING_REMINDER_1H`,
-      status,
+        const message = `ปลายทาง: ${destination} | เวลาไป: ${formatThaiNotificationDateTime_(booking.start_datetime || "") || "-"}`;
+        const payload = buildNotificationPayloadFromBooking_(booking, {
+          reminder_key: `${bookingId}|BOOKING_REMINDER_1H`,
+          status,
+        });
+        const requesterUserId = resolveRequesterNotificationUserId_(booking);
+        const assignedUserId = String(booking.assigned_user_id || "").trim();
+
+        if (requesterUserId) {
+          appendNotificationRecordCore_({
+            target_user_id: requesterUserId,
+            target_role: "",
+            category: "Booking",
+            title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
+            message,
+            type: "BOOKING_REMINDER_1H",
+            booking_id: bookingId,
+            url: "/booking",
+            created_by: actor,
+            payload_json: payload,
+          });
+        }
+
+        if (assignedUserId) {
+          appendNotificationRecordCore_({
+            target_user_id: assignedUserId,
+            target_role: "",
+            category: "Booking",
+            title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
+            message,
+            type: "BOOKING_REMINDER_1H",
+            booking_id: bookingId,
+            url: "/driver-jobs",
+            created_by: actor,
+            payload_json: payload,
+          });
+        }
+      });
+
+      const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+
+      return jsonOutput({
+        success: true,
+        message: "Booking reminder notification run completed",
+        created_notifications: getCreatedNotifications_(),
+        created_count: createdCount,
+      });
+    }, { label: "sendBookingReminderNotifications1Hour" });
+  } catch (err) {
+    console.error("[trigger] sendBookingReminderNotifications1Hour failed", {
+      message: String(err && err.message ? err.message : err),
+      stack: err && err.stack ? String(err.stack) : "",
     });
-    const requesterUserId = resolveRequesterNotificationUserId_(booking);
-    const assignedUserId = String(booking.assigned_user_id || "").trim();
-
-    if (requesterUserId) {
-      appendNotificationRecord_({
-        target_user_id: requesterUserId,
-        target_role: "",
-        category: "Booking",
-        title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
-        message,
-        type: "BOOKING_REMINDER_1H",
-        booking_id: bookingId,
-        url: "/booking",
-        created_by: actor,
-        payload_json: payload,
-      });
-    }
-
-    if (assignedUserId) {
-      appendNotificationRecord_({
-        target_user_id: assignedUserId,
-        target_role: "",
-        category: "Booking",
-        title: "อีก 1 ชั่วโมงจะถึงเวลาใช้งานรถ",
-        message,
-        type: "BOOKING_REMINDER_1H",
-        booking_id: bookingId,
-        url: "/driver-jobs",
-        created_by: actor,
-        payload_json: payload,
-      });
-    }
-  });
-
-  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
-
-  return jsonOutput({
-    success: true,
-    message: "Booking reminder notification run completed",
-    created_notifications: getCreatedNotifications_(),
-    created_count: createdCount,
-  });
+    return jsonOutput({
+      success: false,
+      message: String(err && err.message ? err.message : err),
+      created_notifications: getCreatedNotifications_(),
+      created_count: 0,
+    });
+  }
 }
 
 function getBangkokDateKey_(value) {
@@ -6224,184 +6351,188 @@ function logReminderDebug_(label, payload) {
 }
 
 function sendTomorrowBookingReminders(data) {
-  const bookingsTable = readSheetTable(ensureBookingsSheet());
-  const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
-  const notificationsTable = readSheetTable(ensureNotificationsSheet());
-  const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
-  const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
-  const reminderDate = getBangkokRelativeDateKey_(1);
-  const initialCreatedCount = getCreatedNotifications_().length;
-  let checkedCount = 0;
-  let eligibleCount = 0;
+  return withNotificationsLock_(function () {
+    const bookingsTable = readSheetTable(ensureBookingsSheet());
+    const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
+    const notificationsTable = readSheetTable(ensureNotificationsSheet());
+    const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
+    const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+    const reminderDate = getBangkokRelativeDateKey_(1);
+    const initialCreatedCount = getCreatedNotifications_().length;
+    let checkedCount = 0;
+    let eligibleCount = 0;
 
-  bookings.forEach(function (booking) {
-    checkedCount += 1;
-    const status = String(booking.status || "").trim().toUpperCase();
-    const bookingId = String(booking.booking_id || "").trim();
-    const requesterUserId = String(booking.requester_user_id || "").trim();
-    const assignedUserId = String(booking.assigned_user_id || "").trim();
-    const startDateKey = getBangkokDateKey_(booking.start_datetime || "");
-    if (status !== "APPROVED" || !bookingId || !requesterUserId || !assignedUserId || !startDateKey || startDateKey !== reminderDate) {
-      return;
-    }
+    bookings.forEach(function (booking) {
+      checkedCount += 1;
+      const status = String(booking.status || "").trim().toUpperCase();
+      const bookingId = String(booking.booking_id || "").trim();
+      const requesterUserId = String(booking.requester_user_id || "").trim();
+      const assignedUserId = String(booking.assigned_user_id || "").trim();
+      const startDateKey = getBangkokDateKey_(booking.start_datetime || "");
+      if (status !== "APPROVED" || !bookingId || !requesterUserId || !assignedUserId || !startDateKey || startDateKey !== reminderDate) {
+        return;
+      }
 
-    const requesterReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${requesterUserId}|${reminderDate}`;
-    const driverReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${assignedUserId}|${reminderDate}`;
-    const requesterAlreadySent = hasNotificationReminderKey_(
-      notifications,
-      "BOOKING_REMINDER_TOMORROW",
-      bookingId,
-      requesterUserId,
-      requesterReminderKey
-    );
-    const driverAlreadySent = hasNotificationReminderKey_(
-      notifications,
-      "BOOKING_REMINDER_TOMORROW",
-      bookingId,
-      assignedUserId,
-      driverReminderKey
-    );
+      const requesterReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${requesterUserId}|${reminderDate}`;
+      const driverReminderKey = `${bookingId}|BOOKING_REMINDER_TOMORROW|${assignedUserId}|${reminderDate}`;
+      const requesterAlreadySent = hasNotificationReminderKey_(
+        notifications,
+        "BOOKING_REMINDER_TOMORROW",
+        bookingId,
+        requesterUserId,
+        requesterReminderKey
+      );
+      const driverAlreadySent = hasNotificationReminderKey_(
+        notifications,
+        "BOOKING_REMINDER_TOMORROW",
+        bookingId,
+        assignedUserId,
+        driverReminderKey
+      );
 
-    if (requesterAlreadySent && driverAlreadySent) {
-      return;
-    }
+      if (requesterAlreadySent && driverAlreadySent) {
+        return;
+      }
 
-    eligibleCount += 1;
-    const message = buildRequesterDestinationLabeledStartMessage_(booking, "พรุ่งนี้มีรายการใช้งานรถ");
+      eligibleCount += 1;
+      const message = buildRequesterDestinationLabeledStartMessage_(booking, "พรุ่งนี้มีรายการใช้งานรถ");
 
-    if (!requesterAlreadySent) {
-      appendNotificationRecord_({
-        target_user_id: requesterUserId,
-        target_role: "",
-        category: "Booking",
-        title: "พรุ่งนี้มีรายการใช้งานรถ",
-        message: message,
-        type: "BOOKING_REMINDER_TOMORROW",
-        booking_id: bookingId,
-        url: "/booking",
-        created_by: actor,
-        payload_json: buildNotificationPayloadFromBooking_(booking, {
-          reminder_date: reminderDate,
-          reminder_key: requesterReminderKey,
-          status: status,
-        }),
-      });
-    }
+      if (!requesterAlreadySent) {
+        appendNotificationRecordCore_({
+          target_user_id: requesterUserId,
+          target_role: "",
+          category: "Booking",
+          title: "พรุ่งนี้มีรายการใช้งานรถ",
+          message: message,
+          type: "BOOKING_REMINDER_TOMORROW",
+          booking_id: bookingId,
+          url: "/booking",
+          created_by: actor,
+          payload_json: buildNotificationPayloadFromBooking_(booking, {
+            reminder_date: reminderDate,
+            reminder_key: requesterReminderKey,
+            status: status,
+          }),
+        });
+      }
 
-    if (!driverAlreadySent) {
-      appendNotificationRecord_({
+      if (!driverAlreadySent) {
+        appendNotificationRecordCore_({
+          target_user_id: assignedUserId,
+          target_role: "",
+          category: "Booking",
+          title: "พรุ่งนี้มีรายการใช้งานรถ",
+          message: message,
+          type: "BOOKING_REMINDER_TOMORROW",
+          booking_id: bookingId,
+          url: "/driver-jobs",
+          created_by: actor,
+          payload_json: buildNotificationPayloadFromBooking_(booking, {
+            reminder_date: reminderDate,
+            reminder_key: driverReminderKey,
+            status: status,
+          }),
+        });
+      }
+    });
+
+    const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+    logReminderDebug_("checked bookings", {
+      reminder_type: "BOOKING_REMINDER_TOMORROW",
+      checked_count: checkedCount,
+    });
+    logReminderDebug_("eligible bookings", {
+      reminder_type: "BOOKING_REMINDER_TOMORROW",
+      eligible_count: eligibleCount,
+      reminder_date: reminderDate,
+    });
+    logReminderDebug_("created notifications", {
+      reminder_type: "BOOKING_REMINDER_TOMORROW",
+      created_count: createdCount,
+    });
+
+    return {
+      reminder_type: "BOOKING_REMINDER_TOMORROW",
+      checked_count: checkedCount,
+      eligible_count: eligibleCount,
+      created_count: createdCount,
+      reminder_date: reminderDate,
+    };
+  }, { label: "sendTomorrowBookingReminders" });
+}
+
+function sendOpenJobDailyReminders(data) {
+  return withNotificationsLock_(function () {
+    const bookingsTable = readSheetTable(ensureBookingsSheet());
+    const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
+    const notificationsTable = readSheetTable(ensureNotificationsSheet());
+    const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
+    const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
+    const reminderDate = getBangkokRelativeDateKey_(0);
+    const initialCreatedCount = getCreatedNotifications_().length;
+    let checkedCount = 0;
+    let eligibleCount = 0;
+
+    bookings.forEach(function (booking) {
+      checkedCount += 1;
+      if (!isOpenJobReminderEligible_(booking)) return;
+
+      const bookingId = String(booking.booking_id || "").trim();
+      const assignedUserId = String(booking.assigned_user_id || "").trim();
+      if (!bookingId || !assignedUserId) return;
+
+      const reminderKey = `${bookingId}|BOOKING_OPEN_JOB_DAILY|${assignedUserId}|${reminderDate}`;
+      const alreadySent = hasNotificationReminderKey_(
+        notifications,
+        "BOOKING_OPEN_JOB_DAILY",
+        bookingId,
+        assignedUserId,
+        reminderKey
+      );
+      if (alreadySent) return;
+
+      eligibleCount += 1;
+      appendNotificationRecordCore_({
         target_user_id: assignedUserId,
         target_role: "",
-        category: "Booking",
-        title: "พรุ่งนี้มีรายการใช้งานรถ",
-        message: message,
-        type: "BOOKING_REMINDER_TOMORROW",
+        category: "Driver",
+        title: "กรุณาตรวจสอบการปิดงาน",
+        message: buildRequesterDestinationLabeledStartMessage_(booking, "กรุณาตรวจสอบการปิดงาน"),
+        type: "BOOKING_OPEN_JOB_DAILY",
         booking_id: bookingId,
         url: "/driver-jobs",
         created_by: actor,
         payload_json: buildNotificationPayloadFromBooking_(booking, {
           reminder_date: reminderDate,
-          reminder_key: driverReminderKey,
-          status: status,
+          reminder_key: reminderKey,
+          status: String(booking.status || "").trim().toUpperCase(),
         }),
       });
-    }
-  });
-
-  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
-  logReminderDebug_("checked bookings", {
-    reminder_type: "BOOKING_REMINDER_TOMORROW",
-    checked_count: checkedCount,
-  });
-  logReminderDebug_("eligible bookings", {
-    reminder_type: "BOOKING_REMINDER_TOMORROW",
-    eligible_count: eligibleCount,
-    reminder_date: reminderDate,
-  });
-  logReminderDebug_("created notifications", {
-    reminder_type: "BOOKING_REMINDER_TOMORROW",
-    created_count: createdCount,
-  });
-
-  return {
-    reminder_type: "BOOKING_REMINDER_TOMORROW",
-    checked_count: checkedCount,
-    eligible_count: eligibleCount,
-    created_count: createdCount,
-    reminder_date: reminderDate,
-  };
-}
-
-function sendOpenJobDailyReminders(data) {
-  const bookingsTable = readSheetTable(ensureBookingsSheet());
-  const bookings = rowsToObjects(bookingsTable.headers, bookingsTable.rows);
-  const notificationsTable = readSheetTable(ensureNotificationsSheet());
-  const notifications = rowsToObjects(notificationsTable.headers, notificationsTable.rows);
-  const actor = String(data && (data.created_by || data.updated_by || data.current_user_name || data.run_source || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
-  const reminderDate = getBangkokRelativeDateKey_(0);
-  const initialCreatedCount = getCreatedNotifications_().length;
-  let checkedCount = 0;
-  let eligibleCount = 0;
-
-  bookings.forEach(function (booking) {
-    checkedCount += 1;
-    if (!isOpenJobReminderEligible_(booking)) return;
-
-    const bookingId = String(booking.booking_id || "").trim();
-    const assignedUserId = String(booking.assigned_user_id || "").trim();
-    if (!bookingId || !assignedUserId) return;
-
-    const reminderKey = `${bookingId}|BOOKING_OPEN_JOB_DAILY|${assignedUserId}|${reminderDate}`;
-    const alreadySent = hasNotificationReminderKey_(
-      notifications,
-      "BOOKING_OPEN_JOB_DAILY",
-      bookingId,
-      assignedUserId,
-      reminderKey
-    );
-    if (alreadySent) return;
-
-    eligibleCount += 1;
-    appendNotificationRecord_({
-      target_user_id: assignedUserId,
-      target_role: "",
-      category: "Driver",
-      title: "กรุณาตรวจสอบการปิดงาน",
-      message: buildRequesterDestinationLabeledStartMessage_(booking, "กรุณาตรวจสอบการปิดงาน"),
-      type: "BOOKING_OPEN_JOB_DAILY",
-      booking_id: bookingId,
-      url: "/driver-jobs",
-      created_by: actor,
-      payload_json: buildNotificationPayloadFromBooking_(booking, {
-        reminder_date: reminderDate,
-        reminder_key: reminderKey,
-        status: String(booking.status || "").trim().toUpperCase(),
-      }),
     });
-  });
 
-  const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
-  logReminderDebug_("checked bookings", {
-    reminder_type: "BOOKING_OPEN_JOB_DAILY",
-    checked_count: checkedCount,
-  });
-  logReminderDebug_("eligible bookings", {
-    reminder_type: "BOOKING_OPEN_JOB_DAILY",
-    eligible_count: eligibleCount,
-    reminder_date: reminderDate,
-  });
-  logReminderDebug_("created notifications", {
-    reminder_type: "BOOKING_OPEN_JOB_DAILY",
-    created_count: createdCount,
-  });
+    const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+    logReminderDebug_("checked bookings", {
+      reminder_type: "BOOKING_OPEN_JOB_DAILY",
+      checked_count: checkedCount,
+    });
+    logReminderDebug_("eligible bookings", {
+      reminder_type: "BOOKING_OPEN_JOB_DAILY",
+      eligible_count: eligibleCount,
+      reminder_date: reminderDate,
+    });
+    logReminderDebug_("created notifications", {
+      reminder_type: "BOOKING_OPEN_JOB_DAILY",
+      created_count: createdCount,
+    });
 
-  return {
-    reminder_type: "BOOKING_OPEN_JOB_DAILY",
-    checked_count: checkedCount,
-    eligible_count: eligibleCount,
-    created_count: createdCount,
-    reminder_date: reminderDate,
-  };
+    return {
+      reminder_type: "BOOKING_OPEN_JOB_DAILY",
+      checked_count: checkedCount,
+      eligible_count: eligibleCount,
+      created_count: createdCount,
+      reminder_date: reminderDate,
+    };
+  }, { label: "sendOpenJobDailyReminders" });
 }
 
 function runScheduledReminderNotifications(data) {
