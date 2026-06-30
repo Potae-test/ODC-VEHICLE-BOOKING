@@ -1003,6 +1003,7 @@ var DEFAULT_ROLE_ACTION_PERMISSIONS_ = {
     "bookings_create",
     "bookings_create_backdated",
     "bookings_backdate_complete",
+    "bookings_complete_on_behalf",
     "bookings_approve",
     "bookings_assign_central_vehicle",
     "bookings_cancel",

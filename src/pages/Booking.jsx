@@ -3551,53 +3551,52 @@ export default function Booking() {
     if (processingAction) return;
 
     const requestReason = String(booking.driver_cancel_request_reason || "").trim();
-    const requestLabel = String(booking.booking_no || booking.booking_id || "-").trim();
     const driverLabel = getBookingDriverLabel(booking);
+    const reviewInfoCardHtml = `
+      <div style="display:grid; gap:8px; margin-bottom:${decision === "REJECT" ? "14px" : "0"}; padding:12px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; line-height:1.6;">
+        <div><b>ผู้จอง:</b> ${escapeHtml(booking.requester_name || "-")}</div>
+        <div><b>คนขับ:</b> ${escapeHtml(driverLabel || "-")}</div>
+        <div><b>ปลายทาง:</b> ${escapeHtml(booking.destination || "-")}</div>
+        <div><b>วันเวลาไป:</b> ${escapeHtml(formatBookingDateTimeDisplay(booking.start_datetime))}</div>
+        <div><b>เหตุผลจากคนขับ:</b> "${escapeHtml(requestReason || "-")}"</div>
+      </div>
+    `;
     const rejectModalHtml = `
       <div class="swal-form" style="text-align:left;">
         <div style="margin-bottom:12px;">
           <div style="font-size:19px; font-weight:700; color:#0f172a;">ตรวจสอบเหตุผลก่อนยืนยัน</div>
         </div>
-        <div style="display:grid; gap:8px; margin-bottom:14px; padding:12px; border:1px solid #e2e8f0; border-radius:14px; background:#f8fafc; line-height:1.6;">
-          <div><b>ผู้จอง:</b> ${escapeHtml(booking.requester_name || "-")}</div>
-          <div><b>คนขับ:</b> ${escapeHtml(driverLabel || "-")}</div>
-          <div><b>ปลายทาง:</b> ${escapeHtml(booking.destination || "-")}</div>
-          <div><b>วันเวลาไป:</b> ${escapeHtml(formatBookingDateTimeDisplay(booking.start_datetime))}</div>
-          <div><b>เหตุผลจากคนขับ:</b> "${escapeHtml(requestReason || "-")}"</div>
-        </div>
+        ${reviewInfoCardHtml}
         <label>เหตุผลที่ไม่อนุมัติ</label>
         <textarea id="driver_cancel_review_reason" class="swal2-textarea" rows="4" placeholder="ระบุเหตุผลให้ชัดเจน" style="min-height:104px; margin-top:8px;"></textarea>
+      </div>
+    `;
+    const approveModalHtml = `
+      <div class="swal-form" style="text-align:left;">
+        <div style="margin-bottom:12px;">
+          <div style="font-size:19px; font-weight:700; color:#0f172a;">ตรวจสอบเหตุผลก่อนยืนยัน</div>
+        </div>
+        ${reviewInfoCardHtml}
       </div>
     `;
 
     const result = await Swal.fire({
       title: decision === "APPROVE" ? "อนุมัติยกเลิกงานคนขับ" : "ไม่อนุมัติการยกเลิกงาน",
-      html: decision === "REJECT"
-        ? rejectModalHtml
-        : `
-            <div class="swal-form">
-              <div style="text-align:left; line-height:1.7">
-                <div><b>รายการ:</b> ${escapeHtml(requestLabel)}</div>
-                <div><b>เหตุผลจากคนขับ:</b> ${escapeHtml(requestReason || "-")}</div>
-              </div>
-            </div>
-          `,
-      width: decision === "REJECT" ? "min(96vw, 640px)" : 760,
+      html: decision === "REJECT" ? rejectModalHtml : approveModalHtml,
+      width: "min(96vw, 640px)",
       showCancelButton: true,
       confirmButtonText: decision === "APPROVE" ? "อนุมัติ" : "ยืนยันไม่อนุมัติ",
       cancelButtonText: "ยกเลิก",
       confirmButtonColor: decision === "APPROVE" ? "#1455c8" : "#dc2626",
       cancelButtonColor: "#ffffff",
-      customClass: decision === "REJECT" ? {
-        popup: "booking-driver-cancel-reject-modal",
-        htmlContainer: "booking-driver-cancel-reject-html",
-        actions: "booking-driver-cancel-reject-actions",
-        confirmButton: "booking-driver-cancel-reject-confirm",
-        cancelButton: "booking-driver-cancel-reject-cancel",
-      } : undefined,
+      customClass: {
+        popup: "booking-driver-cancel-review-modal",
+        htmlContainer: "booking-driver-cancel-review-html",
+        actions: "booking-driver-cancel-review-actions",
+        confirmButton: "booking-driver-cancel-review-confirm",
+        cancelButton: "booking-driver-cancel-review-cancel",
+      },
       didOpen: () => {
-        if (decision !== "REJECT") return;
-
         const popup = Swal.getPopup();
         const confirmButton = Swal.getConfirmButton();
         const cancelButton = Swal.getCancelButton();
