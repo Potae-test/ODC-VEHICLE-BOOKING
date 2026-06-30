@@ -1,10 +1,26 @@
 export const PERMISSION_STORAGE_KEY = "odc_menu_permissions";
 export const ACTION_PERMISSION_STORAGE_KEY = "odc_action_permissions";
-export const PERMISSION_CONFIG_VERSION = "2026-06-19.2";
-export const ACTION_PERMISSION_CONFIG_VERSION = "2026-06-19.1";
+export const PERMISSION_CONFIG_VERSION = "2026-06-30.0";
+export const ACTION_PERMISSION_CONFIG_VERSION = "2026-06-30.0";
 
 const PERMISSION_VERSION_STORAGE_KEY = `${PERMISSION_STORAGE_KEY}_version`;
 const ACTION_PERMISSION_VERSION_STORAGE_KEY = `${ACTION_PERMISSION_STORAGE_KEY}_version`;
+
+export const ROLE_LABELS = {
+  ADMIN: "ผู้ดูแลระบบ",
+  STAFF: "เจ้าหน้าที่",
+  DEPARTMENT_HEAD: "หัวหน้าฝ่าย",
+  DRIVER: "พนักงานขับรถ",
+  USER: "ผู้ใช้งานทั่วไป",
+};
+
+export const ROLE_OPTIONS = [
+  { value: "USER", label: ROLE_LABELS.USER },
+  { value: "DEPARTMENT_HEAD", label: ROLE_LABELS.DEPARTMENT_HEAD },
+  { value: "STAFF", label: ROLE_LABELS.STAFF },
+  { value: "DRIVER", label: ROLE_LABELS.DRIVER },
+  { value: "ADMIN", label: ROLE_LABELS.ADMIN },
+];
 
 export const PERMISSION_ITEMS = [
   { id: "admin_dashboard", label: "Admin Dashboard", pages: ["admin"] },
@@ -44,6 +60,16 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     "vehicle-management",
     "booking-cancellation-history",
   ],
+  DEPARTMENT_HEAD: [
+    "dashboard",
+    "booking-list",
+    "user-profile",
+    "calendar",
+    "driver-summary",
+    "driver-unavailable-logs",
+    "driver-queue-logs",
+    "booking-cancellation-history",
+  ],
   USER: ["booking-list", "user-profile", "calendar"],
   DRIVER: [
     "booking-list",
@@ -59,12 +85,21 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 
 export const ACTION_PERMISSION_GROUPS = [
   {
+    id: "dashboard",
+    label: "Dashboard",
+    permissions: [
+      { id: "dashboard_view", label: "ดู Dashboard" },
+    ],
+  },
+  {
     id: "bookings",
     label: "รายการจอง",
     permissions: [
       { id: "bookings_view", label: "ดูรายการจอง" },
+      { id: "bookings_view_all", label: "ดูรายการจองทั้งหมด" },
       { id: "bookings_detail", label: "ดูรายละเอียดรายการจอง" },
       { id: "bookings_create", label: "สร้างรายการจอง" },
+      { id: "bookings_export", label: "ส่งออกรายการจอง" },
       { id: "bookings_create_backdated", label: "เห็น checkbox บันทึกรายการย้อนหลัง" },
       { id: "bookings_backdate_complete", label: "บันทึกงานย้อนหลัง" },
       { id: "bookings_complete_on_behalf", label: "ปิดงานแทนคนขับ" },
@@ -110,6 +145,11 @@ export const ACTION_PERMISSION_GROUPS = [
     label: "รายงาน",
     permissions: [
       { id: "driver_summary_view", label: "ดูสรุปงานคนขับ" },
+      { id: "driver_summary_export", label: "ส่งออกสรุปงานคนขับ" },
+      { id: "booking_cancellation_history_view", label: "ดูประวัติรายการยกเลิก" },
+      { id: "booking_cancellation_history_export", label: "ส่งออกประวัติรายการยกเลิก" },
+      { id: "driver_queue_logs_export", label: "ส่งออกประวัติคิวคนขับ" },
+      { id: "driver_unavailable_logs_export", label: "ส่งออกประวัติแจ้งข้อมูลการปฏิบัติงาน" },
       { id: "driver_summary_cards_scope", label: "ขอบเขตการเห็นกล่องสรุปคนขับ" },
     ],
   },
@@ -172,10 +212,13 @@ export const ACTION_PERMISSION_ITEMS = ACTION_PERMISSION_GROUPS.flatMap((group) 
 export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
   ADMIN: ACTION_PERMISSION_ITEMS.map((item) => item.id),
   STAFF: [
+    "dashboard_view",
     "bookings_view",
+    "bookings_view_all",
     "bookings_detail",
     "bookings_edit",
     "bookings_create",
+    "bookings_export",
     "bookings_create_backdated",
     "bookings_backdate_complete",
     "bookings_approve",
@@ -189,6 +232,9 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "vehicles_edit",
     "vehicles_delete",
     "driver_summary_view",
+    "driver_summary_export",
+    "booking_cancellation_history_view",
+    "booking_cancellation_history_export",
     "driver_jobs_view",
     "drivers_create",
     "drivers_edit",
@@ -203,17 +249,39 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
     "driver_unavailable_edit",
     "driver_unavailable_cancel",
     "driver_unavailable_logs_view",
+    "driver_unavailable_logs_export",
     "driver_queue_view",
     "driver_queue_manage",
     "driver_queue_logs_view",
+    "driver_queue_logs_export",
     "driver_queue_reset",
     "booking_manual_driver_override",
     "bookings_complete_on_behalf",
   ],
+  DEPARTMENT_HEAD: [
+    "dashboard_view",
+    "bookings_view",
+    "bookings_view_all",
+    "bookings_detail",
+    "bookings_export",
+    "driver_summary_view",
+    "driver_summary_export",
+    "driver_summary_cards_scope",
+    "booking_cancellation_history_view",
+    "booking_cancellation_history_export",
+    "calendar_active_drivers_view",
+    "calendar_next_queue_driver_view",
+    "driver_unavailable_logs_view",
+    "driver_unavailable_logs_export",
+    "driver_queue_logs_view",
+    "driver_queue_logs_export",
+  ],
   USER: [
     "bookings_view",
+    "bookings_view_all",
     "bookings_detail",
     "bookings_create",
+    "bookings_export",
     "bookings_edit",
     "bookings_cancel",
     "driver_jobs_complete",
@@ -224,9 +292,12 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
   ],
   DRIVER: [
     "bookings_view",
+    "bookings_view_all",
     "bookings_detail",
+    "bookings_export",
     "vehicles_view",
     "driver_summary_view",
+    "driver_summary_export",
     "driver_jobs_view",
     "driver_jobs_start",
     "driver_jobs_complete",
@@ -241,11 +312,11 @@ export const DEFAULT_ROLE_ACTION_PERMISSIONS = {
 };
 
 const PAGE_ACTION_REQUIREMENTS = {
-  dashboard: [],
+  dashboard: ["dashboard_view"],
   cars: ["vehicles_view"],
-  booking: ["bookings_view", "bookings_create"],
+  booking: ["bookings_view", "bookings_view_all", "bookings_create"],
   profile: [],
-  "booking-cancellation-history": ["bookings_view"],
+  "booking-cancellation-history": ["booking_cancellation_history_view"],
   staff: ["bookings_view", "bookings_approve"],
   calendar: ["bookings_view"],
   "driver-summary": ["driver_summary_view"],
@@ -363,6 +434,7 @@ export const DRIVER_SUMMARY_CARD_SCOPE_STORAGE_KEY = "odc_driver_summary_card_sc
 export const DEFAULT_DRIVER_SUMMARY_CARD_SCOPE = {
   ADMIN: "ALL",
   STAFF: "ALL",
+  DEPARTMENT_HEAD: "ALL",
   USER: "NONE",
   DRIVER: "SELF",
 };
@@ -426,7 +498,11 @@ export function saveDriverSummaryCardScopeConfig(config) {
 export function getDriverSummaryCardScope(role, config = loadDriverSummaryCardScopeConfig()) {
   const normalizedRole = normalizeRole(role);
 
-  if (normalizedRole === "ADMIN" || normalizedRole === "STAFF") {
+  if (
+    normalizedRole === "ADMIN" ||
+    normalizedRole === "STAFF" ||
+    normalizedRole === "DEPARTMENT_HEAD"
+  ) {
     return "ALL";
   }
 
@@ -469,6 +545,11 @@ export function hasPermission(userOrRole, permissionId, config = loadActionPermi
 }
 
 export const can = hasPermission;
+
+export function getRoleLabel(role) {
+  const normalizedRole = normalizeRole(role);
+  return ROLE_LABELS[normalizedRole] || (String(role || "-").trim() || "-");
+}
 
 // TODO: These action permissions are frontend-only until the API has a trusted
 // auth token/session and can validate role permissions server-side.

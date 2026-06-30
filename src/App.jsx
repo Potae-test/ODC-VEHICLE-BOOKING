@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import {
   canAccessPage,
   getFirstAllowedPage,
+  getRoleLabel,
   loadPermissionConfig,
   normalizeRole,
 } from "./permissions";
@@ -187,6 +188,9 @@ function getUserAvatarInitial(name) {
 }
 
 function getUserRoleLabel(role) {
+  const mappedLabel = getRoleLabel(role);
+  if (mappedLabel !== (String(role || "-").trim() || "-")) return mappedLabel;
+
   const normalizedRole = normalizeRole(role);
 
   if (normalizedRole === "ADMIN") return "ผู้ดูแลระบบ";
@@ -222,6 +226,7 @@ function getDefaultPageByRole(role) {
   const normalizedRole = normalizeRole(role);
 
   if (normalizedRole === "ADMIN") return "admin";
+  if (normalizedRole === "DEPARTMENT_HEAD") return "dashboard";
   if (normalizedRole === "STAFF") return "booking";
   if (normalizedRole === "DRIVER") return "driver-jobs";
   if (normalizedRole === "USER") return "calendar";
@@ -316,15 +321,17 @@ export default function App() {
     const pathPage = getPageFromPath(window.location.pathname);
 
     if (pathPage === "admin" && currentRole !== "ADMIN") {
-      window.history.replaceState({}, "", "/staff");
-      setPage("staff");
+      const fallbackPage =
+        getFirstAllowedPage(currentRole, permissionConfig) || getDefaultPageByRole(currentRole) || "booking";
+      window.history.replaceState({}, "", getPathByPage(fallbackPage));
+      setPage(fallbackPage);
       return;
     }
 
     if (pathPage === "admin" && currentRole === "ADMIN") {
       setPage("admin");
     }
-  }, [user]);
+  }, [permissionConfig, user]);
 
   useEffect(() => {
     function refreshPermissions() {

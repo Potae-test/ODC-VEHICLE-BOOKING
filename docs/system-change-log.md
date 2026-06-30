@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-06-30
+- Updated `docs/domain-rules.md`, `src/permissions.js`, `src/App.jsx`, `src/pages/Admin.jsx`, `src/pages/Booking.jsx`, `src/pages/DriverSummary.jsx`, `src/pages/BookingCancellationHistory.jsx`, and `apps-script/code.gs` so the new `DEPARTMENT_HEAD` role (`หัวหน้าฝ่าย`) is available in default menu/action permissions, Admin role selectors and permission matrices, sidebar/default-page routing, and report export gating with dashboard/report visibility by default while keeping operational staff actions, admin-management access, and existing unknown-role fallback behavior unchanged.
+
 ## 2026-06-20
 - Updated `src/pages/DriverUnavailable.jsx` and `src/App.css` again so the mobile-only `รายการแจ้งไม่รับงาน` accordion rows now read more like the DriverJobs mobile cards by prioritizing driver name plus reason, moving start/end datetime into their own readable rows, and keeping compact type/status badges with the same expand/collapse behavior and desktop layout unchanged.
 - Updated `src/pages/DriverUnavailable.jsx` and `src/App.css` so the mobile-only DriverUnavailable accordion cards keep the same expand/collapse structure and content but now use a lighter high-contrast card surface, clearer compact type/status badges, and a more readable expanded detail area without affecting desktop layout or unavailable business logic.

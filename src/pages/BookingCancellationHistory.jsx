@@ -203,7 +203,8 @@ export default function BookingCancellationHistory() {
     cancelled_by: "",
   });
 
-  const canViewHistory = hasPermission(null, "bookings_view");
+  const canViewHistory = hasPermission(null, "booking_cancellation_history_view");
+  const canExportHistory = hasPermission(null, "booking_cancellation_history_export");
   const currentRole = useMemo(() => {
     try {
       const savedUser = JSON.parse(localStorage.getItem("odc_user") || "null");
@@ -403,15 +404,17 @@ export default function BookingCancellationHistory() {
               <span>รีเฟรช</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              disabled={filteredHistory.length === 0}
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-600 px-3 text-[14px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-            >
-              <ExportIcon className="h-4 w-4" />
-              <span>Export Excel</span>
-            </button>
+            {canExportHistory && (
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={filteredHistory.length === 0}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-600 px-3 text-[14px] font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+              >
+                <ExportIcon className="h-4 w-4" />
+                <span>Export Excel</span>
+              </button>
+            )}
           </div>
         </div>
         </section>
@@ -616,15 +619,17 @@ export default function BookingCancellationHistory() {
                     <span>รีเฟรช</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleExportExcel}
-                    disabled={filteredHistory.length === 0}
-                    className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <ExportIcon className="h-4 w-4" />
-                    <span>Export</span>
-                  </button>
+                  {canExportHistory && (
+                    <button
+                      type="button"
+                      onClick={handleExportExcel}
+                      disabled={filteredHistory.length === 0}
+                      className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <ExportIcon className="h-4 w-4" />
+                      <span>Export</span>
+                    </button>
+                  )}
                 </>
               }
             />

@@ -542,6 +542,7 @@ export default function DriverSummary() {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [tablePage, setTablePage] = useState(1);
   const canViewDriverSummary = hasPermission(null, "driver_summary_view");
+  const canExportDriverSummary = hasPermission(null, "driver_summary_export");
   const visibleLoading = useMinimumLoading(loading, 350);
 
   const loadData = useCallback(async (options = {}) => {
@@ -839,14 +840,16 @@ export default function DriverSummary() {
           </div>
 
           <div className="section-toolbar gap-3">
-            <button
-              type="button"
-              className="warning-button"
-              disabled={visibleDriverRows.length === 0}
-              onClick={handleExportExcel}
-            >
-              Export Excel
-            </button>
+            {canExportDriverSummary && (
+              <button
+                type="button"
+                className="warning-button"
+                disabled={visibleDriverRows.length === 0}
+                onClick={handleExportExcel}
+              >
+                Export Excel
+              </button>
+            )}
             <button type="button" disabled={refreshing || loading} onClick={() => loadData({ refreshOnly: true })}>
               รีเฟรชข้อมูล
             </button>
@@ -949,9 +952,11 @@ export default function DriverSummary() {
                 {selectedRange.label}: {formatThaiDateTime(selectedRange.start)} - {formatThaiDateTime(selectedRange.end)}
               </div>
             </div>
-            <button type="button" className="success-button" disabled={visibleDriverRows.length === 0} onClick={handleExportExcel}>
-              Export Excel
-            </button>
+            {canExportDriverSummary && (
+              <button type="button" className="success-button" disabled={visibleDriverRows.length === 0} onClick={handleExportExcel}>
+                Export Excel
+              </button>
+            )}
           </div>
 
           {visibleLoading && <PageSkeleton />}
@@ -1027,15 +1032,17 @@ export default function DriverSummary() {
                   <RefreshIcon className="h-4 w-4" />
                   <span>รีเฟรช</span>
                 </button>
-                <button
-                  type="button"
-                  className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={visibleDriverRows.length === 0}
-                  onClick={handleExportExcel}
-                >
-                  <ExportIcon className="h-4 w-4" />
-                  <span>Export</span>
-                </button>
+                {canExportDriverSummary && (
+                  <button
+                    type="button"
+                    className="mobile-action-button inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-600 shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={visibleDriverRows.length === 0}
+                    onClick={handleExportExcel}
+                  >
+                    <ExportIcon className="h-4 w-4" />
+                    <span>Export</span>
+                  </button>
+                )}
               </>
             }
           />

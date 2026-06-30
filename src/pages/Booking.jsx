@@ -2252,6 +2252,7 @@ export default function Booking() {
   const canCreateBookings = hasPermission(null, "bookings_create");
   const canViewBookings = hasPermission(null, "bookings_view");
   const canViewBookingDetail = hasPermission(null, "bookings_detail");
+  const canExportBookings = hasPermission(null, "bookings_export");
   const canProcessBookings = hasPermission(null, "bookings_approve");
   const canCancelBookings = hasPermission(null, "bookings_cancel");
   const canEditBookings = hasPermission(null, "bookings_edit");
@@ -3842,7 +3843,7 @@ export default function Booking() {
                 <FilterIcon className="booking-mobile-toolbar-icon" />
               </button>
             )}
-            {canViewBookings && (
+            {canViewBookings && canExportBookings && (
              <button
                     type="button"
                     className="booking-mobile-icon-button"
@@ -3977,15 +3978,17 @@ export default function Booking() {
             </div>
 
             <div className="booking-create-wrapper">
-              <button
-                type="button"
-                className="booking-toolbar-button success-button"
-                disabled={filteredBookings.length === 0}
-                onClick={handleExportBookingExcel}
-              >
-                <FileExportIcon className="booking-toolbar-button-icon" />
-                <span>Export Excel</span>
-              </button>
+              {canExportBookings && (
+                <button
+                  type="button"
+                  className="booking-toolbar-button success-button"
+                  disabled={filteredBookings.length === 0}
+                  onClick={handleExportBookingExcel}
+                >
+                  <FileExportIcon className="booking-toolbar-button-icon" />
+                  <span>Export Excel</span>
+                </button>
+              )}
               {canCreateBookings && (
                 <button
                   type="button"

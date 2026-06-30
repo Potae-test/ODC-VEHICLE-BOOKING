@@ -31,6 +31,8 @@ import {
   DEFAULT_DRIVER_SUMMARY_CARD_SCOPE,
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_ITEMS,
+  ROLE_OPTIONS,
+  getRoleLabel,
   hasPermission,
   loadDriverSummaryCardScopeConfig,
   loadActionPermissionConfig,
@@ -120,6 +122,12 @@ function renderDriverOptions(drivers, selectedDriverId = "") {
       return `<option value="${escapeHtml(driverId)}" ${driverId === selectedDriverId ? "selected" : ""}>${escapeHtml(driverId)} - ${escapeHtml(name)}</option>`;
     })
     .join("");
+}
+
+function renderRoleOptions(selectedRole = "") {
+  return ROLE_OPTIONS.map(({ value, label }) => (
+    `<option value="${escapeHtml(value)}" ${normalizeRole(selectedRole) === value ? "selected" : ""}>${escapeHtml(value)} - ${escapeHtml(label)}</option>`
+  )).join("");
 }
 
 function getActionPermissionGroups() {
@@ -544,10 +552,7 @@ export default function Admin() {
 
           <label>Role</label>
           <select id="user_role" class="swal2-select">
-            <option value="USER" ${normalizeRole(u.role) === "USER" ? "selected" : ""}>USER</option>
-            <option value="STAFF" ${normalizeRole(u.role) === "STAFF" ? "selected" : ""}>STAFF</option>
-            <option value="DRIVER" ${normalizeRole(u.role) === "DRIVER" ? "selected" : ""}>DRIVER</option>
-            <option value="ADMIN" ${normalizeRole(u.role) === "ADMIN" ? "selected" : ""}>ADMIN</option>
+            ${renderRoleOptions(u.role)}
           </select>
 
           <label>สถานะ</label>
@@ -628,10 +633,7 @@ async function handleOpenCreateUser() {
 
         <label>Role</label>
         <select id="user_role" class="swal2-select">
-          <option value="USER">USER</option>
-          <option value="STAFF">STAFF</option>
-          <option value="DRIVER">DRIVER</option>
-          <option value="ADMIN">ADMIN</option>
+          ${renderRoleOptions("USER")}
         </select>
 
         <label>สถานะ</label>
@@ -821,13 +823,24 @@ async function handleOpenCreateUser() {
   );
 
   const permissionRoles = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...Object.keys(DEFAULT_ROLE_PERMISSIONS),
-          ...users.map((u) => normalizeRole(u.role)).filter(Boolean),
-        ])
-      ),
+    () => {
+      const roleSet = new Set([
+        ...Object.keys(DEFAULT_ROLE_PERMISSIONS),
+        ...users.map((u) => normalizeRole(u.role)).filter(Boolean),
+      ]);
+      const preferredOrder = [
+        "ADMIN",
+        "STAFF",
+        "DEPARTMENT_HEAD",
+        "USER",
+        "DRIVER",
+      ];
+
+      return [
+        ...preferredOrder.filter((role) => roleSet.has(role)),
+        ...Array.from(roleSet).filter((role) => !preferredOrder.includes(role)),
+      ];
+    },
     [users]
   );
 
@@ -1630,7 +1643,8 @@ async function handleDeleteVehicle(vehicle) {
               {permissionRoles.map((role) => (
                 <tr key={role}>
                   <td>
-                    <b>{role}</b>
+                    <b>{getRoleLabel(role)}</b>
+                    <div className="text-xs text-slate-500">{role}</div>
                     {role === "ADMIN" && <span className="permission-note">เห็นทุกเมนูเสมอ</span>}
                   </td>
                   {PERMISSION_ITEMS.map((permission) => (
@@ -1656,7 +1670,8 @@ async function handleDeleteVehicle(vehicle) {
             <div key={role} className="mobile-data-card admin-permission-card">
               <div className="mobile-data-card-header">
                 <div>
-                  <h3>{role}</h3>
+                  <h3>{getRoleLabel(role)}</h3>
+                  <div className="text-xs text-slate-500">{role}</div>
                   {role === "ADMIN" && <span className="permission-note">เห็นทุกเมนูเสมอ</span>}
                 </div>
               </div>
@@ -1690,7 +1705,7 @@ async function handleDeleteVehicle(vehicle) {
             >
               {permissionRoles.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {role} - {getRoleLabel(role)}
                 </option>
               ))}
             </select>
@@ -1760,7 +1775,10 @@ async function handleDeleteVehicle(vehicle) {
               <tbody>
                 {Object.keys(DEFAULT_DRIVER_SUMMARY_CARD_SCOPE).map((role) => (
                   <tr key={role}>
-                    <td>{role}</td>
+                    <td>
+                      <div>{getRoleLabel(role)}</div>
+                      <div className="text-xs text-slate-500">{role}</div>
+                    </td>
                     <td>
                       <select
                         value={driverSummaryCardScopeConfig[role] || "NONE"}
@@ -1783,7 +1801,8 @@ async function handleDeleteVehicle(vehicle) {
               <div key={role} className="mobile-data-card admin-summary-scope-card">
                 <div className="mobile-data-card-header">
                   <div>
-                    <h3>{role}</h3>
+                    <h3>{getRoleLabel(role)}</h3>
+                    <div className="text-xs text-slate-500">{role}</div>
                   </div>
                 </div>
                 <div className="admin-summary-scope-control">
@@ -2110,7 +2129,7 @@ async function handleDeleteVehicle(vehicle) {
                 <td>{u.user_id}</td>
                 <td>{u.name}</td>
                 <td>{u.email}</td>
-                <td>{u.role}</td>
+                <td>{`${u.role || "-"}${u.role ? ` - ${getRoleLabel(u.role)}` : ""}`}</td>
                 <td>{u.status}</td>
                 <td className="action-buttons">
                   {canEditUsers && (
@@ -2181,7 +2200,7 @@ async function handleDeleteVehicle(vehicle) {
                   </div>
                   <div>
                     <span>Role</span>
-                    <b>{u.role || "-"}</b>
+                    <b>{`${u.role || "-"}${u.role ? ` - ${getRoleLabel(u.role)}` : ""}`}</b>
                   </div>
                 </div>
 

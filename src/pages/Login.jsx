@@ -58,6 +58,7 @@ export default function Login({ onLogin }) {
 
         <div className="login-help">
           <b>ทดสอบ:</b><br />
+          head pass: 1234<br />
           staff pass: 1234<br />
           user pass: 1234<br />
           driver1 pass: 1234<br />
