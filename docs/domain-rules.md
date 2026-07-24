@@ -63,6 +63,7 @@ Read this file before changing booking logic, driver assignment, permissions, ca
 - Permissions are managed centrally.
 - Add new permissions to the admin management UI.
 - Check permissions before rendering actions.
+- Self-service profile edits may update only the current authenticated user's `name`, `department`, `phone`, and login `username`; `user_id`, `role`, `status`, and `permissions` remain system-controlled and must not be writable through profile APIs.
 - `DEPARTMENT_HEAD` is a read/report role for department heads. By default it may access Dashboard, booking/calendar visibility, driver-summary and history/log report pages, plus related export actions, but it must not receive operational booking approval, driver reassignment, cancellation, queue management, central-vehicle assignment, backdated completion, or admin-management write actions unless explicitly granted.
 - `bookings_assign_central_vehicle` defaults to `ADMIN` and `STAFF` only.
 - `bookings_assign_central_vehicle` and `bookings_backdate_complete` are action permissions and must not be hard-coded to UI roles.

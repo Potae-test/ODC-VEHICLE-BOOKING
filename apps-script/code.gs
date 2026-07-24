@@ -332,6 +332,28 @@ function doPost(e) {
       if (denied) return denied;
       return resetUserPassword(body.data);
     }
+    if (action === "updateMyProfile") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
+      return updateMyProfile(body.data);
+    }
+    if (action === "changeMyPassword") {
+      var trusted = applyTrustedSession_(body.data);
+      if (!trusted.ok) {
+        return jsonOutput({
+          success: false,
+          message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่"
+        });
+      }
+      body.data = trusted.data;
+      return changeMyPassword(body.data);
+    }
     if (action === "updateVehicle") {
       var trusted = applyTrustedSession_(body.data);
       if (!trusted.ok) {
@@ -6245,38 +6267,70 @@ function ensureClearOldNotificationsDailyTrigger() {
 
 function sendBookingReminderNotifications1Hour(data) {
   try {
-    return withNotificationsLock_(function () {
+    const result = withNotificationsLock_(function () {
       const sheet = ensureBookingsSheet();
       const table = readSheetTable(sheet);
       const headers = table.headers;
       const bookings = rowsToObjects(headers, table.rows);
       const now = new Date();
-      const actor = String(data && (data.created_by || data.updated_by || "SYSTEM") || "SYSTEM").trim() || "SYSTEM";
-      const initialCreatedCount = getCreatedNotifications_().length;
+
+      const actor = String(
+        (data && (data.created_by || data.updated_by)) || "SYSTEM"
+      ).trim() || "SYSTEM";
+
+      const initialCreatedNotifications = getCreatedNotifications_();
+      const initialCreatedCount = Array.isArray(initialCreatedNotifications)
+        ? initialCreatedNotifications.length
+        : 0;
 
       bookings.forEach((booking) => {
-        const status = String(booking.status || "").trim().toUpperCase();
+        const status = String(booking.status || "")
+          .trim()
+          .toUpperCase();
+
         if (status !== "APPROVED") return;
 
         const bookingId = String(booking.booking_id || "").trim();
         const destination = String(booking.destination || "").trim();
-        const startDatetime = booking.start_datetime ? new Date(booking.start_datetime) : null;
-        if (!bookingId || !destination || !startDatetime || Number.isNaN(startDatetime.getTime())) {
+
+        const startDatetime = booking.start_datetime
+          ? new Date(booking.start_datetime)
+          : null;
+
+        if (
+          !bookingId ||
+          !destination ||
+          !startDatetime ||
+          Number.isNaN(startDatetime.getTime())
+        ) {
           return;
         }
 
         const diffMs = startDatetime.getTime() - now.getTime();
+
         if (diffMs <= 0 || diffMs > 60 * 60 * 1000) {
           return;
         }
 
-        const message = `ปลายทาง: ${destination} | เวลาไป: ${formatThaiNotificationDateTime_(booking.start_datetime || "") || "-"}`;
+        const message =
+          `ปลายทาง: ${destination} | ` +
+          `เวลาไป: ${
+            formatThaiNotificationDateTime_(
+              booking.start_datetime || ""
+            ) || "-"
+          }`;
+
         const payload = buildNotificationPayloadFromBooking_(booking, {
           reminder_key: `${bookingId}|BOOKING_REMINDER_1H`,
           status,
         });
-        const requesterUserId = resolveRequesterNotificationUserId_(booking);
-        const assignedUserId = String(booking.assigned_user_id || "").trim();
+
+        const requesterUserId =
+          resolveRequesterNotificationUserId_(booking);
+
+        const assignedUserId = String(
+          booking.assigned_user_id || ""
+        ).trim();
 
         if (requesterUserId) {
           appendNotificationRecordCore_({
@@ -6309,26 +6363,50 @@ function sendBookingReminderNotifications1Hour(data) {
         }
       });
 
-      const createdCount = Math.max(0, getCreatedNotifications_().length - initialCreatedCount);
+      const finalCreatedNotifications = getCreatedNotifications_();
+      const finalCreatedCount = Array.isArray(finalCreatedNotifications)
+        ? finalCreatedNotifications.length
+        : 0;
 
-      return jsonOutput({
+      return {
         success: true,
         message: "Booking reminder notification run completed",
-        created_notifications: getCreatedNotifications_(),
-        created_count: createdCount,
-      });
-    }, { label: "sendBookingReminderNotifications1Hour" });
+        created_notifications: finalCreatedNotifications,
+        created_count: Math.max(
+          0,
+          finalCreatedCount - initialCreatedCount
+        ),
+      };
+    }, {
+      label: "sendBookingReminderNotifications1Hour",
+    });
+
+    console.log(
+      "[trigger] sendBookingReminderNotifications1Hour completed",
+      result
+    );
+
+    return result;
   } catch (err) {
-    console.error("[trigger] sendBookingReminderNotifications1Hour failed", {
-      message: String(err && err.message ? err.message : err),
-      stack: err && err.stack ? String(err.stack) : "",
-    });
-    return jsonOutput({
+    const errorMessage = String(
+      err && err.message ? err.message : err
+    );
+
+    console.error(
+      "[trigger] sendBookingReminderNotifications1Hour failed",
+      {
+        message: errorMessage,
+        stack: err && err.stack ? String(err.stack) : "",
+      }
+    );
+
+    // ห้ามเรียก Sheet, Notification หรือ jsonOutput ซ้ำใน catch
+    return {
       success: false,
-      message: String(err && err.message ? err.message : err),
-      created_notifications: getCreatedNotifications_(),
+      message: errorMessage,
+      created_notifications: [],
       created_count: 0,
-    });
+    };
   }
 }
 
@@ -8340,15 +8418,52 @@ function buildUsersResponse_() {
     return { success: true, total: 0, data: [] };
   }
 
-  const data = rowsToObjects(headers, rows).map((obj) => {
-    const next = { ...obj };
-    delete next.driver_id;
-    delete next.driver_name;
-    next.password = "********";
-    return next;
-  });
+  const data = rows.map((row) => buildUserResponseData_(headers, row));
 
   return { success: true, total: data.length, data };
+}
+
+function buildUserResponseData_(headers, rowValues) {
+  const user = {};
+
+  headers.forEach((header, index) => {
+    user[header] = rowValues[index];
+  });
+
+  delete user.driver_id;
+  delete user.driver_name;
+  user.password = "********";
+  user.username = String(user.email || "").trim();
+
+  return user;
+}
+
+function getUserSheetContextByUserId_(userId) {
+  const normalizedUserId = String(userId || "").trim();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Users");
+  const table = readSheetTable(sheet);
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const userIdCol = headers.indexOf("user_id");
+
+  if (!normalizedUserId || userIdCol === -1) {
+    return null;
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][userIdCol] || "").trim() === normalizedUserId) {
+      return {
+        sheet: sheet,
+        headers: headers,
+        rows: rows,
+        rowIndex: i,
+        rowNumber: i + 2,
+        rowValues: rows[i].slice(),
+      };
+    }
+  }
+
+  return null;
 }
 
 function getUsers(options) {
@@ -8461,6 +8576,115 @@ function resetUserPassword(data) {
   }
 
   return jsonOutput({ success: false, message: "User not found" });
+}
+
+function updateMyProfile(data) {
+  const trustedUserId = getTrustedCurrentUserId_(data);
+  const requestedUserId = String(data && data.user_id || "").trim();
+  const hasRestrictedFields =
+    data && (
+      data.role !== undefined ||
+      data.status !== undefined ||
+      data.permissions !== undefined
+    );
+
+  if (!trustedUserId) {
+    return jsonOutput({ success: false, message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่" });
+  }
+
+  if (requestedUserId && requestedUserId !== trustedUserId) {
+    return jsonOutput({ success: false, message: "ไม่มีสิทธิ์แก้ไขข้อมูลผู้ใช้งานนี้" });
+  }
+
+  if (hasRestrictedFields) {
+    return jsonOutput({ success: false, message: "ไม่อนุญาตให้แก้ไขข้อมูลระบบ" });
+  }
+
+  const userContext = getUserSheetContextByUserId_(trustedUserId);
+  if (!userContext) {
+    return jsonOutput({ success: false, message: "User not found" });
+  }
+
+  const username = String(data && (data.username !== undefined ? data.username : data.email) || "").trim();
+  const name = String(data && data.name || "").trim();
+  const department = String(data && data.department || "").trim();
+  const phone = String(data && data.phone || "").trim();
+
+  if (!name || !department || !phone || !username) {
+    return jsonOutput({
+      success: false,
+      message: "กรุณากรอกชื่อ หน่วยงาน เบอร์โทร และชื่อผู้ใช้งานให้ครบ"
+    });
+  }
+
+  const headers = userContext.headers;
+  const rowValues = userContext.rowValues.slice();
+  const nameCol = headers.indexOf("name");
+  const emailCol = headers.indexOf("email");
+  const departmentCol = headers.indexOf("department");
+  const phoneCol = headers.indexOf("phone");
+  const updatedAtCol = headers.indexOf("updated_at");
+
+  if (nameCol !== -1) rowValues[nameCol] = name;
+  if (emailCol !== -1) rowValues[emailCol] = username;
+  if (departmentCol !== -1) rowValues[departmentCol] = department;
+  if (phoneCol !== -1) rowValues[phoneCol] = phone;
+  if (updatedAtCol !== -1) rowValues[updatedAtCol] = new Date();
+
+  setRowValues(userContext.sheet, userContext.rowNumber, rowValues);
+  removeCache(MASTER_DATA_CACHE_KEYS_.users);
+
+  return jsonOutput({
+    success: true,
+    message: "Update my profile success",
+    data: buildUserResponseData_(headers, rowValues),
+  });
+}
+
+function changeMyPassword(data) {
+  const trustedUserId = getTrustedCurrentUserId_(data);
+  const requestedUserId = String(data && data.user_id || "").trim();
+
+  if (!trustedUserId) {
+    return jsonOutput({ success: false, message: "Session หมดอายุ กรุณาเข้าสู่ระบบใหม่" });
+  }
+
+  if (requestedUserId && requestedUserId !== trustedUserId) {
+    return jsonOutput({ success: false, message: "ไม่มีสิทธิ์เปลี่ยนรหัสผ่านผู้ใช้งานนี้" });
+  }
+
+  const userContext = getUserSheetContextByUserId_(trustedUserId);
+  if (!userContext) {
+    return jsonOutput({ success: false, message: "User not found" });
+  }
+
+  const nextPassword = String(
+    data && (data.new_password !== undefined ? data.new_password : data.password) || ""
+  ).trim();
+
+  if (!nextPassword) {
+    return jsonOutput({ success: false, message: "กรุณากรอกรหัสผ่านใหม่" });
+  }
+
+  const headers = userContext.headers;
+  const rowValues = userContext.rowValues.slice();
+  const passwordCol = ensureColumn(userContext.sheet, headers, "password");
+  const passwordHashCol = ensureColumn(userContext.sheet, headers, "password_hash");
+  const updatedAtCol = headers.indexOf("updated_at");
+
+  rowValues[passwordCol] = "HASHED";
+  rowValues[passwordHashCol] = hashPassword_(nextPassword);
+  if (updatedAtCol !== -1) {
+    rowValues[updatedAtCol] = new Date();
+  }
+
+  setRowValues(userContext.sheet, userContext.rowNumber, rowValues);
+  removeCache(MASTER_DATA_CACHE_KEYS_.users);
+
+  return jsonOutput({
+    success: true,
+    message: "Change my password success"
+  });
 }
 function updateVehicle(data) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Vehicles");

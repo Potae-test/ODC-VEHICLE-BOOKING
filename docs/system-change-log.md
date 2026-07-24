@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-07-24
+- Updated `docs/domain-rules.md`, `apps-script/code.gs`, `src/api.js`, and `src/pages/Profile.jsx` so profile self-service now uses dedicated `updateMyProfile` and `changeMyPassword` APIs that only act on the current authenticated user, allow editing only name/department/phone/login username, keep `user_id`/`role`/`status`/`permissions` system-controlled, refresh the stored frontend session user immediately after profile edits, and leave existing admin user-management `updateUser` / `resetUserPassword` behavior unchanged.
+
 ## 2026-06-30
 - Updated `docs/domain-rules.md`, `src/permissions.js`, `src/App.jsx`, `src/pages/Admin.jsx`, `src/pages/Booking.jsx`, `src/pages/DriverSummary.jsx`, `src/pages/BookingCancellationHistory.jsx`, and `apps-script/code.gs` so the new `DEPARTMENT_HEAD` role (`หัวหน้าฝ่าย`) is available in default menu/action permissions, Admin role selectors and permission matrices, sidebar/default-page routing, and report export gating with dashboard/report visibility by default while keeping operational staff actions, admin-management access, and existing unknown-role fallback behavior unchanged.
 

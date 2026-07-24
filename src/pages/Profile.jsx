@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from "react";
-import { resetUserPassword, updateUser } from "../api";
+import { useRef, useState } from "react";
+import { changeMyPassword, updateMyProfile } from "../api";
 import { showError, showSuccess } from "../utils/alert";
 import { persistStoredSessionUser } from "../utils/sessionTimeout";
 
@@ -21,7 +21,7 @@ function getProfileFormState(user) {
     name: String(profile.name || "").trim(),
     department: String(profile.department || "").trim(),
     phone: String(profile.phone || "").trim(),
-    email: String(profile.email || "").trim(),
+    username: String(profile.username || profile.email || "").trim(),
   };
 }
 
@@ -30,9 +30,13 @@ function normalizeSection(value) {
 }
 
 function buildUpdatedStoredUser(currentUser, nextProfile) {
+  const username = String(nextProfile.username || nextProfile.email || currentUser?.username || currentUser?.email || "").trim();
+
   return {
     ...(currentUser || {}),
     ...nextProfile,
+    username,
+    email: username,
     user_id: String(nextProfile.user_id || currentUser?.user_id || "").trim(),
     role: String(nextProfile.role || currentUser?.role || "").trim(),
     status: String(nextProfile.status || currentUser?.status || "").trim(),
@@ -55,11 +59,6 @@ export default function Profile({
   const [activeSection, setActiveSection] = useState(() => normalizeSection(initialSection));
   const profileSectionRef = useRef(null);
   const passwordSectionRef = useRef(null);
-
-  const supportsEditableEmail = useMemo(() => {
-    if (!storedUser) return false;
-    return Object.prototype.hasOwnProperty.call(storedUser, "email");
-  }, [storedUser]);
 
   function setProfileField(field, value) {
     setProfileForm((current) => ({
@@ -88,7 +87,7 @@ export default function Profile({
       return;
     }
 
-    if (supportsEditableEmail && !profileForm.email) {
+    if (!profileForm.username) {
       showError("กรุณากรอกอชื่อผู้ใช้งานเพื่อใช้เข้าสู่ระบบ");
       return;
     }
@@ -97,18 +96,15 @@ export default function Profile({
 
     try {
       const payload = {
-        user_id: profileForm.user_id,
-        role: profileForm.role,
-        status: profileForm.status,
         name: profileForm.name,
         department: profileForm.department,
         phone: profileForm.phone,
-        ...(supportsEditableEmail ? { email: profileForm.email } : {}),
+        username: profileForm.username,
       };
-      const updatedUser = await updateUser(payload);
+      const updatedUser = await updateMyProfile(payload);
       const nextStoredUser = buildUpdatedStoredUser(storedUser, {
-        ...payload,
         ...(updatedUser || {}),
+        ...payload,
       });
 
       persistStoredSessionUser(nextStoredUser);
@@ -143,9 +139,8 @@ export default function Profile({
     setSavingPassword(true);
 
     try {
-      await resetUserPassword({
-        user_id: profileForm.user_id,
-        password: passwordForm.password,
+      await changeMyPassword({
+        new_password: passwordForm.password,
       });
       setPasswordForm({
         password: "",
@@ -250,9 +245,8 @@ export default function Profile({
             <label className="profile-form-grid-full">
               ชื่อผู้ใช้งาน
               <input
-                value={profileForm.email}
-                onChange={(event) => setProfileField("email", event.target.value)}
-                readOnly={!supportsEditableEmail}
+                value={profileForm.username}
+                onChange={(event) => setProfileField("username", event.target.value)}
                 placeholder="ชื่อผู้ใช้งานเพื่อใช้เข้าสู่ระบบ"
               />
             </label>

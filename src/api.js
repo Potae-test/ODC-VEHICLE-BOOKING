@@ -1,5 +1,7 @@
 const API_BASE_URL = "https://odc-vehicle-api.kooysky.workers.dev";
 // const API_BASE_URL = "http://localhost:8787";
+const APPS_SCRIPT_API_URL =
+  "https://script.google.com/macros/s/AKfycbwqsGXCt7Ac0p92IFYFWndE8PY_-u1rmo8J7f7mMihYMKkVAub8jAOlbpLMCy0hah3A/exec";
 
 const API_CACHE_TTL_MS = 60000;
 const apiCache = new Map();
@@ -494,6 +496,25 @@ export async function completeBookingOnBehalf(payload) {
   return json;
 }
 
+async function postAppsScriptJson(action, payload = {}) {
+  const json = await fetchJson(APPS_SCRIPT_API_URL, {
+    method: "POST",
+    skipAuth: true,
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify({
+      action,
+      data: {
+        ...withCurrentUserMeta(payload),
+        session_token: getStoredSessionToken(),
+      },
+    }),
+  });
+
+  return json;
+}
+
 export async function driverCancelJob(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/bookings/driver-cancel-job`, {
     method: "POST",
@@ -907,12 +928,35 @@ export async function updateUser(data) {
   return json.data;
 }
 
+export async function updateMyProfile(data) {
+  const payload = {
+    name: data?.name ?? "",
+    department: data?.department ?? "",
+    phone: data?.phone ?? "",
+    username: data?.username ?? data?.email ?? "",
+  };
+  const json = await postAppsScriptJson("updateMyProfile", payload);
+
+  invalidateApiCache(["users"]);
+  return json.data;
+}
+
 export async function resetUserPassword(data) {
   const json = await fetchJson(`${API_BASE_URL}/api/users/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(withCurrentUserMeta(data)),
   });
+
+  invalidateApiCache(["users"]);
+  return json.data;
+}
+
+export async function changeMyPassword(data) {
+  const payload = {
+    new_password: data?.new_password ?? data?.password ?? "",
+  };
+  const json = await postAppsScriptJson("changeMyPassword", payload);
 
   invalidateApiCache(["users"]);
   return json.data;
