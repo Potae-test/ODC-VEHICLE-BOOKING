@@ -42,6 +42,29 @@ const CALENDAR_MESSAGES = {
   noEventsInRange: "ไม่มีรายการในช่วงนี้",
 };
 
+const CALENDAR_OPTIONAL_SOURCES = {
+  vehicles: {
+    label: "ข้อมูลรถ",
+    fallbackMessage: "ไม่สามารถโหลดข้อมูลรถได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+  },
+  users: {
+    label: "ข้อมูลผู้ใช้งาน",
+    fallbackMessage: "ไม่สามารถโหลดข้อมูลผู้ใช้งานได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+  },
+  holidays: {
+    label: "ข้อมูลวันหยุด",
+    fallbackMessage: "ไม่สามารถโหลดข้อมูลวันหยุดได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+  },
+  unavailable: {
+    label: "ข้อมูลไม่รับงานของ พขร.",
+    fallbackMessage: "ไม่สามารถโหลดข้อมูลไม่รับงานของ พขร. ได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+  },
+  queue: {
+    label: "ข้อมูลคิวคนขับ",
+    fallbackMessage: "ไม่สามารถโหลดข้อมูลคิวคนขับได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+  },
+};
+
 function CalendarIcon({ children, className = "h-5 w-5" }) {
   return (
     <span className={`inline-flex items-center justify-center ${className}`} aria-hidden="true">
@@ -782,6 +805,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [loadWarnings, setLoadWarnings] = useState([]);
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [calendarLang, setCalendarLang] = useState("th");
   const [isCompactMobileCalendar, setIsCompactMobileCalendar] = useState(() => {
@@ -958,34 +982,135 @@ export default function CalendarPage() {
         setLoading(true);
       }
       setError("");
+      setLoadWarnings([]);
 
-      const [bookingData, vehicleData, userData, holidayData, unavailableData, queueData] = await Promise.all([
-        getBookings(options.refreshOnly ? { fresh: true } : {}),
-        FEATURES.vehicleModule ? getVehicles() : Promise.resolve([]),
-        getUsers(),
-        getThaiHolidays(options.refreshOnly ? { fresh: true } : {}),
-        getDriverUnavailable(options.refreshOnly ? { fresh: true } : {}),
-        getDriverQueue(options.refreshOnly ? { fresh: true } : {}),
-      ]);
+      const bookingData = await getBookings({
+        ...(options.refreshOnly ? { fresh: true } : {}),
+        requestMeta: {
+          source: "calendar_bookings",
+          userMessage: "ไม่สามารถโหลดข้อมูลรายการจองได้ เนื่องจากเซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง",
+        },
+      });
 
       setBookings(Array.isArray(bookingData) ? bookingData : []);
-      setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
-      setUsers(Array.isArray(userData) ? userData : []);
-      setThaiHolidays(
-        Array.isArray(holidayData)
-          ? holidayData.filter((holiday) => normalizeStatus(holiday.status) !== "INACTIVE")
-          : []
-      );
-      setDriverUnavailableRecords(
-        Array.isArray(unavailableData)
-          ? unavailableData.filter((record) => normalizeStatus(record.status) === "ACTIVE")
-          : []
-      );
-      setDriverQueueRows(Array.isArray(queueData?.data) ? queueData.data : []);
-      setDriverQueueState(queueData?.state || null);
+
+      const optionalLoaders = [
+        {
+          key: "vehicles",
+          load: () =>
+            FEATURES.vehicleModule
+              ? getVehicles({
+                  ...(options.refreshOnly ? { fresh: true } : {}),
+                  requestMeta: {
+                    source: "calendar_vehicles",
+                    userMessage: CALENDAR_OPTIONAL_SOURCES.vehicles.fallbackMessage,
+                  },
+                })
+              : Promise.resolve([]),
+          apply: (vehicleData) => {
+            setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
+          },
+        },
+        {
+          key: "users",
+          load: () =>
+            getUsers({
+              ...(options.refreshOnly ? { fresh: true } : {}),
+              requestMeta: {
+                source: "calendar_users",
+                userMessage: CALENDAR_OPTIONAL_SOURCES.users.fallbackMessage,
+              },
+            }),
+          apply: (userData) => {
+            setUsers(Array.isArray(userData) ? userData : []);
+          },
+        },
+        {
+          key: "holidays",
+          load: () =>
+            getThaiHolidays({
+              ...(options.refreshOnly ? { fresh: true } : {}),
+              requestMeta: {
+                source: "calendar_holidays",
+                userMessage: CALENDAR_OPTIONAL_SOURCES.holidays.fallbackMessage,
+              },
+            }),
+          apply: (holidayData) => {
+            setThaiHolidays(
+              Array.isArray(holidayData)
+                ? holidayData.filter((holiday) => normalizeStatus(holiday.status) !== "INACTIVE")
+                : []
+            );
+          },
+        },
+        {
+          key: "unavailable",
+          load: () =>
+            getDriverUnavailable({
+              ...(options.refreshOnly ? { fresh: true } : {}),
+              requestMeta: {
+                source: "calendar_driver_unavailable",
+                userMessage: CALENDAR_OPTIONAL_SOURCES.unavailable.fallbackMessage,
+              },
+            }),
+          apply: (unavailableData) => {
+            setDriverUnavailableRecords(
+              Array.isArray(unavailableData)
+                ? unavailableData.filter((record) => normalizeStatus(record.status) === "ACTIVE")
+                : []
+            );
+          },
+        },
+        {
+          key: "queue",
+          load: () =>
+            getDriverQueue({
+              ...(options.refreshOnly ? { fresh: true } : {}),
+              requestMeta: {
+                source: "calendar_driver_queue",
+                userMessage: CALENDAR_OPTIONAL_SOURCES.queue.fallbackMessage,
+              },
+            }),
+          apply: (queueData) => {
+            setDriverQueueRows(Array.isArray(queueData?.data) ? queueData.data : []);
+            setDriverQueueState(queueData?.state || null);
+          },
+        },
+      ];
+
+      const optionalResults = await Promise.allSettled(optionalLoaders.map((entry) => entry.load()));
+      const warnings = [];
+
+      optionalResults.forEach((result, index) => {
+        const source = optionalLoaders[index];
+        const sourceMeta = CALENDAR_OPTIONAL_SOURCES[source.key];
+
+        if (result.status === "fulfilled") {
+          source.apply(result.value);
+          return;
+        }
+
+        source.apply(null);
+        const warningMessage = result.reason?.message || sourceMeta.fallbackMessage;
+        warnings.push({
+          key: source.key,
+          label: sourceMeta.label,
+          message: warningMessage,
+        });
+        console.error("[calendar] optional data source failed", {
+          source: source.key,
+          message: warningMessage,
+          action: result.reason?.action || "",
+          endpoint: result.reason?.endpoint || "",
+          status: result.reason?.status || 0,
+        });
+      });
+
+      setLoadWarnings(warnings);
     } catch (err) {
       const message = err.message || "โหลดข้อมูลไม่สำเร็จ";
       setError(message);
+      setLoadWarnings([]);
       setBookings([]);
       setVehicles([]);
       setUsers([]);
@@ -1505,6 +1630,15 @@ export default function CalendarPage() {
             {error && !visibleLoading && (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-3 text-[18px] font-bold text-red-700 sm:px-4 sm:py-4 sm:text-[23px]">
                 {error}
+              </div>
+            )}
+
+            {!visibleLoading && !error && loadWarnings.length > 0 && (
+              <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-[16px] text-amber-900 sm:px-4 sm:py-4 sm:text-[21px]">
+                <div className="font-bold">บางส่วนของข้อมูลเสริมไม่พร้อมใช้งาน</div>
+                <div className="mt-1">
+                  {loadWarnings.map((warning) => warning.message).join(" • ")}
+                </div>
               </div>
             )}
 

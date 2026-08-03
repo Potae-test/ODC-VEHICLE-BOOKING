@@ -4,7 +4,17 @@ const APPS_SCRIPT_API_URL =
   "https://script.google.com/macros/s/AKfycbwqsGXCt7Ac0p92IFYFWndE8PY_-u1rmo8J7f7mMihYMKkVAub8jAOlbpLMCy0hah3A/exec";
 
 const API_CACHE_TTL_MS = 60000;
+const READ_REQUEST_TIMEOUT_MS = 15000;
+const READ_REQUEST_MAX_RETRIES = 1;
 const apiCache = new Map();
+
+class ApiRequestError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = "ApiRequestError";
+    Object.assign(this, details);
+  }
+}
 
 function cloneData(value) {
   if (typeof structuredClone === "function") {
@@ -57,22 +67,245 @@ function getAuthHeaders(extraHeaders = {}) {
   };
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getSafeEndpointLabel(url) {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("script.google.com")) {
+      return "apps-script";
+    }
+    return parsedUrl.pathname || parsedUrl.hostname || "unknown-endpoint";
+  } catch {
+    return "unknown-endpoint";
+  }
+}
+
+function getResponsePreview(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
+
+function looksLikeHtmlBody(text, contentType) {
+  const normalizedText = String(text || "").trim().toLowerCase();
+  const normalizedType = String(contentType || "").toLowerCase();
+  return (
+    normalizedType.includes("text/html") ||
+    normalizedText.startsWith("<!doctype html") ||
+    normalizedText.startsWith("<html") ||
+    normalizedText.startsWith("<head") ||
+    normalizedText.startsWith("<body")
+  );
+}
+
+function buildRequestError({
+  requestMeta,
+  message,
+  status = 0,
+  contentType = "",
+  responsePreview = "",
+  bodyState = "unknown",
+  cause,
+  retryable = false,
+}) {
+  return new ApiRequestError(message, {
+    action: requestMeta?.action || "",
+    source: requestMeta?.source || "",
+    endpoint: requestMeta?.endpoint || "unknown-endpoint",
+    status,
+    contentType,
+    responsePreview,
+    bodyState,
+    retryable,
+    cause,
+  });
+}
+
+function getKnownRequestMessage(requestMeta, fallbackMessage) {
+  return String(requestMeta?.userMessage || fallbackMessage || "Request failed").trim();
+}
+
+function shouldRetryReadRequest(error, attempt, maxRetries) {
+  if (attempt >= maxRetries) return false;
+  return Boolean(error?.retryable);
+}
+
+function logApiDiagnostic(prefix, requestMeta, details = {}) {
+  console.error(prefix, {
+    action: requestMeta?.action || "",
+    source: requestMeta?.source || "",
+    endpoint: requestMeta?.endpoint || "unknown-endpoint",
+    status: details.status || 0,
+    contentType: details.contentType || "",
+    bodyState: details.bodyState || "unknown",
+    responsePreview: details.responsePreview || "",
+    error: details.error || "",
+  });
+}
+
 async function fetchJson(url, options) {
-  const { skipAuth, headers, ...fetchOptions } = options || {};
+  const {
+    skipAuth,
+    headers,
+    requestMeta,
+    readOnly,
+    retryCount,
+    timeoutMs,
+    ...fetchOptions
+  } = options || {};
   const mergedHeaders = skipAuth
     ? { ...(headers || {}) }
     : getAuthHeaders(headers || {});
-  const res = await fetch(url, {
-    ...fetchOptions,
-    headers: mergedHeaders,
-  });
-  const json = await res.json();
+  const method = String(fetchOptions.method || "GET").toUpperCase();
+  const isReadOnlyRequest = typeof readOnly === "boolean" ? readOnly : method === "GET" || method === "HEAD";
+  const maxRetries = isReadOnlyRequest ? retryCount ?? READ_REQUEST_MAX_RETRIES : 0;
+  const effectiveTimeoutMs = isReadOnlyRequest ? timeoutMs ?? READ_REQUEST_TIMEOUT_MS : 0;
+  const resolvedRequestMeta = {
+    action: requestMeta?.action || "",
+    source: requestMeta?.source || "",
+    userMessage: requestMeta?.userMessage || "",
+    endpoint: requestMeta?.endpoint || getSafeEndpointLabel(url),
+  };
 
-  if (!json.success) {
-    throw new Error(json.message || "Request failed");
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId =
+      effectiveTimeoutMs > 0
+        ? setTimeout(() => controller.abort(), effectiveTimeoutMs)
+        : null;
+
+    try {
+      const res = await fetch(url, {
+        ...fetchOptions,
+        headers: mergedHeaders,
+        signal: effectiveTimeoutMs > 0 ? controller.signal : fetchOptions.signal,
+      });
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text();
+      const preview = getResponsePreview(text);
+      const trimmedText = String(text || "").trim();
+
+      if (!trimmedText) {
+        throw buildRequestError({
+          requestMeta: resolvedRequestMeta,
+          message: getKnownRequestMessage(resolvedRequestMeta, "เซิร์ฟเวอร์ไม่ส่งข้อมูลกลับมา"),
+          status: res.status,
+          contentType,
+          responsePreview: preview,
+          bodyState: "empty",
+          retryable: isReadOnlyRequest,
+        });
+      }
+
+      if (looksLikeHtmlBody(trimmedText, contentType)) {
+        throw buildRequestError({
+          requestMeta: resolvedRequestMeta,
+          message: getKnownRequestMessage(resolvedRequestMeta, "เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง"),
+          status: res.status,
+          contentType,
+          responsePreview: preview,
+          bodyState: "html",
+        });
+      }
+
+      let json;
+      try {
+        json = JSON.parse(trimmedText);
+      } catch (error) {
+        throw buildRequestError({
+          requestMeta: resolvedRequestMeta,
+          message: getKnownRequestMessage(resolvedRequestMeta, "เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง"),
+          status: res.status,
+          contentType,
+          responsePreview: preview,
+          bodyState: "invalid-json",
+          cause: error,
+        });
+      }
+
+      if (!res.ok) {
+        throw buildRequestError({
+          requestMeta: resolvedRequestMeta,
+          message: getKnownRequestMessage(
+            resolvedRequestMeta,
+            json?.message || json?.error || `HTTP ${res.status}`
+          ),
+          status: res.status,
+          contentType,
+          responsePreview: preview,
+          bodyState: "json-error",
+          retryable: isReadOnlyRequest && [429, 502, 503, 504].includes(res.status),
+        });
+      }
+
+      if (!json.success) {
+        throw buildRequestError({
+          requestMeta: resolvedRequestMeta,
+          message: getKnownRequestMessage(resolvedRequestMeta, json.message || json.error || "Request failed"),
+          status: res.status,
+          contentType,
+          responsePreview: preview,
+          bodyState: "json-error",
+        });
+      }
+
+      return json;
+    } catch (error) {
+      const normalizedError =
+        error instanceof ApiRequestError
+          ? error
+          : buildRequestError({
+              requestMeta: resolvedRequestMeta,
+              message:
+                error?.name === "AbortError"
+                  ? getKnownRequestMessage(resolvedRequestMeta, "คำขอใช้เวลานานเกินกำหนด")
+                  : getKnownRequestMessage(resolvedRequestMeta, "ไม่สามารถติดต่อเซิร์ฟเวอร์ได้"),
+              bodyState: error?.name === "AbortError" ? "timeout" : "network-error",
+              retryable: isReadOnlyRequest,
+              cause: error,
+            });
+
+      if (shouldRetryReadRequest(normalizedError, attempt, maxRetries)) {
+        console.warn("[api] retrying read request", {
+          action: resolvedRequestMeta.action || "",
+          source: resolvedRequestMeta.source || "",
+          endpoint: resolvedRequestMeta.endpoint || "unknown-endpoint",
+          attempt: attempt + 1,
+          status: normalizedError.status || 0,
+          bodyState: normalizedError.bodyState || "unknown",
+        });
+        await delay(400 * (attempt + 1));
+        continue;
+      }
+
+      logApiDiagnostic("[api] request failed", resolvedRequestMeta, {
+        status: normalizedError.status,
+        contentType: normalizedError.contentType,
+        bodyState: normalizedError.bodyState,
+        responsePreview: normalizedError.responsePreview,
+        error: normalizedError.message,
+      });
+      throw normalizedError;
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
   }
 
-  return json;
+  throw buildRequestError({
+    requestMeta: {
+      action: requestMeta?.action || "",
+      source: requestMeta?.source || "",
+      endpoint: requestMeta?.endpoint || getSafeEndpointLabel(url),
+      userMessage: requestMeta?.userMessage || "",
+    },
+    message: getKnownRequestMessage(requestMeta, "Request failed"),
+  });
 }
 
 async function getCachedCollection(key, fetcher) {
@@ -115,6 +348,12 @@ async function getCachedCollection(key, fetcher) {
 
 async function apiRequest(action, options = {}) {
   const isDeletePayload = action.startsWith("delete") && options && !options.method;
+  const requestMeta = {
+    action,
+    source: options.requestMeta?.source || action,
+    userMessage: options.requestMeta?.userMessage || "",
+    endpoint: options.requestMeta?.endpoint || `/api/${action}`,
+  };
 
   if (options.method === "POST" || isDeletePayload) {
     const json = await fetchJson(`${API_BASE_URL}/api/${action}`, {
@@ -126,18 +365,29 @@ async function apiRequest(action, options = {}) {
         action,
         data: withCurrentUserMeta(options.body || options || {}),
       }),
+      requestMeta,
     });
 
     return json;
   }
 
   if (options.fresh) {
-    const json = await fetchJson(`${API_BASE_URL}/api/${action}?ts=${Date.now()}`);
+    const json = await fetchJson(`${API_BASE_URL}/api/${action}?ts=${Date.now()}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return json.data || [];
   }
 
   return getCachedCollection(action, async () => {
-    const json = await fetchJson(`${API_BASE_URL}/api/${action}`);
+    const json = await fetchJson(`${API_BASE_URL}/api/${action}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return json.data || [];
   });
 }
@@ -165,11 +415,15 @@ function toVehiclePayload(data = {}) {
 // VEHICLES
 // ---------------------
 
-export async function getVehicles() {
-  return getCachedCollection("vehicles", async () => {
-    const json = await fetchJson(`${API_BASE_URL}/api/vehicles`);
-
-    return (json.data || []).map((vehicle) => {
+export async function getVehicles(options = {}) {
+  const requestMeta = {
+    action: "vehicles",
+    source: options.requestMeta?.source || "vehicles",
+    userMessage: options.requestMeta?.userMessage || "",
+    endpoint: options.requestMeta?.endpoint || "/api/vehicles",
+  };
+  const mapVehicles = (items) =>
+    (items || []).map((vehicle) => {
       const vehicleName = vehicle.vehicle_name ?? vehicle.vehicle_code ?? "";
       const licensePlate = vehicle.license_plate ?? vehicle.plate_no ?? "";
       const note = vehicle.note ?? vehicle.driver_name ?? vehicle.next_booking ?? "";
@@ -184,6 +438,26 @@ export async function getVehicles() {
         driver_name: vehicle.driver_name ?? note,
       };
     });
+
+  if (options.fresh) {
+    const json = await fetchJson(`${API_BASE_URL}/api/vehicles?ts=${Date.now()}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
+    return mapVehicles(json.data || []);
+  }
+
+  return getCachedCollection("vehicles", async () => {
+    const json = await fetchJson(`${API_BASE_URL}/api/vehicles`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
+
+    return mapVehicles(json.data || []);
   });
 }
 
@@ -227,8 +501,19 @@ export async function deleteVehicle(vehicle_id) {
 // ---------------------
 
 export async function getBookings(options = {}) {
+  const requestMeta = {
+    action: "bookings",
+    source: options.requestMeta?.source || "bookings",
+    userMessage: options.requestMeta?.userMessage || "",
+    endpoint: options.requestMeta?.endpoint || "/api/bookings",
+  };
   if (options.fresh) {
-    const json = await fetchJson(`${API_BASE_URL}/api/bookings?ts=${Date.now()}`);
+    const json = await fetchJson(`${API_BASE_URL}/api/bookings?ts=${Date.now()}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return (json.data || []).map((booking) => ({
       ...booking,
       assigned_user_id: booking.assigned_user_id ?? booking.driver_id ?? "",
@@ -237,7 +522,12 @@ export async function getBookings(options = {}) {
   }
 
   return getCachedCollection("bookings", async () => {
-    const json = await fetchJson(`${API_BASE_URL}/api/bookings`);
+    const json = await fetchJson(`${API_BASE_URL}/api/bookings`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return (json.data || []).map((booking) => ({
       ...booking,
       assigned_user_id: booking.assigned_user_id ?? booking.driver_id ?? "",
@@ -672,8 +962,19 @@ export async function checkDriverUnavailable(data) {
 // ---------------------
 
 export async function getDriverQueue(options = {}) {
+  const requestMeta = {
+    action: "getDriverQueue",
+    source: options.requestMeta?.source || "driver_queue",
+    userMessage: options.requestMeta?.userMessage || "",
+    endpoint: options.requestMeta?.endpoint || "/api/getDriverQueue",
+  };
   if (options.fresh) {
-    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue?ts=${Date.now()}`);
+    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue?ts=${Date.now()}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return {
       data: json.data || [],
       state: json.state || null,
@@ -681,7 +982,12 @@ export async function getDriverQueue(options = {}) {
   }
 
   return getCachedCollection("getDriverQueue", async () => {
-    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue`);
+    const json = await fetchJson(`${API_BASE_URL}/api/getDriverQueue`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return {
       data: json.data || [],
       state: json.state || null,
@@ -895,13 +1201,29 @@ export async function deleteDriver(driver_id) {
 // ---------------------
 
 export async function getUsers(options = {}) {
+  const requestMeta = {
+    action: "users",
+    source: options.requestMeta?.source || "users",
+    userMessage: options.requestMeta?.userMessage || "",
+    endpoint: options.requestMeta?.endpoint || "/api/users",
+  };
   if (options.fresh) {
-    const json = await fetchJson(`${API_BASE_URL}/api/users?ts=${Date.now()}`);
+    const json = await fetchJson(`${API_BASE_URL}/api/users?ts=${Date.now()}`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return json.data || [];
   }
 
   return getCachedCollection("users", async () => {
-    const json = await fetchJson(`${API_BASE_URL}/api/users`);
+    const json = await fetchJson(`${API_BASE_URL}/api/users`, {
+      requestMeta,
+      readOnly: true,
+      retryCount: READ_REQUEST_MAX_RETRIES,
+      timeoutMs: READ_REQUEST_TIMEOUT_MS,
+    });
     return json.data || [];
   });
 }

@@ -220,17 +220,82 @@ function jsonResponse(payload: unknown, request: Request, status = 200) {
   });
 }
 
-async function fetchSheetJson(url: string, options?: RequestInit) {
-  const res = await fetch(url, options);
-  const text = await res.text();
+function getSafeBodyPreview(text: string) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
+}
 
+function looksLikeHtmlBody(text: string, contentType: string | null) {
+  const normalizedText = String(text || "").trim().toLowerCase();
+  const normalizedType = String(contentType || "").toLowerCase();
+  return (
+    normalizedType.includes("text/html") ||
+    normalizedText.startsWith("<!doctype html") ||
+    normalizedText.startsWith("<html") ||
+    normalizedText.startsWith("<head") ||
+    normalizedText.startsWith("<body")
+  );
+}
+
+async function fetchSheetJson(url: string, action: string, options?: RequestInit) {
   try {
-    return JSON.parse(text);
-  } catch {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get("content-type");
+    const text = await res.text();
+    const preview = getSafeBodyPreview(text);
+
+    if (!text.trim()) {
+      return {
+        success: false,
+        error: "Upstream returned an empty response",
+        message: "Apps Script returned an empty response",
+        action,
+        status: res.status || 502,
+        contentType: contentType || "",
+        body_state: "empty",
+        response_preview: preview,
+      };
+    }
+
+    if (looksLikeHtmlBody(text, contentType)) {
+      return {
+        success: false,
+        error: "Upstream returned HTML instead of JSON",
+        message: "Apps Script returned HTML instead of JSON",
+        action,
+        status: res.status || 502,
+        contentType: contentType || "",
+        body_state: "html",
+        response_preview: preview,
+      };
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {
+        success: false,
+        error: "Upstream returned invalid JSON",
+        message: "Apps Script returned invalid JSON",
+        action,
+        status: res.status || 502,
+        contentType: contentType || "",
+        body_state: "invalid-json",
+        response_preview: preview,
+      };
+    }
+  } catch (error) {
     return {
       success: false,
-      message: "Apps Script did not return valid JSON",
-      raw: text.slice(0, 500),
+      error: "Upstream request failed",
+      message: "Apps Script request failed",
+      action,
+      status: 502,
+      body_state: "network-error",
+      response_preview: "",
+      detail: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -246,11 +311,11 @@ async function forwardSheetGet(action: string, params?: URLSearchParams): Promis
     });
   }
 
-  return fetchSheetJson(`${SHEET_API_URL}?${query.toString()}`);
+  return fetchSheetJson(`${SHEET_API_URL}?${query.toString()}`, action);
 }
 
 async function forwardSheetPost(action: string, data: unknown): Promise<SheetResponse> {
-  return fetchSheetJson(SHEET_API_URL, {
+  return fetchSheetJson(SHEET_API_URL, action, {
     method: "POST",
     headers: {
       "Content-Type": "text/plain;charset=utf-8",
@@ -1633,95 +1698,109 @@ function handleWebPushConfigDebug(request: Request, env: Env) {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
+    try {
+      const url = new URL(request.url);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: getCorsHeaders(request),
-      });
-    }
+      if (request.method === "OPTIONS") {
+        return new Response(null, {
+          status: 204,
+          headers: getCorsHeaders(request),
+        });
+      }
 
-    if (url.pathname === "/api/health") {
+      if (url.pathname === "/api/health") {
+        return jsonResponse(
+          {
+            success: true,
+            data: {
+              time: new Date().toISOString(),
+            },
+            message: "ODC Vehicle Booking API Running",
+          },
+          request
+        );
+      }
+
+      if (request.method === "GET" && url.pathname === "/debug/webpush-config") {
+        return handleWebPushConfigDebug(request, env);
+      }
+
+      if (request.method === "GET") {
+        const action = getRouteActions[url.pathname];
+        if (action) {
+          const response = await forwardSheetGet(action, url.searchParams);
+          return jsonResponse(response, request, response.success === false ? Number(response.status || 502) : 200);
+        }
+      }
+
+      if (request.method === "POST") {
+        if (url.pathname === "/push/test") {
+          return handlePushTest(request, env);
+        }
+        if (url.pathname === "/api/reminders/run" || url.pathname === "/api/run-scheduled-reminders") {
+          return handleScheduledReminderRun(request, env);
+        }
+
+        const body = await readRequestBody(request);
+        const token = getBearerToken(request);
+
+        if (url.pathname === "/api/thai_holidays") {
+          const requestedAction = String(body?.action || "thai_holidays").trim();
+          const action = requestedAction === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
+          const response = await forwardSheetPost(action, body?.data || body || {});
+          return jsonResponse(response, request, response.success === false ? Number(response.status || 502) : 200);
+        }
+
+        const action = postRouteActions[url.pathname];
+        if (action) {
+          const rawPayload =
+            body &&
+            typeof body === "object" &&
+            "action" in body &&
+            "data" in body
+              ? body.data
+              : body;
+          const responsePayload =
+            protectedPostActions.has(action) && rawPayload && typeof rawPayload === "object"
+              ? {
+                  ...(rawPayload as Record<string, unknown>),
+                  session_token: token,
+                }
+              : rawPayload;
+          const response = await forwardSheetPost(action, responsePayload);
+          ctx.waitUntil(
+            maybeDeliverCreatedNotifications(env, response).catch((error) => {
+              console.warn("[push] async delivery failed", {
+                path: url.pathname,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            })
+          );
+          return jsonResponse(response, request, response.success === false ? Number(response.status || 502) : 200);
+        }
+      }
+
       return jsonResponse(
         {
-          success: true,
-          data: {
-            time: new Date().toISOString(),
-          },
-          message: "ODC Vehicle Booking API Running",
+          success: false,
+          data: null,
+          message: "API Not Found",
+          path: url.pathname,
         },
-        request
+        request,
+        404
+      );
+    } catch (error) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "Worker request failed",
+          message: error instanceof Error ? error.message : "Worker request failed",
+        },
+        request,
+        500
       );
     }
-
-    if (request.method === "GET" && url.pathname === "/debug/webpush-config") {
-      return handleWebPushConfigDebug(request, env);
-    }
-
-    if (request.method === "GET") {
-      const action = getRouteActions[url.pathname];
-      if (action) {
-        return jsonResponse(await forwardSheetGet(action, url.searchParams), request);
-      }
-    }
-
-    if (request.method === "POST") {
-      if (url.pathname === "/push/test") {
-        return handlePushTest(request, env);
-      }
-      if (url.pathname === "/api/reminders/run" || url.pathname === "/api/run-scheduled-reminders") {
-        return handleScheduledReminderRun(request, env);
-      }
-
-      const body = await readRequestBody(request);
-      const token = getBearerToken(request);
-
-      if (url.pathname === "/api/thai_holidays") {
-        const requestedAction = String(body?.action || "thai_holidays").trim();
-        const action = requestedAction === "getThaiHolidays" ? "getThaiHolidays" : "thai_holidays";
-        return jsonResponse(await forwardSheetPost(action, body?.data || body || {}), request);
-      }
-
-      const action = postRouteActions[url.pathname];
-      if (action) {
-        const rawPayload =
-          body &&
-          typeof body === "object" &&
-          "action" in body &&
-          "data" in body
-            ? body.data
-            : body;
-        const responsePayload =
-          protectedPostActions.has(action) && rawPayload && typeof rawPayload === "object"
-            ? {
-                ...(rawPayload as Record<string, unknown>),
-                session_token: token,
-              }
-            : rawPayload;
-        const response = await forwardSheetPost(action, responsePayload);
-        ctx.waitUntil(
-          maybeDeliverCreatedNotifications(env, response).catch((error) => {
-            console.warn("[push] async delivery failed", {
-              path: url.pathname,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          })
-        );
-        return jsonResponse(response, request);
-      }
-    }
-
-    return jsonResponse(
-      {
-        success: false,
-        data: null,
-        message: "API Not Found",
-        path: url.pathname,
-      },
-      request,
-      404
-    );
   },
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const reminderType = getReminderTypeFromCron(controller.cron);

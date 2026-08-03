@@ -2,6 +2,9 @@
 
 Record repository-level rule changes here. Read this file before editing shared architecture, domain logic, API contracts, sheet schema, or common UI patterns.
 
+## 2026-08-03
+- Updated `src/api.js`, `src/pages/Calendar.jsx`, and `odc-vehicle-api/src/index.ts` so Calendar now treats bookings as the only blocking data source, loads vehicles/users/Thai holidays/driver unavailable/driver queue as optional sources with per-source warnings, uses safer read-only timeout/retry handling plus non-caching invalid-response failures in the shared frontend API parser, and makes the Cloudflare Worker wrap upstream Apps Script empty/HTML/invalid-JSON responses into structured JSON errors that identify the failing action without exposing raw upstream pages.
+
 ## 2026-07-24
 - Updated `docs/domain-rules.md`, `apps-script/code.gs`, `src/api.js`, and `src/pages/Profile.jsx` so profile self-service now uses dedicated `updateMyProfile` and `changeMyPassword` APIs that only act on the current authenticated user, allow editing only name/department/phone/login username, keep `user_id`/`role`/`status`/`permissions` system-controlled, refresh the stored frontend session user immediately after profile edits, and leave existing admin user-management `updateUser` / `resetUserPassword` behavior unchanged.
 

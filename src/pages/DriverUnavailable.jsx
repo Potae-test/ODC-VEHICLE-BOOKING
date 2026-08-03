@@ -74,8 +74,38 @@ function getTypeClassName(type) {
   const normalized = normalizeType(type);
   if (normalized === "ลา") return "amber";
   if (normalized === "หยุด") return "green";
+  if (normalized === "หยุดปฏิบัติงานช่วยเช้า") return "green";
+  if (normalized === "หยุดปฏิบัติงานช่วงบ่าย") return "green";
   if (normalized === "OUT_PROVINCE") return "blue";
   return "gray";
+}
+
+function getUnavailableTypePreset(type) {
+  switch (normalizeType(type)) {
+    case "หยุดปฏิบัติงานช่วยเช้า":
+      return {
+        startHour: 8,
+        startMinute: 30,
+        endHour: 12,
+        endMinute: 59,
+      };
+    case "หยุดปฏิบัติงานช่วงบ่าย":
+      return {
+        startHour: 12,
+        startMinute: 0,
+        endHour: 16,
+        endMinute: 30,
+      };
+    default:
+      return null;
+  }
+}
+
+function buildPresetDateTimeValue(hours, minutes) {
+  const value = new Date();
+  value.setSeconds(0, 0);
+  value.setHours(hours, minutes, 0, 0);
+  return toLocalDateTimeString(value);
 }
 
 function getStatusClassName(status) {
@@ -243,6 +273,14 @@ function UnavailableDateTimeFields({ initialStart, initialEnd, onChange }) {
   const [endValue, setEndValue] = useState(initialEnd);
 
   useEffect(() => {
+    setStartValue(initialStart);
+  }, [initialStart]);
+
+  useEffect(() => {
+    setEndValue(initialEnd);
+  }, [initialEnd]);
+
+  useEffect(() => {
     onChange?.({
       start_datetime: startValue,
       end_datetime: endValue,
@@ -300,6 +338,8 @@ function buildFormHtml(record, options = {}) {
       <select id="unavailable_type" class="swal2-select driver-unavailable-select">
         <option value="ลา" ${type === "ลา" ? "selected" : ""}>ลา / หยุด</option>
         <option value="หยุด" ${type === "หยุด" ? "selected" : ""}>ติดภารกิจ (ชั่วคราว)</option>
+        <option value="หยุดปฏิบัติงานช่วยเช้า" ${type === "หยุดปฏิบัติงานช่วยเช้า" ? "selected" : ""}>หยุดปฏิบัติงานช่วยเช้า</option>
+        <option value="หยุดปฏิบัติงานช่วงบ่าย" ${type === "หยุดปฏิบัติงานช่วงบ่าย" ? "selected" : ""}>หยุดปฏิบัติงานช่วงบ่าย</option>
         <option value="OUT_PROVINCE" ${type === "OUT_PROVINCE" ? "selected" : ""}>ปฏิบัติงานต่างจังหวัด</option>
       </select>
 
@@ -500,6 +540,20 @@ export default function DriverUnavailable() {
     };
     let datetimeRoot = null;
 
+    const renderDateTimeFields = () => {
+      if (!datetimeRoot) return;
+      datetimeRoot.render(
+        <UnavailableDateTimeFields
+          initialStart={datetimeState.start_datetime}
+          initialEnd={datetimeState.end_datetime}
+          onChange={(nextValues) => {
+            datetimeState.start_datetime = nextValues.start_datetime;
+            datetimeState.end_datetime = nextValues.end_datetime;
+          }}
+        />
+      );
+    };
+
     const result = await Swal.fire({
       title: record ? "แก้ไขวันไม่รับงาน" : "เพิ่มข้อมูลการปฏิบัติงาน",
       html: buildFormHtml(record, {
@@ -527,16 +581,18 @@ export default function DriverUnavailable() {
         if (!datetimeMount) return;
 
         datetimeRoot = createRoot(datetimeMount);
-        datetimeRoot.render(
-          <UnavailableDateTimeFields
-            initialStart={datetimeState.start_datetime}
-            initialEnd={datetimeState.end_datetime}
-            onChange={(nextValues) => {
-              datetimeState.start_datetime = nextValues.start_datetime;
-              datetimeState.end_datetime = nextValues.end_datetime;
-            }}
-          />
-        );
+        renderDateTimeFields();
+
+        const typeSelect = modal?.querySelector("#unavailable_type");
+        typeSelect?.addEventListener("change", (event) => {
+          const selectedType = event.target?.value || "";
+          const preset = getUnavailableTypePreset(selectedType);
+          if (!preset) return;
+
+          datetimeState.start_datetime = buildPresetDateTimeValue(preset.startHour, preset.startMinute);
+          datetimeState.end_datetime = buildPresetDateTimeValue(preset.endHour, preset.endMinute);
+          renderDateTimeFields();
+        });
       },
       willClose: () => {
         datetimeRoot?.unmount?.();
@@ -688,6 +744,8 @@ export default function DriverUnavailable() {
                   <option value="">ทุกประเภท</option>
                   <option value="ลา">ลา / หยุด</option>
                   <option value="หยุด">ติดภารกิจ (ชั่วคราว)</option>
+                  <option value="หยุดปฏิบัติงานช่วยเช้า">หยุดปฏิบัติงานช่วยเช้า</option>
+                  <option value="หยุดปฏิบัติงานช่วงบ่าย">หยุดปฏิบัติงานช่วงบ่าย</option>
                   <option value="OUT_PROVINCE">ปฏิบัติงานต่างจังหวัด</option>
                 </select>
 
@@ -859,6 +917,8 @@ export default function DriverUnavailable() {
                       <option value="">ทุกประเภท</option>
                       <option value="ลา">ลา / หยุด</option>
                       <option value="หยุด">ติดภารกิจ (ชั่วคราว)</option>
+                      <option value="หยุดปฏิบัติงานช่วยเช้า">หยุดปฏิบัติงานช่วยเช้า</option>
+                      <option value="หยุดปฏิบัติงานช่วงบ่าย">หยุดปฏิบัติงานช่วงบ่าย</option>
                       <option value="OUT_PROVINCE">ปฏิบัติงานต่างจังหวัด</option>
                     </select>
 
